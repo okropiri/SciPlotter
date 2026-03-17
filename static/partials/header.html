@@ -1,0 +1,23 @@
+<style>
+  :root { --header-height: 56px; }
+  .site-header {
+    height: var(--header-height);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 16px; background: #0f172a; color: #fff;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    box-sizing: border-box;
+  }
+  .site-header .brand { font-weight: 600; letter-spacing: 0.2px; }
+  .tabs { display: flex; gap: 8px; align-items: center; }
+  .tab { display: inline-block; padding: 8px 12px; color: #cbd5e1; text-decoration: none; border-radius: 6px; transition: background 120ms, color 120ms; font-size: 14px; line-height: 1; }
+  .tab:hover { background: rgba(255,255,255,0.08); color: #fff; }
+  .tab.active { background: #1e293b; color: #fff; }
+</style>
+<header class="site-header">
+  <div class="brand">Cyclotron Analysis Suite</div>
+  <nav class="tabs">
+    <a class="tab" data-tab="waveforms" href="index.html">Waveforms</a>
+    <a class="tab" data-tab="histogram" href="histogram.html">Histogram</a>
+  </nav>
+</header>
+

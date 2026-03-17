@@ -1,0 +1,3454 @@
+<!doctype html>
+<html>
+
+<head>
+  <meta charset='utf-8' />
+  <title>Per-event waveform viewer</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <!-- Plotly: prefer local file with CDN fallback for offline/LAN use -->
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js" defer></script>
+  <style>
+    :root {
+      --files-height: 140px;
+      --header-height: 56px;
+      --surface-0: #f9fafb;
+      --surface-1: #fafbfc;
+      --surface-2: #ffffff;
+      --border-soft: #e5e7eb;
+      --border-strong: #d1d5db;
+      --text-strong: #111827;
+      --text-muted: #6b7280;
+      --accent: #2563eb;
+    }
+
+    body {
+      font-family: "Segoe UI", "Inter", "Helvetica Neue", Arial, sans-serif;
+      margin: 0;
+      background: var(--surface-0);
+      color: var(--text-strong);
+    }
+
+    /* Top header */
+    .site-header {
+      height: var(--header-height);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      background: #0f172a;
+      /* slate-900 */
+      color: #fff;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      box-sizing: border-box;
+    }
+
+    .site-header .brand {
+      font-weight: 600;
+      letter-spacing: 0.2px;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .tab {
+      display: inline-block;
+      padding: 8px 12px;
+      color: #cbd5e1;
+      /* slate-300 */
+      text-decoration: none;
+      border-radius: 6px;
+      transition: background 120ms, color 120ms;
+      font-size: 14px;
+    }
+
+    .tab:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: #fff;
+    }
+
+    .tab.active {
+      background: #1e293b;
+      color: #fff;
+    }
+
+    #app {
+      display: flex;
+      height: calc(100vh - var(--header-height));
+      background: var(--surface-0);
+    }
+
+    #left {
+      width: 334px;
+      border-right: 1px solid var(--border-soft);
+      padding: 10px 10px 16px;
+      box-sizing: border-box;
+      overflow: auto;
+      background: var(--surface-1);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    #right {
+      flex: 1;
+      padding: 12px;
+      box-sizing: border-box;
+      background: var(--surface-0);
+    }
+
+    #files {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      height: var(--files-height);
+      overflow-y: auto;
+      border: 1px solid var(--border-soft);
+      border-radius: 4px;
+      background: var(--surface-2);
+    }
+
+    #files li {
+      padding: 6px 8px;
+      border-bottom: 1px solid #f3f4f6;
+      cursor: pointer;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-size: 12px;
+    }
+
+    #files li:hover {
+      background: #f8fafc;
+    }
+
+    #files li.sel {
+      background: #eff6ff;
+    }
+
+    #controls {
+      margin: 8px 0;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    #controls2 {
+      margin: 6px 0 10px;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    #plot {
+      width: 100%;
+      height: calc(100vh - var(--header-height) - 120px);
+    }
+
+    #filter {
+      width: 100%;
+      box-sizing: border-box;
+      min-height: 26px;
+      height: 26px;
+      padding: 3px 8px;
+      border: 1px solid var(--border-strong);
+      border-radius: 4px;
+      background: var(--surface-2);
+      color: var(--text-strong);
+      font: inherit;
+    }
+
+    .meta {
+      font-size: 12px;
+      color: #374151;
+      white-space: pre-wrap;
+      margin-top: 12px;
+    }
+
+    button {
+      min-height: 26px;
+      height: 26px;
+      padding: 3px 10px;
+      border-radius: 4px;
+      border: 1px solid var(--border-strong);
+      background: var(--surface-2);
+      color: #374151;
+      font: inherit;
+      font-weight: 600;
+      box-shadow: none;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #f3f4f6;
+      border-color: #9ca3af;
+    }
+
+    input[type='text'],
+    input[type='number'],
+    select {
+      min-height: 26px;
+      height: 26px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      border: 1px solid var(--border-strong);
+      background: var(--surface-2);
+      color: var(--text-strong);
+      font: inherit;
+      box-sizing: border-box;
+      box-shadow: none;
+    }
+
+    input[type='text']:focus,
+    input[type='number']:focus,
+    select:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1.5px rgba(37, 99, 235, 0.12);
+    }
+
+    input[type='checkbox'] {
+      accent-color: var(--accent);
+    }
+
+    .nav-btn {
+      padding: 3px 10px;
+    }
+
+    .header-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 8px;
+    }
+
+    .header-row h3 {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-strong);
+      line-height: 1.2;
+    }
+
+    /* Pile-up status dot */
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+      border: 1px solid #aaa;
+    }
+
+    .status-pass {
+      background: #17c964;
+      /* green */
+      border-color: #0ea24f;
+    }
+
+    .status-fail {
+      background: #ff4d4f;
+      /* red */
+      border-color: #d9363e;
+    }
+
+    .status-unknown {
+      background: #ccc;
+      border-color: #aaa;
+    }
+
+    .help-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 16px;
+      height: 16px;
+      margin-left: 6px;
+      border-radius: 50%;
+      background: #eff6ff;
+      color: #2563eb;
+      font-size: 12px;
+      line-height: 16px;
+      border: 1px solid #bfdbfe;
+      cursor: help;
+      user-select: none;
+    }
+
+    .tooltip {
+      position: fixed;
+      z-index: 10000;
+      background: #1f2937;
+      color: #fff;
+      padding: 6px 8px;
+      border-radius: 4px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+      font-size: 12px;
+      max-width: 360px;
+      white-space: pre-line;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 80ms ease-in-out;
+    }
+
+    .tooltip.show {
+      opacity: 0.95;
+    }
+
+    #loading,
+    #directory-config,
+    #marker-section,
+    #smoothing-section,
+    #pileup-section,
+    #psd-section,
+    #event-finder-section {
+      margin-top: 0 !important;
+      margin-bottom: 0 !important;
+      padding: 10px 0 10px !important;
+      border: 0 !important;
+      border-bottom: 1px solid var(--border-soft) !important;
+      border-radius: 0 !important;
+      background: transparent !important;
+      box-shadow: none !important;
+    }
+
+    #loading {
+      margin-bottom: 8px !important;
+      padding: 8px 10px !important;
+      background: #fffbeb !important;
+      border: 1px solid #fef3c7 !important;
+      border-radius: 4px !important;
+      color: #92400e !important;
+      font-size: 12px !important;
+    }
+
+    #directory-config {
+      padding-top: 0 !important;
+    }
+
+    #directory-config label,
+    #marker-section label,
+    #smoothing-section label,
+    #pileup-section label,
+    #psd-section label,
+    #event-finder-section label,
+    #controls label,
+    #controls2 label {
+      font-size: 12px;
+      color: #374151;
+    }
+
+    #directory-config > div:first-child,
+    #directory-config > div[style*='Summary CSV'],
+    #marker-section > div:first-of-type,
+    #smoothing-section > div,
+    #pileup-section > div,
+    #psd-section > div,
+    #event-finder-section > div {
+      gap: 8px !important;
+    }
+
+    #marker-section h4,
+    #smoothing-section h4,
+    #pileup-section h4,
+    #psd-section h4,
+    #event-finder-section h4 {
+      margin: 0 0 8px 0 !important;
+      font-size: 12px !important;
+      font-weight: 700 !important;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--text-muted) !important;
+    }
+
+    #current-directory,
+    #current-summary,
+    #marker-source-status,
+    #smoothing-status,
+    #pileup-results,
+    #psd-results,
+    #event-finder-results {
+      background: var(--surface-2) !important;
+      border: 1px solid var(--border-soft) !important;
+      border-radius: 4px !important;
+      color: #374151 !important;
+      font-size: 12px !important;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace !important;
+      box-shadow: none !important;
+    }
+
+    #current-directory,
+    #current-summary {
+      padding: 6px 8px !important;
+    }
+
+    #marker-source-status,
+    #smoothing-status,
+    #pileup-results,
+    #psd-results,
+    #event-finder-results {
+      padding: 8px !important;
+    }
+
+    #directory-input {
+      width: 100% !important;
+      margin-bottom: 6px !important;
+    }
+
+    #show-original,
+    #cancel-directory,
+    #cancel-browser,
+    #summary-cancel {
+      background: #fff !important;
+      color: #374151 !important;
+      border: 1px solid var(--border-strong) !important;
+    }
+
+    #apply-directory,
+    #select-dir,
+    #run-pileup,
+    #run-psd,
+    #run-event-finder,
+    #apply-smoothing,
+    #apply-updated-markers {
+      background: #2563eb !important;
+      border: 1px solid #2563eb !important;
+      color: #fff !important;
+    }
+
+    #directory-browser,
+    #summary-file-picker {
+      font-family: "Segoe UI", "Inter", "Helvetica Neue", Arial, sans-serif !important;
+    }
+
+    #directory-browser > div,
+    #summary-file-picker > div {
+      background: var(--surface-1) !important;
+      border: 1px solid var(--border-soft) !important;
+      border-radius: 6px !important;
+      box-shadow: 0 18px 42px rgba(15, 23, 42, 0.18) !important;
+    }
+
+    #directory-browser > div > div:first-child,
+    #summary-file-picker > div > div:first-child,
+    #directory-browser > div > div:last-child,
+    #summary-file-picker > div > div:last-child {
+      background: var(--surface-1) !important;
+      border-color: var(--border-soft) !important;
+    }
+
+    #directory-browser h3,
+    #summary-file-picker [style*='font-weight:600'] {
+      font-size: 12px !important;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--text-strong) !important;
+    }
+
+    #summary-current-path,
+    #current-path {
+      background: var(--surface-2) !important;
+      border: 1px solid var(--border-strong) !important;
+      border-radius: 4px !important;
+      color: #374151 !important;
+      font-size: 12px !important;
+    }
+
+    #summary-list ul,
+    #dir-list {
+      background: var(--surface-2);
+    }
+
+    #summary-list li,
+    .dir-item {
+      font-size: 12px !important;
+      border-bottom: 1px solid #f3f4f6 !important;
+    }
+
+    #summary-list li:hover,
+    .dir-item:hover {
+      background: #f8fafc !important;
+    }
+
+    @media (max-width: 980px) {
+      #left {
+        width: 300px;
+        padding: 8px 8px 14px;
+      }
+    }
+  </style>
+  <script>
+    // For shared header to mark the active tab
+    window.ACTIVE_TAB = 'waveforms';
+    // Utility to inject the common header
+    function loadHeader(){
+      fetch('partials/header.html').then(function(r){ return r.text();}).then(function(html){
+        var holder = document.getElementById('shared-header');
+        if (holder) { holder.innerHTML = html; }
+        // Now mark active tab
+        try {
+          document.querySelectorAll('.tabs .tab').forEach(function(a){
+            if (a.getAttribute('data-tab') === window.ACTIVE_TAB) a.classList.add('active');
+          });
+        } catch (e) {}
+      }).catch(function(e){});
+    }
+    document.addEventListener('DOMContentLoaded', loadHeader);
+  </script>
+</head>
+
+<body>
+  <div id="shared-header"></div>
+  <div id='app'>
+    <div id='left'>
+      <div id='loading'
+        style='display:none; padding:6px 8px; background:#fffbe6; border:1px solid #ffe58f; color:#8c6d1f; margin-bottom:6px; font-size:12px;'>
+        <span id="loading-text">Loading…</span>
+        <span id="loading-progress" style="margin-left:6px; display:none;">0%</span>
+        <div id="loading-bar-wrap" style="display:none; margin-top:4px; width:100%; height:6px; background:#f0e3b0; border-radius:3px; overflow:hidden;">
+          <div id="loading-bar" style="width:0%; height:100%; background:#d4a514; transition:width 80ms;"></div>
+        </div>
+      </div>
+      <!-- Waveforms Directory Configuration -->
+      <div id='directory-config' style='margin-bottom: 8px; padding: 8px; background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 4px;'>
+        <div style='display: flex; align-items: center; gap: 8px; margin-bottom: 6px;'>
+          <label style='font-weight: bold; font-size: 0.9em;'>Waveforms Directory:</label>
+          <button id='browse-directory' class='btn-secondary' title='Browse Directories' style='padding: 4px 8px; font-size: 0.8em; border: 1px solid #ccc; background: #f8f9fa; border-radius: 3px; cursor: pointer;'>📂 Browse</button>
+          <button id='change-directory' style='padding: 2px 6px; font-size: 0.8em;'>Manual</button>
+        </div>
+        <div id='current-directory' style='font-family: monospace; font-size: 0.85em; color: #666; word-break: break-all;'>
+          Loading...
+        </div>
+
+        <!-- Summary selection -->
+        <div style='display:flex; align-items:center; gap:8px; margin-top:8px;'>
+          <label style='font-weight: bold; font-size: 0.9em;'>Summary CSV:</label>
+          <button id='auto-summary' style='padding: 2px 6px; font-size: 0.8em;'>Auto</button>
+          <button id='pick-summary' style='padding: 2px 6px; font-size: 0.8em;'>Pick file</button>
+          <span id='current-summary' style='font-family: monospace; font-size: 0.85em; color: #666; word-break: break-all;'>Auto (preferred)</span>
+        </div>
+
+        <!-- Summary File Picker Modal -->
+        <div id='summary-file-picker' style='display:none; position: fixed; top:0; left:0; right:0; bottom:0; background: rgba(0,0,0,0.5); z-index: 1100;'>
+          <div style='position:absolute; top:50%; left:50%; transform: translate(-50%, -50%); width: 800px; max-height: 600px; background:#fff; border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,0.3); display:flex; flex-direction:column;'>
+            <div style='display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border-bottom:1px solid #ddd; background:#f8f9fa;'>
+              <div style='font-weight:600;'>📄 Select Summary CSV</div>
+              <button id='close-summary-picker' style='background:none; border:none; font-size:20px; cursor:pointer;'>&times;</button>
+            </div>
+            <div style='padding:10px 16px; background:#f1f3f4; border-bottom:1px solid #ddd;'>
+              <div style='display:flex; gap:8px; align-items:center;'>
+                <button id='summary-go-up' style='padding:4px 8px;'>⬆ Up</button>
+                <div id='summary-current-path' style='flex:1; font-family:monospace; background:#fff; padding:6px 10px; border:1px solid #ccc; border-radius:3px;'></div>
+              </div>
+            </div>
+            <div style='flex:1; overflow:auto;'>
+              <div id='summary-list'><div style='padding:24px; text-align:center; color:#666;'>Loading...</div></div>
+            </div>
+            <div style='padding:12px 16px; border-top:1px solid #ddd; background:#f8f9fa; display:flex; justify-content:flex-end; gap:8px;'>
+              <button id='summary-cancel' style='padding:6px 12px;'>Cancel</button>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Directory Browser Modal -->
+        <div id='directory-browser' style='display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; font-family: Arial, sans-serif;'>
+          <div style='position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; border-radius: 8px; width: 700px; max-height: 600px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); display: flex; flex-direction: column;'>
+            
+            <!-- Header -->
+            <div style='display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; border-bottom: 1px solid #ddd; background: #f8f9fa; border-radius: 8px 8px 0 0;'>
+              <h3 style='margin: 0; color: #333;'>📂 Select Directory</h3>
+              <button id='close-browser' style='background: none; border: none; font-size: 20px; cursor: pointer; color: #666; padding: 0; width: 24px; height: 24px;'>&times;</button>
+            </div>
+            
+            <!-- Navigation Bar -->
+            <div style='padding: 10px 20px; background: #f1f3f4; border-bottom: 1px solid #ddd;'>
+              <div style='display: flex; align-items: center; gap: 8px; margin-bottom: 8px;'>
+                <button id='go-home' style='padding: 4px 8px; background: #e9ecef; border: 1px solid #ccc; border-radius: 3px; cursor: pointer; font-size: 12px;'>🏠 Home</button>
+                <button id='go-up' style='padding: 4px 8px; background: #e9ecef; border: 1px solid #ccc; border-radius: 3px; cursor: pointer; font-size: 12px;'>⬆ Up</button>
+              </div>
+              <div style='font-family: monospace; background: white; padding: 6px 10px; border: 1px solid #ccc; border-radius: 3px; font-size: 13px; word-break: break-all;' id='current-path'></div>
+            </div>
+            
+            <!-- Directory List -->
+            <div style='flex: 1; overflow-y: auto; max-height: 400px;'>
+              <div id='dir-list' style='padding: 0;'>
+                <div style='padding: 40px; text-align: center; color: #666;'>Loading...</div>
+              </div>
+            </div>
+            
+            <!-- Footer -->
+            <div style='padding: 15px 20px; border-top: 1px solid #ddd; background: #f8f9fa; display: flex; justify-content: space-between; align-items: center; border-radius: 0 0 8px 8px;'>
+              <button id='select-dir' style='padding: 8px 16px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 500;'>Select This Directory</button>
+              <button id='cancel-browser' style='padding: 8px 16px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;'>Cancel</button>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Manual text input -->
+        <div id='directory-input-section' style='display: none; margin-top: 8px;'>
+          <input id='directory-input' type='text' placeholder='Enter directory path...' style='width: 100%; margin-bottom: 6px; padding: 4px 8px; border: 1px solid #ccc; border-radius: 3px;' />
+          <div style='display: flex; gap: 6px;'>
+            <button id='apply-directory' style='padding: 4px 8px; font-size: 0.8em; background: #28a745; color: white; border: none; border-radius: 3px;'>Apply</button>
+            <button id='cancel-directory' style='padding: 4px 8px; font-size: 0.8em; background: #6c757d; color: white; border: none; border-radius: 3px;'>Cancel</button>
+          </div>
+        </div>
+      </div>
+      
+      <div class='header-row'>
+        <h3 style='margin:0; flex:1'>Waveform files</h3>
+        <button id='prev' class='nav-btn'>◀ Prev</button>
+        <button id='next' class='nav-btn'>Next ▶</button>
+      </div>
+      
+
+      <input id='filter' placeholder='filter by name...' />
+      <div id='controls'>
+        <label><input type='checkbox' id='overlay'> overlay</label>
+        <button id='refresh'>Refresh</button>
+        <button id='clear'>Clear</button>
+      </div>
+      <div id='controls2'>
+        <label><input type='checkbox' id='fixYAxis'> Fix Y-axis</label>
+        <label>Y Range: <input type='text' id='yRange' placeholder='min,max' size='10'></label>
+      </div>
+      <ul id='files'></ul>
+
+      <!-- Marker Visualization Section -->
+      <div id='marker-section' style='margin-top: 16px; border-top: 1px solid #ddd; padding-top: 12px;'>
+        <h4 style='margin: 0 0 8px 0;'>Markers</h4>
+        <div style='display:flex; gap:12px; flex-wrap:wrap; font-size:0.9em; align-items:center;'>
+          <label><input type='checkbox' id='show-efdynamic-markers' checked> EFdynamic (raw)</label>
+          <label><input type='checkbox' id='show-batch-markers' checked> Batch (smoothed)</label>
+          <div class='help-icon' data-tooltip='EFdynamic: boundary expansion on raw waveform (EF-style algorithm).\nBatch: same EF-style algorithm applied to Savitzky–Golay smoothed waveform (window=101, poly=3).'>?</div>
+        </div>
+        <div style='font-size:0.75em; color:#555; margin-top:4px;'>Raw EFdynamic markers always computed from original waveform. Batch markers appear after smoothing is applied. Peak markers: orange = EFdynamic, purple = Batch. Start/End lines share those colors.</div>
+        <div id='marker-source-status' style='margin-top:6px; font-size:0.7em; background:#f5f7fa; border:1px solid #e2e8f0; padding:4px 6px; border-radius:4px; color:#334155; font-family:monospace;'>marker sources: (pending)</div>
+      </div>
+
+      <!-- Smoothing Section -->
+      <div id='smoothing-section' style='margin-top: 16px; border-top: 1px solid #ddd; padding-top: 12px;'>
+        <h4 style='margin: 0 0 8px 0;'>Batch Analyzer Smoothing</h4>
+        <div style='margin-bottom: 8px;'>
+          <label>Method:
+            <select id='smoothing-method' style='width: 160px;'>
+              <option value='savgol'>Savitzky-Golay (default)</option>
+              <option value='adaptive'>Adaptive</option>
+              <option value='edge_preserving'>Edge-preserving</option>
+              <option value='gaussian'>Gaussian</option>
+            </select>
+          </label>
+          <span id='method-help' class='help-icon'
+            data-tooltip='Smoothing methods:\n• Savitzky–Golay: Local polynomial fit within a sliding window. Preserves peak shape while reducing noise.\n• Adaptive: Noise-adaptive averaging (auto-tunes span).\n• Edge-preserving: Smoothing that tries to keep sharp transitions.\n• Gaussian: Convolution with a Gaussian kernel (smooth, can blur peaks).'>?</span>
+          <span id='savgol-params' style='margin-top:12px; display:inline-flex; align-items:left; gap:16px;'>
+            <label>Window:
+              <input type='number' id='savgol-window' value='101' min='3' step='2' style='width: 70px;'
+                data-tooltip='Savitzky–Golay window length in samples (odd integer, ≥ poly + 2). Controls the smoothing span.'>
+            </label>
+            <label>Poly:
+              <input type='number' id='savgol-poly' value='3' min='0' step='1' style='width: 60px;'
+                data-tooltip='Polynomial order (0 .. window−1). Higher values preserve sharp features but smooth less.'>
+            </label>
+            <span id='savgol-help' class='help-icon'
+              data-tooltip='Savitzky–Golay parameters:\n• Window: Odd number of samples (≥ poly + 2). Larger window = stronger smoothing; too large may smear pulses.\n• Poly: Polynomial order (typ. 2–4). Higher = better peak preservation but can introduce oscillations.'>?</span>
+          </span>
+        </div>
+        <div style='margin-bottom: 8px; display: flex; gap: 8px; align-items: center;'>
+          <button id='apply-smoothing' disabled>Apply Smoothing</button>
+          <button id='show-original' disabled style='background: #e8e8e8;'>Show Original</button>
+        </div>
+        <div style='margin-bottom: 8px; display: flex; gap: 8px; align-items: center; font-size: 0.9em;'>
+          <label><input type='checkbox' id='overlay-smooth'> Overlay smoothed</label>
+          <label><input type='checkbox' id='use-smoothed-analysis'> Use smoothed for analysis</label>
+          <button id='apply-updated-markers' disabled>Apply markers</button>
+          <label>Thr mV: <input type='number' id='updated-threshold' placeholder='keep old'
+              style='width: 80px;'></label>
+        </div>
+        <div id='smoothing-status'
+          style='background: #f8f8f8; border: 1px solid #ddd; padding: 8px; min-height: 40px; font-family: monospace; font-size: 0.85em; white-space: pre-wrap;'>
+          Select a waveform file to apply smoothing
+        </div>
+      </div>
+
+      <!-- Pile-up Detection Section -->
+      <div id='pileup-section' style='margin-top: 16px; border-top: 1px solid #ddd; padding-top: 12px;'>
+        <h4 style='margin: 0 0 8px 0;'>Pile-up Detection</h4>
+        <div style='margin-bottom: 8px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;'>
+          <label>Quasi-ratio α:
+            <input type='number' id='quasi-ratio' value='' step='0.05' min='0' max='1' style='width: 70px;'>
+          </label>
+          <label><input type='checkbox' id='scan-alpha' checked> Scan</label>
+          <label>Max noise crossing (ns):
+            <input type='number' id='max-noise-cross-ns' value='' step='0.1' min='0' style='width: 80px;'>
+          </label>
+          <button id='run-pileup' disabled>Run Pile-up</button>
+          <span id='pileup-indicator' class='status-dot status-unknown' title='Pile-up status unknown'></span>
+        </div>
+        <div style='font-size: 0.85em; color:#666; margin-bottom:6px;'>
+          Quasi-threshold = thr + α · (peak − thr)
+        </div>
+        <div id='pileup-results'
+          style='background: #f8f8f8; border: 1px solid #ddd; padding: 8px; min-height: 60px; font-family: monospace; font-size: 0.85em; white-space: pre-wrap;'>
+          Select a waveform file to run pile-up detection
+        </div>
+      </div>
+
+      <!-- PSD Analysis Section -->
+      <div id='psd-section' style='margin-top: 16px; border-top: 1px solid #ddd; padding-top: 12px;'>
+        <h4 style='margin: 0 0 8px 0;'>PSD Analysis</h4>
+        <div style='margin-bottom: 8px; display: flex; gap: 8px; align-items: center;'>
+          <label>Qtail: <input type='number' id='qtail-fraction' value='' step='0.1' min='0' max='1'
+              style='width: 60px;'></label>
+          <button id='run-psd' disabled>Run PSD</button>
+        </div>
+        <div style='font-size: 0.85em; color:#555; margin: 6px 0 10px 0;'>
+          PSD integrates relative to baseline (0 mV). If "Use smoothed for analysis" is enabled, smoothing and marker recomputation apply before PSD.
+        </div>
+        <div id='psd-results'
+          style='background: #f8f8f8; border: 1px solid #ddd; padding: 8px; min-height: 60px; font-family: monospace; font-size: 0.85em; white-space: pre-wrap;'>
+          Select a waveform file to run PSD analysis
+        </div>
+      </div>
+
+      <!-- Event_Finder Modular Analysis Section -->
+      <div id='event-finder-section' style='margin-top: 16px; border-top: 1px solid #ddd; padding-top: 12px;'>
+        <h4 style='margin: 0 0 8px 0;'>Event_Finder Modular Analysis</h4>
+        <div style='margin-bottom: 8px;'>
+          <div style='display: flex; gap: 8px; align-items: center; margin-bottom: 6px;'>
+            <label>Detection Channels: 
+              <select id='detection-channels' style='width: 100px;'>
+                <option value='all'>All (C2,C3,C4)</option>
+                <option value='C2'>C2 only</option>
+                <option value='C3'>C3 only</option>
+                <option value='C4'>C4 only</option>
+                <option value='C2,C3'>C2,C3</option>
+                <option value='C2,C4'>C2,C4</option>
+                <option value='C3,C4'>C3,C4</option>
+              </select>
+            </label>
+            <label>Export Format: 
+              <select id='export-format' style='width: 60px;'>
+                <option value='csv'>CSV</option>
+                <option value='json'>JSON</option>
+              </select>
+            </label>
+          </div>
+          <div style='display: flex; gap: 8px; align-items: center; margin-bottom: 6px;'>
+            <label><input type='checkbox' id='include-waveforms'> Include waveform segments</label>
+            <label><input type='checkbox' id='detailed-metadata'> Detailed metadata</label>
+            <label><input type='checkbox' id='use-config-override'> Override thresholds</label>
+          </div>
+          <div id='threshold-overrides' style='display: none; margin-bottom: 6px; padding: 6px; background: #f0f0f0; border-radius: 3px;'>
+            <div style='font-size: 0.85em; margin-bottom: 4px;'>Threshold Overrides (V):</div>
+            <div style='display: flex; gap: 8px; flex-wrap: wrap;'>
+              <label>C1: <input type='number' id='c1-threshold' step='0.001' min='0' style='width: 60px;' placeholder='0.100'></label>
+              <label>C2: <input type='number' id='c2-threshold' step='0.001' min='0' style='width: 60px;' placeholder='0.001'></label>
+              <label>C3: <input type='number' id='c3-threshold' step='0.001' min='0' style='width: 60px;' placeholder='0.002'></label>
+              <label>C4: <input type='number' id='c4-threshold' step='0.001' min='0' style='width: 60px;' placeholder='0.015'></label>
+            </div>
+          </div>
+          <button id='run-event-finder' disabled>Run Event Analysis</button>
+          <span id='event-finder-indicator' class='status-dot status-unknown' title='Event analysis status unknown'></span>
+        </div>
+        <div style='font-size: 0.85em; color:#666; margin-bottom:6px;'>
+          Comprehensive event detection with cyclotron correlation, pulse characterization, and quality filtering
+        </div>
+        <div id='event-finder-results'
+          style='background: #f8f8f8; border: 1px solid #ddd; padding: 8px; min-height: 80px; font-family: monospace; font-size: 0.85em; white-space: pre-wrap;'>
+          Select a waveform file to run Event_Finder modular analysis
+        </div>
+      </div>
+    </div>
+    <div id='right'>
+      <div id='plot'></div>
+      <div id='meta' class='meta'></div>
+    </div>
+  </div>
+
+  <script>
+    // App configuration — centralized defaults and tuning knobs (edit here)
+  const CONFIG = {
+      // Performance: cap initial render; user can filter to narrow down
+      MAX_RENDER_ITEMS: 1000,
+      // Pile-up: default quasi-threshold alpha when scan is off
+      DEFAULT_ALPHA: 0.5,
+      // Pile-up: Tmax — max noise crossing width (ns) for wide segments and above-gap checks
+      DEFAULT_MAX_NOISE_NS: 10.0,
+      // PSD: default Qtail fraction
+      DEFAULT_QTAIL_FRACTION: 0.3,
+      // Plot: extra headroom for auto Y range (fraction of span)
+      Y_PADDING_FRACTION: 0.05,
+      // Marker width level (mV) for start/end markers (keep in sync with batch analyzer settings)
+      // If the server exposes settings in /api/config later, we can override this dynamically.
+      WIDTH_LEVEL_MV: 0.0,
+      // Batch Analyzer defaults (must match batch_analyzer_settings.json)
+      BATCH_ANALYZER: {
+        SAVGOL_WINDOW: 101,
+        SAVGOL_POLY: 3,
+        STD_MULTIPLIER: 3.0,
+        DWELL_SAMPLES: 3,
+        SMOOTHING_METHOD: 'savgol'
+      },
+      // Distinct color palette for overlayed waveforms (Plotly-like Category10)
+      COLOR_PALETTE: [
+        '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
+        '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'
+      ],
+    };
+
+    // Performance hint: very large folders can freeze the UI if we render everything at once
+    const { MAX_RENDER_ITEMS } = CONFIG; // convenience alias
+
+    let files = [];
+    let selected = [];
+    let filteredFiles = [];
+    let currentIndex = -1;
+  let summaryData = null;
+  // Combined metadata: processing params and per-trace/channel baselines
+  let combinedMeta = null; // { processing_params, trace_metadata: [ {trace_number, channel_baselines{C2:{baseline_std_mv,…}} } ] }
+
+    // Smoothing variables
+    let originalData = new Map(); // Store original waveform data
+    let smoothedData = new Map();  // Store smoothed waveform data
+    let smoothingActive = false;   // Track if smoothing is applied
+
+    // Pile-up state (per file)
+  let quasiThresholds = new Map(); // filename -> quasi-threshold (mV)
+  let quasiAlphas = new Map();     // filename -> alpha used
+  let qtailStarts = new Map();     // filename -> qtail start time (ns)
+  let qtailFractions = new Map();  // filename -> qtail fraction used
+    // Persisted Y-axis lock while Fix Y-axis is enabled
+    let fixedYRange = null;          // [minY, maxY]
+    // Updated markers (when enabled)
+    let updatedMarkers = new Map();  // filename -> {event_start_time_ns, event_end_time_ns, peak_time_ns, peak_amplitude_mV, threshold_mV}
+
+    // Distinct color palette for overlayed waveforms
+    const WAVEFORM_COLORS = CONFIG.COLOR_PALETTE;
+
+    function colorForIndex(i) {
+      return WAVEFORM_COLORS[i % WAVEFORM_COLORS.length];
+    }
+
+    // Sample amplitude (mV) at a given time (ns) from a series using linear interpolation.
+    // Expects times to be monotonic ascending. Clamps to endpoints if outside range.
+    function sampleAmplitudeAtNs(times, amps, tns) {
+      if (!times || !amps || times.length === 0) return 0;
+      const n = times.length;
+      if (tns <= times[0]) return amps[0];
+      if (tns >= times[n - 1]) return amps[n - 1];
+      // Binary search for right index such that times[i] <= tns < times[i+1]
+      let lo = 0, hi = n - 1;
+      while (lo + 1 < hi) {
+        const mid = (lo + hi) >> 1;
+        if (times[mid] <= tns) lo = mid; else hi = mid;
+      }
+      const t0 = times[lo], t1 = times[lo + 1];
+      const y0 = amps[lo], y1 = amps[lo + 1];
+      const frac = (t1 !== t0) ? (tns - t0) / (t1 - t0) : 0;
+      return y0 + frac * (y1 - y0);
+    }
+
+    function getSeriesForFile(fn, preferSmoothed = false) {
+      const sm = smoothedData.get(fn);
+      const orig = originalData.get(fn);
+      if (preferSmoothed && sm && sm.times && sm.amps && sm.times.length > 0) return sm;
+      return orig || { times: [], amps: [] };
+    }
+
+    async function refresh() {
+      try {
+        document.getElementById('loading').style.display = 'block';
+        const res = await fetch('/api/files');
+        if (!res.ok) { throw new Error('Failed to list files'); }
+        const j = await res.json();
+        files = j.files || [];
+        // Attempt to fetch raw LeCroy .txt files (optional)
+        // Build RAW_FILE_SET opportunistically from .txt present in /api/files result OR from optional /api/raw_files
+        if (!window.RAW_FILE_SET) window.RAW_FILE_SET = new Set();
+        files.filter(f=>f.toLowerCase().endsWith('.txt')).forEach(f=>window.RAW_FILE_SET.add(f));
+        // Optional separate raw listing (kept for legacy heuristic) - merge if available
+        try {
+          const rraw = await fetch('/api/raw_files');
+          if (rraw.ok) {
+            const jr = await rraw.json();
+            (jr.raw_files||[]).forEach(f=>{ if(!files.includes(f)) files.push(f); window.RAW_FILE_SET.add(f); });
+          }
+        } catch(_) {}
+        console.log('Available files:', files);
+        await loadSummaryData();
+        renderFiles();
+      } catch (e) { alert('Error fetching file list: ' + e.message); }
+      finally { document.getElementById('loading').style.display = 'none'; }
+    }
+
+    // Disable alpha box when scan is enabled to clarify behavior
+    document.addEventListener('DOMContentLoaded', () => {
+      // Lightweight tooltip handler for elements using data-tooltip
+      (function setupTooltips() {
+        let tipEl = null;
+        function ensureTip() {
+          if (!tipEl) {
+            tipEl = document.createElement('div');
+            tipEl.className = 'tooltip';
+            document.body.appendChild(tipEl);
+          }
+          return tipEl;
+        }
+        function onEnter(e) {
+          const text = e.currentTarget.getAttribute('data-tooltip');
+          if (!text) return;
+          const t = ensureTip();
+          t.textContent = '';
+          // Preserve bullets/newlines
+          t.innerText = text;
+          const r = e.currentTarget.getBoundingClientRect();
+          const pad = 8;
+          const x = Math.min(window.innerWidth - 10 - 280, r.left + r.width / 2);
+          const y = r.bottom + pad;
+          t.style.left = Math.max(8, x) + 'px';
+          t.style.top = Math.max(8, y) + 'px';
+          t.classList.add('show');
+        }
+        function onMove(e) {
+          if (!tipEl || !tipEl.classList.contains('show')) return;
+          const pad = 12;
+          tipEl.style.left = Math.min(e.clientX + pad, window.innerWidth - 300) + 'px';
+          tipEl.style.top = (e.clientY + pad) + 'px';
+        }
+        function onLeave() {
+          if (tipEl) tipEl.classList.remove('show');
+        }
+        const attach = (el) => {
+          el.addEventListener('mouseenter', onEnter);
+          el.addEventListener('mousemove', onMove);
+          el.addEventListener('mouseleave', onLeave);
+          el.addEventListener('blur', onLeave);
+        };
+        document.querySelectorAll('[data-tooltip]').forEach(attach);
+        // Observe future nodes (e.g., if UI is re-rendered)
+        const obs = new MutationObserver(() => {
+          document.querySelectorAll('[data-tooltip]').forEach(el => {
+            if (!el.__tipBound) { attach(el); el.__tipBound = true; }
+          });
+        });
+        obs.observe(document.body, { childList: true, subtree: true });
+      })();
+      const scanCb = document.getElementById('scan-alpha');
+      const alphaBox = document.getElementById('quasi-ratio');
+      const maxNoiseBox = document.getElementById('max-noise-cross-ns');
+      const qtailBox = document.getElementById('qtail-fraction');
+      const smoothMethodSel = document.getElementById('smoothing-method');
+      const savgolWindow = document.getElementById('savgol-window');
+      const savgolPoly = document.getElementById('savgol-poly');
+      const savgolParamsWrap = document.getElementById('savgol-params');
+      const savgolHelp = document.getElementById('savgol-help');
+
+      // Initialize defaults from CONFIG so they're visible in the UI
+      if (alphaBox && !alphaBox.value) alphaBox.value = String(CONFIG.DEFAULT_ALPHA);
+      if (maxNoiseBox && !maxNoiseBox.value) maxNoiseBox.value = String(CONFIG.DEFAULT_MAX_NOISE_NS);
+      if (qtailBox && !qtailBox.value) qtailBox.value = String(CONFIG.DEFAULT_QTAIL_FRACTION);
+      
+      // Initialize batch analyzer defaults for smoothing settings
+      if (savgolWindow && !savgolWindow.value) savgolWindow.value = String(CONFIG.BATCH_ANALYZER.SAVGOL_WINDOW);
+      if (savgolPoly && !savgolPoly.value) savgolPoly.value = String(CONFIG.BATCH_ANALYZER.SAVGOL_POLY);
+      function syncAlphaDisabled() {
+        if (!scanCb || !alphaBox) return;
+        alphaBox.disabled = !!scanCb.checked;
+      }
+      if (scanCb) {
+        scanCb.addEventListener('change', syncAlphaDisabled);
+      }
+      syncAlphaDisabled();
+
+      // Set default smoothing to Savitzky–Golay with batch analyzer defaults
+      if (smoothMethodSel) smoothMethodSel.value = 'savgol';
+      // Enforce initial constraints (odd window, window >= poly + 2)
+      function normalizeSavgolInputs() {
+        if (!savgolWindow || !savgolPoly) return;
+        let w = parseInt(savgolWindow.value || String(CONFIG.BATCH_ANALYZER.SAVGOL_WINDOW), 10);
+        let p = parseInt(savgolPoly.value || String(CONFIG.BATCH_ANALYZER.SAVGOL_POLY), 10);
+        if (Number.isNaN(w) || w < 3) w = 3;
+        if (w % 2 === 0) w += 1; // must be odd
+        if (Number.isNaN(p) || p < 0) p = 0;
+        // window must be >= poly + 2
+        const minW = Math.max(3, p + 2);
+        if (w < minW) {
+          w = minW + ((minW % 2 === 0) ? 1 : 0); // ensure odd
+        }
+        savgolWindow.value = String(w);
+        savgolPoly.value = String(p);
+      }
+      normalizeSavgolInputs();
+      if (savgolWindow) savgolWindow.addEventListener('change', normalizeSavgolInputs);
+      if (savgolPoly) savgolPoly.addEventListener('change', normalizeSavgolInputs);
+
+      // Show/hide param inputs based on method
+      function updateParamVisibility() {
+        const method = smoothMethodSel?.value || 'savgol';
+        const showSG = (method === 'savgol');
+        if (savgolParamsWrap) savgolParamsWrap.style.display = showSG ? 'inline-flex' : 'none';
+        if (savgolHelp) savgolHelp.style.display = showSG ? 'inline-flex' : 'none';
+      }
+      if (smoothMethodSel) smoothMethodSel.addEventListener('change', () => { updateParamVisibility(); });
+      updateParamVisibility();
+
+      // Directory management functionality
+      const changeDirectoryBtn = document.getElementById('change-directory');
+      const browseDirectoryBtn = document.getElementById('browse-directory');
+      const currentDirectoryDiv = document.getElementById('current-directory');
+      const directoryInputSection = document.getElementById('directory-input-section');
+      const directoryInput = document.getElementById('directory-input');
+      const applyDirectoryBtn = document.getElementById('apply-directory');
+      const cancelDirectoryBtn = document.getElementById('cancel-directory');
+
+      // Directory browser elements
+      const dirBrowser = document.getElementById('directory-browser');
+      const closeBrowserBtn = document.getElementById('close-browser');
+      const cancelBrowserBtn = document.getElementById('cancel-browser');
+      const selectDirBtn = document.getElementById('select-dir');
+      const currentPathDiv = document.getElementById('current-path');
+      const dirListDiv = document.getElementById('dir-list');
+      const goHomeBtn = document.getElementById('go-home');
+      const goUpBtn = document.getElementById('go-up');
+      
+      let currentBrowsePath = '';
+
+      // Load current directory on page load
+      async function loadCurrentDirectory() {
+        try {
+          const res = await fetch('/api/config');
+          if (res.ok) {
+            const config = await res.json();
+            const currentDir = config.waveforms_directory || 'Not configured';
+            currentDirectoryDiv.textContent = currentDir;
+            // Update summary label
+            const cs = document.getElementById('current-summary');
+            if (config.summary_override) cs.textContent = config.summary_override; else cs.textContent = 'Auto (preferred)';
+          } else {
+            currentDirectoryDiv.textContent = 'Failed to load directory info';
+          }
+        } catch (e) {
+          currentDirectoryDiv.textContent = 'Error loading directory: ' + e.message;
+        }
+      }
+
+      // Browse directories
+      async function browseDirectory(path) {
+        try {
+          dirListDiv.innerHTML = '<div style="padding: 40px; text-align: center; color: #666;">Loading...</div>';
+          
+          const url = path ? `/api/browse?path=${encodeURIComponent(path)}` : '/api/browse';
+          const res = await fetch(url);
+          
+          if (!res.ok) {
+            const errorText = await res.text();
+            dirListDiv.innerHTML = `<div style="padding: 20px; text-align: center; color: #d32f2f;">Error: ${errorText}</div>`;
+            return;
+          }
+          
+          const data = await res.json();
+          currentBrowsePath = data.current_path;
+          currentPathDiv.textContent = currentBrowsePath;
+          
+          // Render directory items
+          if (data.items.length === 0) {
+            dirListDiv.innerHTML = '<div style="padding: 20px; text-align: center; color: #666;">No directories found</div>';
+            return;
+          }
+          
+          const itemsHTML = data.items.map(item => {
+            const icon = item.type === 'parent' ? '📁⬆' : '📁';
+            const name = item.type === 'parent' ? '.. (Go up)' : item.name;
+            const textColor = item.type === 'parent' ? '#666' : '#333';
+            
+            return `
+              <div class="dir-item" data-path="${item.path}" style="
+                padding: 12px 20px; 
+                border-bottom: 1px solid #f0f0f0; 
+                cursor: pointer; 
+                display: flex; 
+                align-items: center; 
+                gap: 12px;
+                transition: background 0.2s;
+              " onmouseover="this.style.backgroundColor='#f8f9fa'" onmouseout="this.style.backgroundColor='transparent'">
+                <span style="font-size: 16px; min-width: 20px;">${icon}</span>
+                <span style="color: ${textColor}; word-break: break-all;">${name}</span>
+              </div>
+            `;
+          }).join('');
+          
+          dirListDiv.innerHTML = itemsHTML;
+          
+          // Add click handlers
+          dirListDiv.querySelectorAll('.dir-item').forEach(item => {
+            item.addEventListener('click', () => {
+              const path = item.getAttribute('data-path');
+              browseDirectory(path);
+            });
+          });
+          
+        } catch (e) {
+          dirListDiv.innerHTML = `<div style="padding: 20px; text-align: center; color: #d32f2f;">Error: ${e.message}</div>`;
+        }
+      }
+
+      // Show directory browser
+      if (browseDirectoryBtn) {
+        browseDirectoryBtn.addEventListener('click', () => {
+          dirBrowser.style.display = 'block';
+          // Start from current directory or home
+          const startPath = currentDirectoryDiv.textContent !== 'Not configured' ? 
+                           currentDirectoryDiv.textContent : '';
+          browseDirectory(startPath);
+        });
+      }
+
+      // Navigation buttons
+      if (goHomeBtn) {
+        goHomeBtn.addEventListener('click', () => {
+          browseDirectory(''); // Empty path defaults to home
+        });
+      }
+
+      if (goUpBtn) {
+        goUpBtn.addEventListener('click', () => {
+          if (currentBrowsePath) {
+            const parentPath = currentBrowsePath.split('/').slice(0, -1).join('/') || '/';
+            browseDirectory(parentPath);
+          }
+        });
+      }
+
+      // Close browser
+      function closeBrowser() {
+        dirBrowser.style.display = 'none';
+        currentBrowsePath = '';
+      }
+
+      if (closeBrowserBtn) {
+        closeBrowserBtn.addEventListener('click', closeBrowser);
+      }
+
+      if (cancelBrowserBtn) {
+        cancelBrowserBtn.addEventListener('click', closeBrowser);
+      }
+
+      // Close on outside click
+      dirBrowser.addEventListener('click', (e) => {
+        if (e.target === dirBrowser) {
+          closeBrowser();
+        }
+      });
+
+      // Select directory
+      if (selectDirBtn) {
+        selectDirBtn.addEventListener('click', async () => {
+          if (!currentBrowsePath) {
+            alert('No directory selected');
+            return;
+          }
+          
+          try {
+            const res = await fetch('/api/config/waveforms-directory', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ directory: currentBrowsePath })
+            });
+            
+            if (res.ok) {
+              currentDirectoryDiv.textContent = currentBrowsePath;
+              closeBrowser();
+              refresh(); // Refresh file list
+              alert('Directory updated successfully!');
+            } else {
+              const error = await res.text();
+              alert('Failed to update directory: ' + error);
+            }
+          } catch (e) {
+            alert('Error updating directory: ' + e.message);
+          }
+        });
+      }
+
+      // Manual directory input
+      if (changeDirectoryBtn) {
+        changeDirectoryBtn.addEventListener('click', () => {
+          directoryInputSection.style.display = 'block';
+          changeDirectoryBtn.style.display = 'none';
+          browseDirectoryBtn.style.display = 'none';
+          directoryInput.value = currentDirectoryDiv.textContent === 'Not configured' ? '' : currentDirectoryDiv.textContent;
+          directoryInput.focus();
+        });
+      }
+
+      if (cancelDirectoryBtn) {
+        cancelDirectoryBtn.addEventListener('click', () => {
+          directoryInputSection.style.display = 'none';
+          changeDirectoryBtn.style.display = 'inline-block';
+          browseDirectoryBtn.style.display = 'inline-block';
+          directoryInput.value = '';
+        });
+      }
+
+      if (applyDirectoryBtn) {
+        applyDirectoryBtn.addEventListener('click', async () => {
+          const newDir = directoryInput.value.trim();
+          if (!newDir) {
+            alert('Please enter a directory path');
+            return;
+          }
+          
+          try {
+            const res = await fetch('/api/config/waveforms-directory', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ directory: newDir })
+            });
+            
+            if (res.ok) {
+              currentDirectoryDiv.textContent = newDir;
+              directoryInputSection.style.display = 'none';
+              changeDirectoryBtn.style.display = 'inline-block';
+              browseDirectoryBtn.style.display = 'inline-block';
+              directoryInput.value = '';
+              await refresh();
+              alert('Directory updated successfully!');
+            } else {
+              const error = await res.text();
+              alert('Failed to update directory: ' + error);
+            }
+          } catch (e) {
+            alert('Error updating directory: ' + e.message);
+          }
+        });
+      }
+
+      // Summary selection handlers
+      const autoSummaryBtn = document.getElementById('auto-summary');
+      const pickSummaryBtn = document.getElementById('pick-summary');
+      const currentSummarySpan = document.getElementById('current-summary');
+
+      if (autoSummaryBtn) {
+        autoSummaryBtn.addEventListener('click', async () => {
+          try {
+            const res = await fetch('/api/config/summary-override', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: null })
+            });
+            if (res.ok) {
+              currentSummarySpan.textContent = 'Auto (preferred)';
+              await refresh();
+            } else {
+              alert('Failed to clear override');
+            }
+          } catch (e) { alert('Error: ' + e.message); }
+        });
+      }
+
+      if (pickSummaryBtn) {
+        const picker = document.getElementById('summary-file-picker');
+        const closeBtn = document.getElementById('close-summary-picker');
+        const cancelBtn = document.getElementById('summary-cancel');
+        const goUpBtn = document.getElementById('summary-go-up');
+        const curPath = document.getElementById('summary-current-path');
+        const listDiv = document.getElementById('summary-list');
+        let browsePath = '';
+
+        async function loadList(path) {
+          try {
+            listDiv.innerHTML = '<div style="padding:24px; text-align:center; color:#666;">Loading...</div>';
+            const url = path ? ('/api/browse-files?path=' + encodeURIComponent(path)) : '/api/browse-files';
+            const res = await fetch(url);
+            if (!res.ok) {
+              const t = await res.text();
+              listDiv.innerHTML = '<div style="padding:20px; text-align:center; color:#d32f2f;">' + t + '</div>';
+              return;
+            }
+            const data = await res.json();
+            browsePath = data.current_path;
+            curPath.textContent = browsePath;
+            if (!data.items || data.items.length === 0) {
+              listDiv.innerHTML = '<div style="padding:20px; text-align:center; color:#666;">Empty directory</div>';
+              return;
+            }
+            const ul = document.createElement('ul');
+            ul.style.listStyle = 'none';
+            ul.style.margin = '0';
+            ul.style.padding = '0';
+            data.items.forEach(item => {
+              const li = document.createElement('li');
+              li.style.padding = '6px 10px';
+              li.style.borderBottom = '1px solid #eee';
+              li.style.cursor = 'pointer';
+              if (item.type === 'directory' || item.type === 'parent') {
+                li.textContent = '📁 ' + item.name;
+                li.addEventListener('click', () => loadList(item.path));
+              } else if (item.type === 'file') {
+                li.textContent = '📄 ' + item.name;
+                li.addEventListener('click', async () => {
+                  try {
+                    const res = await fetch('/api/config/summary-override', {
+                      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: item.path })
+                    });
+                    const j = await res.json();
+                    if (!res.ok || j.error) throw new Error(j.error || 'failed');
+                    currentSummarySpan.textContent = j.summary_override || 'Auto (preferred)';
+                    picker.style.display = 'none';
+                    await refresh();
+                  } catch (e) {
+                    alert('Failed to set override: ' + e.message);
+                  }
+                });
+              }
+              ul.appendChild(li);
+            });
+            listDiv.innerHTML = '';
+            listDiv.appendChild(ul);
+          } catch (e) {
+            listDiv.innerHTML = '<div style="padding:20px; text-align:center; color:#d32f2f;">' + e.message + '</div>';
+          }
+        }
+
+        pickSummaryBtn.addEventListener('click', () => { picker.style.display = 'block'; loadList(''); });
+        closeBtn.addEventListener('click', () => { picker.style.display = 'none'; });
+        cancelBtn.addEventListener('click', () => { picker.style.display = 'none'; });
+        goUpBtn.addEventListener('click', () => {
+          if (!browsePath) return;
+          let p = browsePath;
+          // Normalize separators
+          p = p.replace(/\\/g, '/');
+          if (p.endsWith('/')) p = p.slice(0, -1);
+          const idx = p.lastIndexOf('/');
+          const up = idx > 0 ? p.slice(0, idx) : p;
+          loadList(up);
+        });
+      }
+
+      // Load current directory on page load
+      loadCurrentDirectory();
+    });
+
+  async function loadSummaryData() {
+      try {
+        console.log('Discovering available summaries...');
+        // Prefer smoothed summary if available (supports legacy batch_analyzer_results layout)
+        let src = 'original';
+        try {
+          const info = await fetch('/api/summaries');
+          if (info.ok) {
+            const j = await info.json();
+            const sm = (j && j.sources || []).find(s => s.label === 'smoothed');
+            if (sm && sm.exists) src = 'smoothed';
+          }
+        } catch (_) { /* ignore and fallback below */ }
+
+        console.log('Loading summary CSV (src=' + src + ')...');
+        const res = await fetch('/api/summary?src=' + encodeURIComponent(src));
+        if (res.ok) {
+          const csvText = await res.text();
+          console.log('Raw CSV text (first 500 chars):', csvText.substring(0, 500));
+          summaryData = parseSummaryCSV(csvText);
+          console.log('Successfully loaded summary data');
+          console.log('Summary data keys (first 10):', Object.keys(summaryData || {}).slice(0, 10));
+          console.log('Total summary entries:', Object.keys(summaryData || {}).length);
+          // Also fetch combined metadata if available
+          try {
+            const r2 = await fetch('/api/combined_metadata');
+            if (r2.ok) {
+              combinedMeta = await r2.json();
+              console.log('Loaded combined metadata:', combinedMeta?.processing_params);
+            } else {
+              combinedMeta = null;
+            }
+          } catch (e) {
+            console.warn('No combined metadata available:', e.message);
+            combinedMeta = null;
+          }
+          // Try reading export-level analysis summary to pick up width level, etc.
+          try {
+            const r3 = await fetch('/api/analysis_summary');
+            if (r3.ok) {
+              const ajs = await r3.json();
+              const wl = ajs?.markers?.width_level_mV;
+              if (typeof wl === 'number' && Number.isFinite(wl)) {
+                CONFIG.WIDTH_LEVEL_MV = wl;
+                console.log('Width level (mV) set from Analysis_summary.json:', wl);
+              }
+            } else {
+              console.log('No Analysis_summary.json found (optional).');
+            }
+          } catch (e) {
+            console.log('Failed to read analysis summary (optional):', e?.message || e);
+          }
+          return;
+        } else {
+          console.log('Failed to load summary CSV, status:', res.status);
+        }
+      } catch (e) {
+        console.log('Error loading summary CSV:', e.message);
+      }
+
+      console.log('No summary CSV found');
+  summaryData = null;
+    } function parseSummaryCSV(csvText) {
+      const lines = csvText.trim().split('\n');
+
+      if (lines.length < 2) {
+        return null;
+      }
+
+      const headers = lines[0].split(',').map(h => h.trim());
+      const data = {};
+
+      for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(',');
+        const row = {};
+        headers.forEach((h, idx) => {
+          row[h] = values[idx] ? values[idx].trim() : '';
+        });
+
+        console.log(`Row ${i}:`, row);
+
+        const eventId = row.event_id;
+        if (!eventId) {
+          console.log(`WARNING: Row ${i} has no event_id`);
+          continue;
+        }
+
+        // Use event_id directly as key since it already contains channel info
+        data[eventId] = {
+          // Standard markers (EFdynamic - boundary expanded)
+          event_start_time_ns: parseFloat(row.event_start_time_ns) || 0,
+          peak_time_ns: parseFloat(row.peak_time_ns) || 0,
+          event_end_time_ns: parseFloat(row.event_end_time_ns) || 0,
+          // Three-stage marker support
+          event_start_time_EFraw: parseFloat(row.event_start_time_EFraw) || null,
+          event_peak_time_EFraw: parseFloat(row.event_peak_time_EFraw) || null,
+          event_end_time_EFraw: parseFloat(row.event_end_time_EFraw) || null,
+          event_start_time_EFdynamic: parseFloat(row.event_start_time_EFdynamic) || null,
+          event_peak_time_EFdynamic: parseFloat(row.event_peak_time_EFdynamic) || null,
+          event_end_time_EFdynamic: parseFloat(row.event_end_time_EFdynamic) || null,
+          event_start_time_batch: parseFloat(row.event_start_time_batch) || null,
+          event_peak_time_batch: parseFloat(row.event_peak_time_batch) || null,
+          event_end_time_batch: parseFloat(row.event_end_time_batch) || null,
+          // Other event properties
+          event_duration_ns: parseFloat(row.event_duration_ns) || 0,
+          peak_amplitude_mV: parseFloat(row.peak_amplitude_mV) || 0,
+          detection_threshold_mV: parseFloat(row.detection_threshold_mV) || 0,
+          channel: row.channel || '',
+          // Extended cycle timing data
+          cycle_start_time: parseFloat(row.cycle_start_time) || 0,
+          cycle_index: parseInt(row.cycle_index) || 0,
+          c1_peak_time_error_ns: parseFloat(row.c1_peak_time_error_ns) || 0,
+          cycle_end_time: parseFloat(row.cycle_end_time) || 0,
+          cycle_period_ns: parseFloat(row.cycle_period_ns) || 0,
+          phase: parseFloat(row.phase) || 0,
+          phase_EFraw: parseFloat(row.phase_EFraw) || null,
+          signal_amplitude_mV: parseFloat(row.signal_amplitude_mV) || 0,
+          snr: parseFloat(row.snr) || 0
+        };
+
+        console.log(`Processed event ${eventId}:`, data[eventId]);
+      }
+
+      console.log('Final data object keys (first 10):', Object.keys(data).slice(0, 10));
+      console.log('Sample data entries:');
+      Object.keys(data).slice(0, 5).forEach(key => {
+        console.log(`  ${key}:`, data[key]);
+      });
+      console.log('=== END CSV PARSING ===');
+      return data;
+    }
+
+    // Helpers to get baseline sigma (mV) and k for a given filename/channel
+    function getTraceNumberFromFilename(fn) {
+      // Supports both T01_C3_000123.csv and trace_00001/C3/event_000123.csv
+      const m1 = fn.match(/T(\d+)_/);
+      if (m1) return parseInt(m1[1], 10);
+      const m2 = fn.match(/trace_(\d+)\//);
+      if (m2) return parseInt(m2[1], 10);
+      return null;
+    }
+    function getBaselineStdMvFor(fn, channel) {
+      if (!combinedMeta || !Array.isArray(combinedMeta.trace_metadata)) return null;
+      const tnum = getTraceNumberFromFilename(fn);
+      if (tnum == null) return null;
+      const tmeta = combinedMeta.trace_metadata.find(t => Number(t.trace_number) === Number(tnum));
+      const ch = channel || (getEventInfo(fn)?.channel);
+      if (!tmeta || !tmeta.channel_baselines || !ch) return null;
+      const cb = tmeta.channel_baselines[ch];
+      if (!cb) return null;
+      const v = cb.baseline_std_mv;
+      return (typeof v === 'number') ? v : (v != null ? Number(v) : null);
+    }
+    function getKMultiplier() {
+      const k = combinedMeta?.processing_params?.boundary_std_multiplier;
+      return (typeof k === 'number') ? k : 3.0;
+    }
+
+    function getEventInfo(filename) {
+      // Extract info from filename like "trace_00001/C3/event_000000.csv"
+      const match = filename.match(/trace_(\d+)\/([^\/]+)\/event_(\d+)\.csv/);
+      if (!match) {
+        // Try alternative patterns
+        const altMatch = filename.match(/T(\d+)_([^_]+)_(\d+)\.csv/);
+        if (altMatch) {
+          const traceNum = altMatch[1];
+          const channel = altMatch[2];
+          const eventNum = altMatch[3];
+          // Use the filename without .csv extension as event ID since that's what's in the CSV
+          const eventId = filename.replace('.csv', '');
+          console.log(`Alternative parsed: trace=${traceNum}, channel=${channel}, event=${eventNum}, eventId=${eventId}`);
+          return { eventId, channel };
+        }
+
+        console.log('No match for any pattern');
+        return null;
+      }
+
+      const traceNum = match[1];
+      const channel = match[2];
+      const eventNum = match[3];
+
+      // Convert to summary CSV format: C3_1_0 (channel_trace_event)
+      const eventId = `${channel}_${parseInt(traceNum)}_${parseInt(eventNum)}`;
+
+      console.log(`Original parsed: trace=${traceNum}, channel=${channel}, event=${eventNum}, eventId=${eventId}`);
+      console.log('=== END FILENAME PARSING ===');
+
+      return { eventId, channel };
+    }
+
+    // Map summary markers (which are defined relative to the "main" cycle) into
+    // the saved waveform time frame. With the new fixed window scheme, waveforms
+  // start 40 ns before the main cycle start and extend to +120 ns after.
+    // Also fix threshold polarity to match pulse sign (negative pulses => negative threshold).
+  function toWaveformFrame(baseEvent) {
+      if (!baseEvent) return null;
+      const peak = Number(baseEvent.peak_amplitude_mV) || 0;
+      const thr = Number(baseEvent.detection_threshold_mV) || 0;
+      const thrSigned = (peak < 0) ? -Math.abs(thr) : Math.abs(thr);
+      return {
+        ...baseEvent,
+    // Use times as-is; no additional +pre-shift applied in viewer
+    event_start_time_ns: (Number(baseEvent.event_start_time_ns) || 0),
+    peak_time_ns: (Number(baseEvent.peak_time_ns) || 0),
+    event_end_time_ns: (Number(baseEvent.event_end_time_ns) || 0),
+        detection_threshold_mV: thrSigned,
+      };
+    }
+
+    function renderFiles() {
+      const ul = document.getElementById('files');
+      ul.innerHTML = '';
+      const q = document.getElementById('filter').value.trim().toLowerCase();
+      filteredFiles = files.filter(fn => !q || fn.toLowerCase().indexOf(q) !== -1);
+
+      // Render at most MAX_RENDER_ITEMS to avoid long blocking loops
+      const frag = document.createDocumentFragment();
+      const count = Math.min(filteredFiles.length, MAX_RENDER_ITEMS);
+      for (let idx = 0; idx < count; idx++) {
+        const fn = filteredFiles[idx];
+        const li = document.createElement('li');
+        const isRaw = window.RAW_FILE_SET && window.RAW_FILE_SET.has(fn);
+        li.textContent = isRaw ? fn + ' (raw)' : fn;
+        li.title = fn;
+        li.dataset.file = fn;
+        li.dataset.index = idx;
+        li.onclick = () => onFileClick(fn, li, idx);
+        frag.appendChild(li);
+      }
+      ul.appendChild(frag);
+
+      // Status message when the list is huge
+      // Remove any previous notice to avoid duplicates
+      const existingNotice = document.getElementById('list-size-notice');
+      if (existingNotice) existingNotice.remove();
+
+      if (filteredFiles.length > MAX_RENDER_ITEMS) {
+        const more = document.createElement('div');
+        more.id = 'list-size-notice';
+        more.style.padding = '6px 8px';
+        more.style.color = '#666';
+        more.textContent = `Showing first ${MAX_RENDER_ITEMS.toLocaleString()} of ${filteredFiles.length.toLocaleString()} files. Use the filter to narrow.`;
+        ul.parentElement.appendChild(more);
+      }
+      updateNavButtons();
+    }
+
+    function updateNavButtons() {
+      document.getElementById('prev').disabled = currentIndex <= 0;
+      document.getElementById('next').disabled = currentIndex >= filteredFiles.length - 1;
+    }
+
+    function navigateToIndex(newIndex) {
+      if (newIndex < 0 || newIndex >= filteredFiles.length) return;
+      currentIndex = newIndex;
+      const fn = filteredFiles[currentIndex];
+
+      // Update UI selection
+      document.querySelectorAll('#files li').forEach(x => x.classList.remove('sel'));
+      const li = document.querySelector(`#files li[data-index="${currentIndex}"]`);
+      if (li) li.classList.add('sel');
+
+      // Update selected and plot
+      selected = [fn];
+      plotSelected();
+      updateNavButtons();
+      updatePSDButton(); // Update PSD button state
+      updatePileupButton(); // Update Pile-up button state
+      updateSmoothingButtons(); // Update smoothing button state
+      setPileupIndicator('unknown'); // reset indicator on navigation
+      autofillUpdatedThreshold();
+      const applyBtn = document.getElementById('apply-updated-markers');
+      if (applyBtn) applyBtn.disabled = selected.length === 0;
+    }
+
+    function onFileClick(fn, li, idx) {
+      const overlay = document.getElementById('overlay').checked;
+      if (!overlay) {
+        currentIndex = idx;
+        selected = [fn];
+        document.querySelectorAll('#files li').forEach(x => x.classList.remove('sel'));
+        li.classList.add('sel');
+      } else {
+        if (selected.indexOf(fn) === -1) { selected.push(fn); li.classList.add('sel'); } else { selected = selected.filter(x => x !== fn); li.classList.remove('sel'); }
+      }
+      plotSelected();
+      updateNavButtons();
+      updatePSDButton(); // Enable/disable PSD button based on selection
+      updatePileupButton(); // Enable/disable Pile-up button based on selection
+      updateSmoothingButtons(); // Enable/disable smoothing buttons based on selection
+      autofillUpdatedThreshold(); // ensure threshold box matches current event
+      const applyBtn2 = document.getElementById('apply-updated-markers');
+      if (applyBtn2) applyBtn2.disabled = selected.length === 0;
+      updateRawResolutionControls();
+    }
+
+    // Removed duplicate/partial fetchWaveformData (was causing top-level await syntax error)
+
+    // --- Marker computation state (full-fidelity EFdynamic + Batch) ---
+    // (no loading logic here; consolidated inside the later unified fetchWaveformData implementation)
+    function getChannelFromFilename(fn){
+      // Attempt patterns: T01_C3_..., trace_00001/C3/event_....csv
+      const m1 = fn.match(/_C(\d)_/i); if (m1) return 'C'+m1[1];
+      const m2 = fn.match(/\/C(\d)\//i); if (m2) return 'C'+m2[1];
+      // Fallback: search C2 / C3 / C4 tokens
+      const m3 = fn.match(/C[234]/); if (m3) return m3[0];
+      return null;
+    }
+
+    function estimateBaselineSigma(amps, peakAmp){
+      if (!amps || !amps.length) return null;
+      const absPeak = Math.abs(peakAmp || 0);
+      const limit = absPeak * 0.2 || 5; // heuristic guard
+      const candidates = [];
+      const maxSamples = Math.min(amps.length, 2000);
+      for (let i=0;i<maxSamples;i++){
+        const v = amps[i];
+        if (!Number.isFinite(v)) continue;
+        if (Math.abs(v) <= limit) candidates.push(v);
+      }
+      // Fallback if filtering removed everything
+      const arr = candidates.length >= 20 ? candidates : amps.slice(0, maxSamples);
+      const mean = arr.reduce((a,b)=>a+b,0)/arr.length;
+      const variance = arr.reduce((a,b)=>a+(b-mean)*(b-mean),0)/arr.length;
+      return Math.sqrt(variance);
+    }
+
+    // Simple peak detector used by simplified threshold overlay mode
+    function detectPeak(times, amps, channel){
+      if (!times || !amps || times.length !== amps.length || !times.length) return null;
+      const chUp = (channel||'').toUpperCase();
+      const negative = ['C2','C3','C4'].includes(chUp);
+      let idx = 0;
+      if (negative){
+        let best = amps[0];
+        for (let i=1;i<amps.length;i++){ const v = amps[i]; if (v < best){ best = v; idx = i; } }
+      } else {
+        let best = amps[0];
+        for (let i=1;i<amps.length;i++){ const v = amps[i]; if (v > best){ best = v; idx = i; } }
+      }
+      return { peak_ns: times[idx], peak_amp: amps[idx], neg: negative };
+    }
+
+    function computeBatchMarkers(times, amps, channel){
+      const mk = computeEfDynamicMarkers(times, amps, channel, 50, { boundary_mode:'fixed'});
+      if (mk) mk.algo='batch';
+      return mk;
+    }
+
+    async function fetchServerMarkers(type, fn){
+      const ch = getChannelFromFilename(fn) || '';
+      const base = type === 'batch' ? '/api/markers/batch' : '/api/markers/efdynamic';
+      const params = new URLSearchParams({ file: fn, channel: ch });
+      if (type === 'batch') {
+        const w = document.getElementById('savgol-window')?.value || '101';
+        const p = document.getElementById('savgol-poly')?.value || '3';
+        params.set('window', w); params.set('poly', p);
+      }
+      try {
+        const r = await fetch(base + '?' + params.toString());
+        if (!r.ok) throw new Error('HTTP '+r.status);
+        const j = await r.json();
+        if (j && j.markers){
+          const m = j.markers;
+          return {
+            start_ns: m.event_start_time_ns,
+            end_ns: m.event_end_time_ns,
+            peak_ns: m.peak_time_ns,
+            peak_amp: m.peak_amplitude_mV,
+            algo: type === 'batch' ? 'batch' : 'ef_dynamic',
+            source: 'server',
+            algorithm_version: j.algorithm_version,
+            std_multiplier: j.params?.std_multiplier,
+            dwell_samples: j.params?.dwell_samples,
+            // Added baseline stats from backend (optional chaining for safety)
+            base_mean: j.stats?.base_mean,
+            base_std: j.stats?.base_std,
+            width_level: j.stats?.width_level,
+            peak_rel: j.stats?.peak_rel,
+            exclude_margin: j.stats?.exclude_margin,
+            savgol_window: j.stats?.savgol_window,
+            savgol_poly: j.stats?.savgol_poly,
+            boundary_mode: j.params?.boundary_mode || j.markers?.boundary_mode
+          };
+        }
+      } catch (e){ console.warn('Server marker fetch failed', type, fn, e); return null; }
+      return null;
+    }
+
+    // Cache of thresholds from server endpoint (separating EF detection vs Batch fixed widths)
+    let thresholdCache = { ts:0, ef:{}, batch:{}, efFile:null, batchFile:null };
+    async function fetchThresholds(force=false){
+      const now = Date.now();
+      if (!force && (now - thresholdCache.ts) < 5000) return thresholdCache;
+      try {
+        const r = await fetch('/api/thresholds');
+        if (r.ok){
+          const j = await r.json();
+            // EF detection thresholds
+            const ef = j.detection_thresholds_mV || {};
+            // Batch thresholds (raw batch settings only if provided, else fallback to thresholds_mV)
+            const batch = j.batch_thresholds_mV || j.thresholds_mV || {};
+            thresholdCache = { ts:now, ef, batch, efFile:j.event_finder_settings_file || null, batchFile:j.settings_file || null };
+        }
+      } catch(e){ console.warn('threshold fetch failed', e); }
+      return thresholdCache;
+    }
+
+    async function ensureEfMarkers(fn, rawSeries){
+      if (efMarkersRaw.has(fn)) return efMarkersRaw.get(fn);
+      let mk = await fetchServerMarkers('efdynamic', fn);
+      if (!mk){
+        const ch = getChannelFromFilename(fn);
+        mk = computeEfDynamicMarkers(rawSeries.times, rawSeries.amps, ch, 50, { boundary_mode:'fixed'});
+        if (mk) mk.source = 'js-fallback';
+      }
+      if (mk) efMarkersRaw.set(fn, mk);
+      return mk || null;
+    }
+    async function ensureBatchMarkers(fn){
+      if (!smoothedData.has(fn)) return null;
+      if (batchMarkersSmoothed.has(fn)) return batchMarkersSmoothed.get(fn);
+      let mk = await fetchServerMarkers('batch', fn);
+      if (!mk){
+        const ch = getChannelFromFilename(fn);
+        const sm = smoothedData.get(fn);
+        mk = computeBatchMarkers(sm.times, sm.amps, ch);
+        if (mk) mk.source = 'js-fallback';
+      }
+      if (mk) batchMarkersSmoothed.set(fn, mk);
+      return mk || null;
+    }
+
+    async function plotSelected() {
+      const container = document.getElementById('plot');
+      document.getElementById('meta').textContent = '';
+      if (selected.length === 0) {
+        container.innerHTML = '<div style="padding: 20px; text-align: center; color: #666;">Click on a file in the list above to display its waveform</div>';
+        return;
+      }
+
+      // Wrap the entire plotting pipeline so unexpected errors surface in UI
+      try {
+        // Update raw resolution controls visibility early (depends on current selection)
+        try { updateRawResolutionControls(); } catch(_) {}
+        const overlay = document.getElementById('overlay').checked;
+        const overlaySmooth = document.getElementById('overlay-smooth').checked;
+        const toPlot = overlay ? selected.slice() : [selected[selected.length - 1]];
+        const traces = [];
+        const annotations = [];
+        const shapes = [];
+  // Track last waveform data actually used for latest file for post-plot status/meta
+  let lastWaveformPlotted = null;
+
+    // Marker toggles
+    const showEFdyn = document.getElementById('show-efdynamic-markers')?.checked ?? true;
+    const showBatch = document.getElementById('show-batch-markers')?.checked ?? true;
+
+        // Helper to ensure Plotly is available (defer race protection)
+        async function waitForPlotly(maxMs = 3000) {
+          const start = performance.now();
+          while (typeof Plotly === 'undefined' && (performance.now() - start) < maxMs) {
+            await new Promise(r => setTimeout(r, 50));
+          }
+          return typeof Plotly !== 'undefined';
+        }
+
+        // Main plotting loop
+        let skippedDueToNoStart = 0; // placeholder for future filtering metrics
+  for (let i = 0; i < toPlot.length; i++) {
+          const fn = toPlot[i];
+          const isLatestFile = i === toPlot.length - 1;
+          const baseColor = colorForIndex(i);
+
+          // Unified waveform fetch: handles per-event CSV (API) and raw .txt LeCroy files
+          const originalDataForFile = await (async () => {
+            try { return await fetchWaveformData(fn, /*respectFullRes*/ true); }
+            catch (err) { console.warn('Failed to load ' + fn + ': ' + err.message); return null; }
+          })();
+          if (!originalDataForFile) continue;
+          // Store original for reuse
+          // Always update cache for raw files (may switch decimated->full) else set-once for CSV
+          if (originalDataForFile.raw) {
+            originalData.set(fn, originalDataForFile);
+          } else if (!originalData.has(fn)) {
+            originalData.set(fn, originalDataForFile);
+          }
+          if (isLatestFile) lastWaveformPlotted = originalDataForFile;
+          // If single selection and it's raw, update resolution status early
+          try {
+            if (selected.length === 1 && originalDataForFile.raw && isLatestFile) {
+              updateRawResolutionStatus(originalDataForFile);
+            }
+          } catch(_) {}
+
+          // Lookup summary event markers or client-side overrides
+          let eventStart = null, eventEnd = null, peakTime = null, peakAmp = null;
+          try {
+            const info = getEventInfo(fn);
+            if (info && summaryData && summaryData[info.eventId]) {
+              const sd = summaryData[info.eventId];
+              eventStart = sd.event_start_time_batch ?? sd.event_start_time_EFdynamic ?? sd.event_start_time_ns ?? sd.event_start_time_EFraw;
+              eventEnd   = sd.event_end_time_batch   ?? sd.event_end_time_EFdynamic   ?? sd.event_end_time_ns   ?? sd.event_end_time_EFraw;
+              peakTime   = sd.event_peak_time_batch  ?? sd.event_peak_time_EFdynamic  ?? sd.peak_time_ns        ?? sd.event_peak_time_EFraw;
+              peakAmp    = sd.peak_amplitude_mV;
+            }
+            // Apply override if present
+            if (updatedMarkers.has(fn)) {
+              const ov = updatedMarkers.get(fn);
+              if (ov.event_start_time_ns != null) eventStart = ov.event_start_time_ns;
+              if (ov.event_end_time_ns != null) eventEnd = ov.event_end_time_ns;
+              if (ov.peak_time_ns != null) peakTime = ov.peak_time_ns;
+              if (ov.peak_amplitude_mV != null) peakAmp = ov.peak_amplitude_mV;
+            }
+            // Determine y extents for vertical line traces
+            let yMinLine = null, yMaxLine = null;
+            try {
+              const series = originalDataForFile;
+              if (series && Array.isArray(series.amps) && series.amps.length) {
+                for (const v of series.amps) { if (typeof v === 'number' && isFinite(v)) { if (yMinLine===null||v<yMinLine) yMinLine=v; if (yMaxLine===null||v>yMaxLine) yMaxLine=v; } }
+              }
+              if (yMinLine === null || yMaxLine === null) { yMinLine = -1; yMaxLine = 1; }
+            } catch(_) { yMinLine = -1; yMaxLine = 1; }
+            const legendEligible = (!overlay) || isLatestFile; // reduce clutter when overlaying many
+            if (typeof eventStart === 'number' && isFinite(eventStart) && typeof eventEnd === 'number' && isFinite(eventEnd) && eventEnd > eventStart) {
+              // Shaded region (keep as shape)
+              shapes.push({ type:'rect', x0:eventStart, x1:eventEnd, y0:0, y1:1, xref:'x', yref:'paper', fillcolor: baseColor + '18', line:{width:0} });
+              // Vertical start line trace
+              traces.push({ x:[eventStart,eventStart], y:[yMinLine,yMaxLine], mode:'lines', line:{color:baseColor, width:1.5, dash:'dot'}, name:`Start ${eventStart.toFixed(2)} ns`, showlegend: legendEligible, hovertemplate:'Start %{'+'x:.2f} ns<extra></extra>' });
+              traces.push({ x:[eventEnd,eventEnd], y:[yMinLine,yMaxLine], mode:'lines', line:{color:baseColor, width:1.5, dash:'dot'}, name:`End ${eventEnd.toFixed(2)} ns`, showlegend: legendEligible, hovertemplate:'End %{'+'x:.2f} ns<extra></extra>' });
+              // Optional point markers (legend hidden to avoid duplicates)
+              try {
+                const series = originalDataForFile;
+                if (series && Array.isArray(series.times) && Array.isArray(series.amps)) {
+                  const idxS = nearestIndex ? nearestIndex(series.times, eventStart) : null;
+                  const idxE = nearestIndex ? nearestIndex(series.times, eventEnd) : null;
+                  const sY = (idxS!=null)?series.amps[idxS]:null;
+                  const eY = (idxE!=null)?series.amps[idxE]:null;
+                  traces.push({ x:[eventStart], y:[sY!=null?sY:0], mode:'markers', marker:{color:baseColor, size:9, symbol:'circle-open'}, name:'', showlegend:false, hoverinfo:'skip' });
+                  traces.push({ x:[eventEnd], y:[eY!=null?eY:0], mode:'markers', marker:{color:baseColor, size:9, symbol:'circle-open'}, name:'', showlegend:false, hoverinfo:'skip' });
+                }
+              } catch(_){}
+            }
+            if (typeof peakTime === 'number' && isFinite(peakTime)) {
+              let peakY = peakAmp;
+              if (peakY == null && originalDataForFile?.times) {
+                try { const idxP = nearestIndex ? nearestIndex(originalDataForFile.times, peakTime) : null; if (idxP!=null) peakY = originalDataForFile.amps[idxP]; } catch(_){}
+              }
+              traces.push({ x:[peakTime, peakTime], y:[yMinLine, yMaxLine], mode:'lines', line:{color:baseColor, width:1.2}, name:`Peak ${peakTime.toFixed(2)} ns`, showlegend: legendEligible, hovertemplate:'Peak %{'+'x:.2f} ns<extra></extra>' });
+              traces.push({ x:[peakTime], y:[peakY!=null?peakY:0], mode:'markers', marker:{color:baseColor, size:11, symbol:'circle'}, name:'', showlegend:false, hovertemplate:'Peak %{'+'x:.2f} ns<br>Amp %{y:.1f} mV<extra></extra>' });
+            }
+          } catch (e) {
+            console.warn('Failed to overlay markers for', fn, e);
+          }
+
+            let d; // series used for plotting for this file
+            const hasSmoothedData = smoothedData.has(fn);
+            if (overlaySmooth && hasSmoothedData) {
+              const smoothedDataForFile = smoothedData.get(fn);
+              traces.push({ x: originalDataForFile.times, y: originalDataForFile.amps, mode:'lines', name:fn+' (orig)', line:{color:baseColor, width:1.2, dash:'dot'}, opacity:0.9 });
+              traces.push({ x: smoothedDataForFile.times, y: smoothedDataForFile.amps, mode:'lines', name:fn+' (smoothed)', line:{color:baseColor, width:2.2} });
+              d = originalDataForFile; // markers from chosen analysis series handled below
+            } else if (smoothingActive && hasSmoothedData) {
+              d = smoothedData.get(fn);
+              traces.push({ x:d.times, y:d.amps, mode:'lines', name:fn+' (smoothed)', line:{color:baseColor, width:2.2} });
+            } else {
+              d = originalDataForFile;
+              const annotatedName = annotateRawInLegend(fn, originalDataForFile);
+              traces.push({ x:d.times, y:d.amps, mode:'lines', name:annotatedName, line:{color:baseColor, width:isLatestFile?2:1.6} });
+            }
+
+            // Simplified threshold + peak overlay
+            const ch = getChannelFromFilename(fn);
+            const tcache = await fetchThresholds();
+            const efThr = ch && tcache.ef[ch] !== undefined ? tcache.ef[ch] : null;
+            const batchThrAlways = ch && tcache.batch[ch] !== undefined ? tcache.batch[ch] : null; // always show batch threshold
+            const rawPeak = detectPeak(originalDataForFile.times, originalDataForFile.amps, ch);
+            if (rawPeak){
+              let lineY = efThr;
+              if (lineY != null && rawPeak.neg && lineY > 0) lineY = -lineY;
+              if (lineY != null) traces.push({ x:[originalDataForFile.times[0], originalDataForFile.times[originalDataForFile.times.length-1]], y:[lineY,lineY], mode:'lines', line:{color:'#ef4444', width:1.5, dash:'dot'}, name:`EF thr ${efThr} mV`, hoverinfo:'skip' });
+              const showInLegend = !overlay || isLatestFile;
+              traces.push({ x:[rawPeak.peak_ns], y:[rawPeak.peak_amp], mode:'markers', marker:{color:'#dc2626', size:9, symbol:'circle'}, name:`EF Peak (thr=${efThr!=null?efThr:'?'} mV)`, showlegend: showInLegend });
+            }
+            if (batchThrAlways != null){
+              let bY = batchThrAlways;
+              if (rawPeak && rawPeak.neg && bY > 0) bY = -bY;
+              const showInLegend = !overlay || isLatestFile;
+              traces.push({ x:[originalDataForFile.times[0], originalDataForFile.times[originalDataForFile.times.length-1]], y:[bY,bY], mode:'lines', line:{color:'#6366f1', width:1.5, dash:'dash'}, name:`Batch thr ${batchThrAlways} mV`, showlegend: showInLegend, hoverinfo:'skip' });
+            }
+            if ((smoothingActive || overlaySmooth) && smoothedData.has(fn)) {
+              const sm = smoothedData.get(fn);
+              const smPeak = detectPeak(sm.times, sm.amps, ch);
+              if (smPeak){
+                const showInLegend = !overlay || isLatestFile;
+                traces.push({ x:[smPeak.peak_ns], y:[smPeak.peak_amp], mode:'markers', marker:{color:'#4f46e5', size:9, symbol:'diamond'}, name:`Batch Peak`, showlegend: showInLegend });
+              }
+            }
+            if (isLatestFile){
+              try { const statusDiv = document.getElementById('marker-source-status'); if (statusDiv){ statusDiv.textContent = `C=${ch||'?'} EF_thr=${efThr!=null?efThr:'?'} mV  Batch_thr=${(ch&&tcache.batch[ch]!==undefined)?tcache.batch[ch]:'?'} mV`; } } catch(_) {}
+            }
+    }
+
+        // Don't show individual file metadata when overlaying multiple files
+        // document.getElementById('meta').textContent += fn + ' — samples: ' + d.times.length + '\n';
+      
+
+      // Show compact summary instead of individual file details
+      if (traces.length > 0) {
+        const overlay = document.getElementById('overlay').checked;
+  if (overlay && toPlot.length > 1) {
+          // Show stats for the most recent (last) waveform when overlaying
+          const lastFile = toPlot[toPlot.length - 1];
+          const lastEventInfo = getEventInfo(lastFile);
+          let statsText = `Overlaying ${toPlot.length} files`;
+          if (skippedDueToNoStart > 0) statsText += ` (skipped ${skippedDueToNoStart} no-start)`;
+
+          if (summaryData && lastEventInfo && summaryData[lastEventInfo.eventId]) {
+            const lastEvent = toWaveformFrame(summaryData[lastEventInfo.eventId]);
+            statsText += `\nMost Recent: ${lastFile}`;
+            statsText += `\nCycle Index: ${lastEvent.cycle_index}`;
+            statsText += `\nCycle Period: ${lastEvent.cycle_period_ns.toFixed(0)} ns`;
+            statsText += `\nStart: ${lastEvent.event_start_time_ns.toFixed(0)} ns`;
+            statsText += `\nPeak: ${lastEvent.peak_time_ns.toFixed(0)} ns`;
+            statsText += `\nEnd: ${lastEvent.event_end_time_ns.toFixed(0)} ns`;
+            if (lastEvent.c1_peak_time_error_ns !== 0) {
+              statsText += `\nC1 Peak Error: ${lastEvent.c1_peak_time_error_ns.toFixed(1)} ns`;
+            }
+          }
+
+          document.getElementById('meta').textContent = statsText;
+        } else if (toPlot.length === 1) {
+          // Get original data for sample count (since we processed this file already)
+          // Prefer already fetched waveform (may be full) instead of refetching a potentially decimated version
+          let originalDataForMeta = lastWaveformPlotted;
+          if (!originalDataForMeta) {
+            try {
+              const isRawSingle = selected.length === 1 && toPlot[0].toLowerCase().endsWith('.txt');
+              const fullToggle = document.getElementById('raw-full-res-checkbox');
+              let metaUrl = '/api/data?file=' + encodeURIComponent(toPlot[0]);
+              if (isRawSingle && fullToggle && fullToggle.checked) metaUrl += '&full=1';
+              const res = await fetch(metaUrl);
+              if (res.ok) originalDataForMeta = await res.json();
+            } catch(_) {}
+          }
+
+          const eventInfo = getEventInfo(toPlot[0]);
+          let statsText = `${toPlot[0]} — ${originalDataForMeta ? originalDataForMeta.times.length : 0} samples`;
+          if (skippedDueToNoStart > 0) statsText += ` (skipped ${skippedDueToNoStart} no-start)`;
+
+          // Add smoothing status to metadata
+          if (smoothedData.has(toPlot[0])) {
+            const overlaySmooth = document.getElementById('overlay-smooth').checked;
+            if (overlaySmooth) {
+              statsText += ` (showing original + smoothed)`;
+            } else if (smoothingActive) {
+              statsText += ` (showing smoothed)`;
+            }
+          }
+
+          if (summaryData && eventInfo && summaryData[eventInfo.eventId]) {
+            const baseEvent = toWaveformFrame(summaryData[eventInfo.eventId]);
+            const override = updatedMarkers.get(toPlot[0]);
+            const event = (override) ? {
+              ...baseEvent,
+              event_start_time_ns: override.event_start_time_ns ?? baseEvent.event_start_time_ns,
+              event_end_time_ns: override.event_end_time_ns ?? baseEvent.event_end_time_ns,
+              peak_time_ns: override.peak_time_ns ?? baseEvent.peak_time_ns,
+              peak_amplitude_mV: override.peak_amplitude_mV ?? baseEvent.peak_amplitude_mV,
+              detection_threshold_mV: (override.threshold_mV ?? baseEvent.detection_threshold_mV),
+            } : baseEvent;
+            statsText += `\nCycle Index: ${event.cycle_index}`;
+            statsText += `\nCycle Period: ${event.cycle_period_ns.toFixed(0)} ns`;
+            statsText += `\nStart: ${event.event_start_time_ns.toFixed(0)} ns`;
+            statsText += `\nPeak: ${event.peak_time_ns.toFixed(0)} ns`;
+            statsText += `\nEnd: ${event.event_end_time_ns.toFixed(0)} ns`;
+            if (event.c1_peak_time_error_ns !== 0) {
+              statsText += `\nC1 Peak Error: ${event.c1_peak_time_error_ns.toFixed(1)} ns`;
+            }
+          }
+
+          document.getElementById('meta').textContent = statsText;
+        }
+      }
+
+      if (traces.length === 0) {
+        // Clear the plot if everything was skipped by filters (e.g., no-start exclusion)
+        if (typeof Plotly !== 'undefined' && document.getElementById('plot')?.data) {
+          try { Plotly.purge('plot'); } catch (_) { /* ignore */ }
+        } else {
+          container.innerHTML = '';
+        }
+        const meta = document.getElementById('meta');
+        if (meta) meta.textContent = skippedDueToNoStart > 0 ? `All selected events skipped (no-start filter).` : '';
+        return;
+      }
+
+      // Get control values
+      const fixYAxis = document.getElementById('fixYAxis').checked;
+      const yRangeInput = document.getElementById('yRange').value.trim();
+
+      // Calculate waveform-based X range (ignore marker-only traces & vertical marker shapes)
+      let xMin = Infinity, xMax = -Infinity;
+      let waveformTraceCount = 0;
+      for (const trace of traces) {
+        // Waveform trace heuristic: has numeric x array length>2 AND has y array of same length AND is a line mode
+        if (Array.isArray(trace.x) && Array.isArray(trace.y) && trace.x.length > 2 && trace.y.length === trace.x.length && trace.mode && trace.mode.includes('lines')) {
+          // Exclude legend-only / marker helper traces (null placeholder, names with 'Peak (' etc.)
+            if (trace.name && (
+              trace.name.includes('k·σ') || trace.name.includes('Quasi') || trace.name.includes('X = Qtail') ||
+              trace.name.includes(' markers') || trace.name.includes(' Peak (') || trace.name.includes('Duration:') ||
+              trace.name.includes('SNR:') || trace.name.includes('Error:') || trace.name.includes('Cycle')
+            )) continue;
+          waveformTraceCount++;
+          for (const v of trace.x) {
+            if (typeof v === 'number' && isFinite(v)) {
+              if (v < xMin) xMin = v;
+              if (v > xMax) xMax = v;
+            }
+          }
+        }
+      }
+      // Fallback if no waveform traces were found (should not happen, but guard anyway)
+      if (waveformTraceCount === 0 || xMin === Infinity || xMax === -Infinity) {
+        xMin = 0; xMax = 1; // minimal dummy range to avoid Plotly complaining
+      }
+      // Apply small padding based on range (independent of Y padding constant)
+      const xSpan = xMax - xMin;
+      const xPad = xSpan * 0.01; // 1% breathing room
+      const finalXRange = [xMin - xPad, xMax + xPad];
+      console.log(`Computed X range from waveform data only: [${finalXRange[0]}, ${finalXRange[1]}] using ${waveformTraceCount} waveform traces`);
+      
+      const layout = {
+        margin: { l: 60, r: 200, t: 40, b: 40 },
+        xaxis: {
+          title: 'time (ns)',
+          range: finalXRange,
+          autorange: false
+        },
+        yaxis: { 
+          title: 'amplitude (mV)',
+          autorange: true  // Temporary: use simple autorange
+        },
+        annotations: annotations,
+        shapes: shapes,
+        showlegend: true,
+        legend: {
+          x: 1.02,
+          y: 1,
+          xanchor: 'left',
+          yanchor: 'top',
+          bgcolor: 'rgba(255,255,255,0.9)',
+          bordercolor: 'rgba(0,0,0,0.3)',
+          borderwidth: 1,
+          font: { size: 10 }
+        }
+      };
+
+
+      // Apply Y range with lock memory when Fix Y-axis is enabled
+      if (false && fixYAxis) {
+        // If user typed manual range, adopt and lock it
+        if (yRangeInput) {
+          const yRange = yRangeInput.split(',').map(y => parseFloat(y.trim()));
+          if (yRange.length === 2 && !isNaN(yRange[0]) && !isNaN(yRange[1])) {
+            fixedYRange = [yRange[0], yRange[1]];
+          }
+        }
+        // If no fixed range yet, compute once from waveform traces only (ignore markers/lines)
+        if (!fixedYRange) {
+          let minY = Infinity, maxY = -Infinity;
+          traces.forEach(trace => {
+            // Only consider actual waveform data traces, not threshold/marker lines or legend entries
+            if (trace.y && Array.isArray(trace.y) && trace.y.length > 1 && trace.mode && 
+                (trace.mode.includes('lines') || trace.mode.includes('markers+lines')) && 
+                trace.name && trace.y[0] !== null &&
+                // Exclude only specific non-waveform traces
+                !trace.name.includes('k·σ') && !trace.name.includes('Quasi') && 
+                !trace.name.includes('X = Qtail') && !trace.name.includes(' markers') &&
+                !trace.name.includes(' Peak (') && !trace.name.includes('Duration:') && 
+                !trace.name.includes('SNR:') && !trace.name.includes('Error:') && 
+                !trace.name.includes('Cycle')) {
+              (trace.y || []).forEach(v => {
+                if (typeof v === 'number' && isFinite(v)) {
+                  if (v < minY) minY = v;
+                  if (v > maxY) maxY = v;
+                }
+              });
+            }
+          });
+          if (minY !== Infinity && maxY !== -Infinity) {
+            const padding = (maxY - minY) * CONFIG.Y_PADDING_FRACTION;
+            fixedYRange = [minY - padding, maxY + padding];
+          }
+        }
+        if (fixedYRange) {
+          layout.yaxis.range = fixedYRange.slice();
+        } else {
+          // Ensure Y range is always set to prevent shape auto-scaling
+          layout.yaxis.range = [-100, 100];
+        }
+      } else if (yRangeInput) {
+        const yRange = yRangeInput.split(',').map(y => parseFloat(y.trim()));
+        if (yRange.length === 2 && !isNaN(yRange[0]) && !isNaN(yRange[1])) {
+          layout.yaxis.range = yRange;
+        } else {
+          // Invalid manual range - use auto-scaled range
+          let minY = Infinity, maxY = -Infinity;
+          traces.forEach(trace => {
+            if (trace.y && Array.isArray(trace.y) && trace.y.length > 1 && trace.mode && 
+                (trace.mode.includes('lines') || trace.mode.includes('markers+lines')) && 
+                trace.name && trace.y[0] !== null &&
+                // Exclude only specific non-waveform traces
+                !trace.name.includes('k·σ') && !trace.name.includes('Quasi') && 
+                !trace.name.includes('X = Qtail') && !trace.name.includes(' markers') &&
+                !trace.name.includes(' Peak (') && !trace.name.includes('Duration:') && 
+                !trace.name.includes('SNR:') && !trace.name.includes('Error:') && 
+                !trace.name.includes('Cycle')) {
+              (trace.y || []).forEach(v => {
+                if (typeof v === 'number' && isFinite(v)) {
+                  if (v < minY) minY = v;
+                  if (v > maxY) maxY = v;
+                }
+              });
+            }
+          });
+          if (minY !== Infinity && maxY !== -Infinity) {
+            const padding = (maxY - minY) * CONFIG.Y_PADDING_FRACTION;
+            layout.yaxis.range = [minY - padding, maxY + padding];
+          } else {
+            layout.yaxis.range = [-100, 100];
+          }
+        }
+        fixedYRange = null;
+      } else {
+        // Auto-scale to waveform data only, not markers/lines
+        let minY = Infinity, maxY = -Infinity;
+        traces.forEach(trace => {
+          // Only consider actual waveform data traces, not threshold/marker lines or legend entries
+          if (trace.y && Array.isArray(trace.y) && trace.y.length > 1 && trace.mode && 
+              (trace.mode.includes('lines') || trace.mode.includes('markers+lines')) && 
+              trace.name && trace.y[0] !== null &&
+              // Exclude only specific non-waveform traces
+              !trace.name.includes('k·σ') && !trace.name.includes('Quasi') && 
+              !trace.name.includes('X = Qtail') && !trace.name.includes(' markers') &&
+              !trace.name.includes(' Peak (') && !trace.name.includes('Duration:') && 
+              !trace.name.includes('SNR:') && !trace.name.includes('Error:') && 
+              !trace.name.includes('Cycle')) {
+            (trace.y || []).forEach(v => {
+              if (typeof v === 'number' && isFinite(v)) {
+                if (v < minY) minY = v;
+                if (v > maxY) maxY = v;
+              }
+            });
+          }
+        });
+        if (minY !== Infinity && maxY !== -Infinity) {
+          const padding = (maxY - minY) * CONFIG.Y_PADDING_FRACTION;
+          layout.yaxis.range = [minY - padding, maxY + padding];
+        } else {
+          // Fallback: set a reasonable default range to prevent shape auto-scaling
+          layout.yaxis.range = [-100, 100];
+        }
+        fixedYRange = null; // allow auto-scaling
+      }
+
+
+  console.log(`Total traces: ${traces.length}`);
+  console.log('Sample trace names:', traces.slice(0, 3).map(t => t.name));
+  console.log('Layout:', layout);
+  console.log('Plotly available (pre-wait):', typeof Plotly !== 'undefined');
+  console.log('Plot container:', document.getElementById('plot'));
+
+      // Guard in case Plotly failed to load (e.g., offline/CDN blocked)
+      if (!(await waitForPlotly())) {
+        const msg = document.createElement('div');
+        msg.style.padding = '12px';
+        msg.style.color = '#a33';
+        msg.style.background = '#fff7f7';
+        msg.style.border = '1px solid #f0d6d6';
+        msg.textContent = 'Plotly library failed to load. The page is usable, but plots cannot be rendered. Please check your internet connection or allow access to cdn.plot.ly.';
+        const container = document.getElementById('plot');
+        if (container) {
+          container.innerHTML = '';
+          container.appendChild(msg);
+        }
+      } else {
+        console.log('Creating plot with', traces.length, 'traces and layout:', layout);
+        console.log('=== ABOUT TO CALL Plotly.newPlot ===');
+        Plotly.newPlot('plot', traces, layout, { responsive: true });
+        console.log('=== Plotly.newPlot COMPLETED ===');
+        try {
+          const plotEl = document.getElementById('plot');
+          if (plotEl && plotEl.on) {
+            plotEl.removeAllListeners && plotEl.removeAllListeners('plotly_relayout');
+            plotEl.on('plotly_relayout', (ev)=>{
+              // Detect axis range changes
+              const x0 = ev['xaxis.range[0]'];
+              const x1 = ev['xaxis.range[1]'];
+              if (x0 != null && x1 != null && selected.length === 1) {
+                const fnSel = selected[0];
+                const fullToggle = document.getElementById('raw-full-res-checkbox');
+                if (fullToggle && !fullToggle.checked && fnSel.toLowerCase().endsWith('.txt')) {
+                  attemptAdaptiveUpgrade(fnSel, parseFloat(x0), parseFloat(x1));
+                }
+              }
+            });
+          }
+        } catch(e){ console.warn('Failed to attach adaptive relayout listener', e); }
+      }
+
+      // After successful plot, update raw resolution status panel (only meaningful for single raw selection)
+      try {
+        if (selected.length === 1 && lastWaveformPlotted && lastWaveformPlotted.raw) {
+          updateRawResolutionStatus(lastWaveformPlotted);
+        } else if (selected.length === 1) {
+          // Single non-raw selection
+          updateRawResolutionStatus(null);
+        } else {
+          // Multiple selection overlay
+            updateRawResolutionStatus(null);
+        }
+      } catch(e){ console.warn('Failed updating raw resolution status:', e); }
+      } catch (err) {
+        console.error('plotSelected() failed:', err);
+        const container = document.getElementById('plot');
+        if (container) {
+          container.innerHTML = `<div style="padding:12px;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;">Plot error: ${err.message}</div>`;
+        }
+        // On error clear status so stale info not shown
+        try { updateRawResolutionStatus(null); } catch(_) {}
+      }
+    }
+
+    // PSD Analysis Functions
+    function buildSmoothingParam() {
+      const method = document.getElementById('smoothing-method')?.value || 'savgol';
+      if (method === 'savgol') {
+        const w = document.getElementById('savgol-window')?.value || String(CONFIG.BATCH_ANALYZER.SAVGOL_WINDOW);
+        const p = document.getElementById('savgol-poly')?.value || '3';
+        return `window=${w},poly=${p}`;
+      }
+      return '';
+    }
+
+    async function runEventFinderAnalysis() {
+      const resultsDiv = document.getElementById('event-finder-results');
+      const button = document.getElementById('run-event-finder');
+      const indicator = document.getElementById('event-finder-indicator');
+
+      if (selected.length === 0) {
+        resultsDiv.textContent = 'No file selected';
+        return;
+      }
+
+      // Get configuration
+      const detectionChannels = document.getElementById('detection-channels').value;
+      const exportFormat = document.getElementById('export-format').value;
+      const includeWaveforms = document.getElementById('include-waveforms').checked;
+      const detailedMetadata = document.getElementById('detailed-metadata').checked;
+      const useConfigOverride = document.getElementById('use-config-override').checked;
+
+      // Get threshold overrides if enabled
+      let thresholdOverrides = {};
+      if (useConfigOverride) {
+        ['c1', 'c2', 'c3', 'c4'].forEach(ch => {
+          const input = document.getElementById(`${ch}-threshold`);
+          if (input.value) {
+            thresholdOverrides[ch.toUpperCase()] = parseFloat(input.value);
+          }
+        });
+      }
+
+      button.disabled = true;
+      indicator.className = 'status-dot status-running';
+      indicator.title = 'Event analysis running...';
+      resultsDiv.textContent = 'Running Event_Finder modular analysis...\nThis may take several minutes for complex traces.';
+
+      try {
+        const filename = selected[selected.length - 1];
+        
+        // Prepare request parameters
+        const params = {
+          filename: filename,
+          detection_channels: detectionChannels,
+          export_format: exportFormat,
+          include_waveforms: includeWaveforms ? '1' : '0',
+          detailed_metadata: detailedMetadata ? '1' : '0',
+          use_config_override: useConfigOverride ? '1' : '0'
+        };
+
+        // Add threshold overrides
+        Object.keys(thresholdOverrides).forEach(ch => {
+          params[`threshold_${ch.toLowerCase()}`] = thresholdOverrides[ch];
+        });
+
+        const queryString = new URLSearchParams(params).toString();
+        const response = await fetch(`/run_event_finder?${queryString}`);
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const result = await response.json();
+
+        if (result.success) {
+          let output = `Event_Finder Analysis Complete!\n`;
+          output += `=${'='.repeat(50)}\n`;
+          
+          if (result.cyclotron_analysis) {
+            output += `Cyclotron Analysis:\n`;
+            output += `  Frequency: ${result.cyclotron_analysis.frequency_mhz?.toFixed(2) || 'N/A'} MHz\n`;
+            output += `  Cycles detected: ${result.cyclotron_analysis.cycles_count || 0}\n`;
+            output += `  Confidence: ${result.cyclotron_analysis.confidence?.toFixed(3) || 'N/A'}\n\n`;
+          }
+
+          if (result.event_analysis) {
+            output += `Event Detection Summary:\n`;
+            Object.keys(result.event_analysis).forEach(channel => {
+              const channelData = result.event_analysis[channel];
+              output += `  ${channel}: ${channelData.events_found || 0} events\n`;
+              if (channelData.events_filtered !== undefined) {
+                output += `    After filtering: ${channelData.events_filtered}\n`;
+              }
+            });
+            output += `\n`;
+          }
+
+          if (result.export_info) {
+            output += `Export Information:\n`;
+            output += `  Format: ${result.export_info.format.toUpperCase()}\n`;
+            output += `  Output file: ${result.export_info.filename}\n`;
+            output += `  Total events exported: ${result.export_info.total_events || 0}\n`;
+            if (result.export_info.waveform_file) {
+              output += `  Waveform file: ${result.export_info.waveform_file}\n`;
+            }
+            output += `\n`;
+          }
+
+          if (result.processing_time) {
+            output += `Processing time: ${result.processing_time.toFixed(2)}s\n`;
+          }
+
+          if (result.warnings && result.warnings.length > 0) {
+            output += `\nWarnings:\n`;
+            result.warnings.forEach(warning => {
+              output += `  ⚠ ${warning}\n`;
+            });
+          }
+
+          indicator.className = 'status-dot status-success';
+          indicator.title = 'Event analysis completed successfully';
+          
+        } else {
+          indicator.className = 'status-dot status-error';
+          indicator.title = 'Event analysis failed';
+          output = `Error: ${result.error || 'Unknown error occurred'}`;
+          
+          if (result.details) {
+            output += `\n\nDetails:\n${result.details}`;
+          }
+        }
+
+        resultsDiv.textContent = output;
+
+      } catch (error) {
+        console.error('Event_Finder analysis error:', error);
+        indicator.className = 'status-dot status-error';
+        indicator.title = 'Event analysis failed';
+        resultsDiv.textContent = `Error: ${error.message}`;
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+  async function runPSDAnalysis(forceOverride = false) {
+      const resultsDiv = document.getElementById('psd-results');
+      const button = document.getElementById('run-psd');
+
+      if (selected.length === 0) {
+        resultsDiv.textContent = 'No file selected';
+        return;
+      }
+
+      const filename = selected[selected.length - 1]; // Use the last selected file
+      const qtailFraction = parseFloat(document.getElementById('qtail-fraction').value) || CONFIG.DEFAULT_QTAIL_FRACTION;
+      const useSmoothed = document.getElementById('use-smoothed-analysis').checked;
+      const smoothingMethod = document.getElementById('smoothing-method').value;
+      const smoothingParam = buildSmoothingParam();
+
+      button.disabled = true;
+      resultsDiv.textContent = 'Calculating PSD...';
+
+      try {
+        // Extract event ID from filename (remove .csv extension)
+        const eventId = filename.replace('.csv', '');
+
+        // Get event info from summary data if available
+        const eventInfo = getEventInfo(filename);
+        let eventData = null;
+
+        if (summaryData && eventInfo && summaryData[eventInfo.eventId]) {
+          eventData = toWaveformFrame(summaryData[eventInfo.eventId]);
+        } else if (summaryData && summaryData[eventId]) {
+          eventData = toWaveformFrame(summaryData[eventId]);
+        }
+
+        // Allow marker overrides if enabled
+        const override = updatedMarkers.get(filename);
+        const useUpdated = (forceOverride || document.getElementById('use-smoothed-analysis').checked) && !!override;
+  let psdParams = {
+          event_id: eventId,
+          qtail_fraction: qtailFraction,
+          use_smoothed: useSmoothed ? '1' : '0',
+          smoothing_method: smoothingMethod,
+          smoothing_param: smoothingParam
+        };
+  if (useUpdated) {
+          psdParams.event_start = override.event_start_time_ns;
+          psdParams.event_end = override.event_end_time_ns;
+          psdParams.event_peak_time = override.peak_time_ns;
+          // Prefer override amplitude if provided, else fallback to summary
+          if (override.peak_amplitude_mV != null) {
+            psdParams.event_peak_amplitude = override.peak_amplitude_mV;
+          } else if (eventData) {
+            psdParams.event_peak_amplitude = eventData.peak_amplitude_mV;
+          }
+  } else if (eventData) {
+          // Use base summary markers
+          psdParams.event_start = eventData.event_start_time_ns;
+          psdParams.event_end = eventData.event_end_time_ns;
+          psdParams.event_peak_time = eventData.peak_time_ns;
+          psdParams.event_peak_amplitude = eventData.peak_amplitude_mV;
+        }
+  // Note: we intentionally do NOT pass a threshold for PSD — baseline (0 mV) is used server-side
+
+        // Make API call
+        const response = await fetch('/api/psd?' + new URLSearchParams(psdParams));
+
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({ error: response.statusText }));
+          throw new Error(error.error || response.statusText);
+        }
+
+        const result = await response.json();
+
+
+        console.log('PSD API result:', result);
+
+        // Display results with proper null checks
+        let resultText = `Event: ${result.event_id || 'Unknown'}\n`;
+        if (typeof result.qtail_fraction === 'number') {
+          resultText += `Qtail fraction: ${result.qtail_fraction.toFixed(2)}\n`;
+        }
+        resultText += `PSD Ratio: ${result.psd_value !== undefined ? result.psd_value.toFixed(4) : 'N/A'}\n`;
+        resultText += `Qtotal: ${result.total_area_mV_ns !== undefined ? result.total_area_mV_ns.toFixed(2) : 'N/A'} mV·ns\n`;
+        resultText += `Qtail: ${result.tail_area_mV_ns !== undefined ? result.tail_area_mV_ns.toFixed(2) : 'N/A'} mV·ns\n`;
+        resultText += `Qtail Start: ${result.qtail_start_time_ns !== undefined ? result.qtail_start_time_ns.toFixed(1) : 'N/A'} ns\n`;
+
+  // Always show the baseline reference used for integration
+  resultText += `Baseline reference: 0.0 mV\n`;
+
+        resultText += `Samples: ${result.samples_count || 'N/A'}`;
+
+        resultsDiv.textContent = resultText;
+
+        // Store Qtail start for plotting as a vertical line and refresh plot
+        if (typeof result.qtail_start_time_ns === 'number' && !Number.isNaN(result.qtail_start_time_ns)) {
+          qtailStarts.set(filename, result.qtail_start_time_ns);
+          if (typeof result.qtail_fraction === 'number' && !Number.isNaN(result.qtail_fraction)) {
+            qtailFractions.set(filename, result.qtail_fraction);
+          }
+        } else {
+          qtailStarts.delete(filename);
+          qtailFractions.delete(filename);
+        }
+        plotSelected();
+
+      } catch (error) {
+        resultsDiv.textContent = `Error: ${error.message}`;
+        console.error('PSD calculation error:', error);
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    function updatePSDButton() {
+      const button = document.getElementById('run-psd');
+      button.disabled = selected.length === 0;
+    }
+
+    // Pile-up Detection Functions
+    async function runPileupAnalysis(forceOverride = false) {
+      const resultsDiv = document.getElementById('pileup-results');
+      const button = document.getElementById('run-pileup');
+
+      if (selected.length === 0) {
+        resultsDiv.textContent = 'No file selected';
+        return;
+      }
+
+      const filename = selected[selected.length - 1];
+      const eventInfo = getEventInfo(filename);
+      const alpha = parseFloat(document.getElementById('quasi-ratio').value) || CONFIG.DEFAULT_ALPHA;
+      const maxNoiseNs = parseFloat(document.getElementById('max-noise-cross-ns').value) || CONFIG.DEFAULT_MAX_NOISE_NS;
+      const useSmoothed = document.getElementById('use-smoothed-analysis').checked;
+      const smoothingMethod = document.getElementById('smoothing-method').value;
+      const smoothingParam = buildSmoothingParam();
+
+      button.disabled = true;
+      resultsDiv.textContent = 'Checking pile-up...';
+      setPileupIndicator('unknown');
+
+      try {
+        if (!summaryData || !eventInfo || !summaryData[eventInfo.eventId]) {
+          resultsDiv.textContent = 'Missing summary data for this event; cannot compute pile-up.';
+          return;
+        }
+
+  const baseEvent = toWaveformFrame(summaryData[eventInfo.eventId]);
+        const override = updatedMarkers.get(filename);
+        const useUpdated = (forceOverride || document.getElementById('use-smoothed-analysis').checked) && !!override;
+        const event = useUpdated ? {
+          ...baseEvent,
+          event_start_time_ns: override.event_start_time_ns ?? baseEvent.event_start_time_ns,
+          event_end_time_ns: override.event_end_time_ns ?? baseEvent.event_end_time_ns,
+          peak_time_ns: override.peak_time_ns ?? baseEvent.peak_time_ns,
+          peak_amplitude_mV: override.peak_amplitude_mV ?? baseEvent.peak_amplitude_mV,
+          detection_threshold_mV: (override.threshold_mV ?? baseEvent.detection_threshold_mV),
+        } : baseEvent;
+  const thr = event.detection_threshold_mV;
+        const peak = event.peak_amplitude_mV;
+        const quasiThreshold = thr + alpha * (peak - thr);
+
+        const scanEnabled = document.getElementById('scan-alpha').checked;
+        const params = new URLSearchParams({
+          event_id: (function () {
+            // Prefer summary eventId; fallback to filename without .csv
+            if (eventInfo && eventInfo.eventId) return eventInfo.eventId;
+            return filename.replace('.csv', '');
+          })(),
+          fraction: String(alpha),
+          scan: scanEnabled ? '1' : '0',
+          scan_min: '0.1',
+          scan_max: '0.9',
+          scan_step: '0.05',
+          max_noise_cross_ns: String(maxNoiseNs),
+          event_start_ns: String(event.event_start_time_ns),
+          event_end_ns: String(event.event_end_time_ns),
+          threshold_mV: String(event.detection_threshold_mV),
+          peak_amplitude_mV: String(event.peak_amplitude_mV),
+          use_smoothed: useSmoothed ? '1' : '0',
+          smoothing_method: smoothingMethod,
+          smoothing_param: smoothingParam
+        });
+
+        const response = await fetch('/api/pileup?' + params.toString());
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({ error: response.statusText }));
+          throw new Error(error.error || response.statusText);
+        }
+        const result = await response.json();
+
+        const quasiFromServer = (result && typeof result.quasi_threshold_mV === 'number') ? result.quasi_threshold_mV : null;
+        const quasiToShow = quasiFromServer != null ? quasiFromServer : quasiThreshold;
+
+        // Store and draw quasi-threshold on plot
+        quasiThresholds.set(filename, quasiToShow);
+        quasiAlphas.set(filename, alpha);
+        plotSelected();
+
+        let text = `Event: ${eventInfo.eventId}\n`;
+        if (result && typeof result.pileup !== 'undefined') {
+          text += `Pile-up: ${result.pileup ? 'True' : 'False'}\n`;
+        }
+        if (result && typeof result.reason === 'string') {
+          text += `Reason: ${result.reason}\n`;
+        }
+        if (scanEnabled) {
+          const hits = Array.isArray(result?.hits) ? result.hits : [];
+          if (hits.length > 0) {
+            const first = result.alpha_hit ?? hits[0]?.alpha;
+            text += `Scan α hit: ${Number(first).toFixed(2)} (hits=${hits.length})\n`;
+          } else {
+            text += `Scan α hit: none (0.10→0.90 step 0.05)\n`;
+          }
+        }
+        text += `Quasi threshold (α=${(result?.alpha_hit ?? alpha).toFixed ? (result.alpha_hit ?? alpha).toFixed(2) : alpha.toFixed(2)}): ${quasiToShow != null ? quasiToShow.toFixed(2) : 'n/a'} mV\n`;
+        text += `Max noise crossing: ${maxNoiseNs.toFixed(2)} ns\n`;
+        text += `Peak: ${peak.toFixed(2)} mV, Thr: ${thr.toFixed(2)} mV`;
+
+        resultsDiv.textContent = text;
+
+        // Update indicator next to the button
+        if (result && typeof result.pileup !== 'undefined') {
+          setPileupIndicator(result.pileup ? 'fail' : 'pass');
+        } else {
+          setPileupIndicator('unknown');
+        }
+      } catch (err) {
+        // Show quasi threshold even on error if possible
+        try {
+          const ei2 = getEventInfo(selected[selected.length - 1]);
+          if (summaryData && ei2 && summaryData[ei2.eventId]) {
+            const evt = summaryData[ei2.eventId];
+            const thr2 = evt.detection_threshold_mV;
+            const peak2 = evt.peak_amplitude_mV;
+            const a2 = parseFloat(document.getElementById('quasi-ratio').value) || 0.5;
+            const q2 = thr2 + a2 * (peak2 - thr2);
+            resultsDiv.textContent = `Error: ${err.message}\nQuasi threshold (α=${a2.toFixed(2)}): ${q2.toFixed(2)} mV\nPeak: ${peak2.toFixed(2)} mV, Thr: ${thr2.toFixed(2)} mV`;
+
+            // Store and draw even on error (local computation)
+            quasiThresholds.set(filename, q2);
+            quasiAlphas.set(filename, a2);
+            plotSelected();
+            setPileupIndicator('unknown');
+          } else {
+            resultsDiv.textContent = `Error: ${err.message}`;
+            setPileupIndicator('unknown');
+          }
+        } catch (_) {
+          resultsDiv.textContent = `Error: ${err.message}`;
+          setPileupIndicator('unknown');
+        }
+        console.error('Pile-up error:', err);
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    function updatePileupButton() {
+      const button = document.getElementById('run-pileup');
+      if (button) button.disabled = selected.length === 0;
+    }
+
+    function setPileupIndicator(status) {
+      const el = document.getElementById('pileup-indicator');
+      if (!el) return;
+      let cls = 'status-dot ';
+      if (status === 'pass') cls += 'status-pass';
+      else if (status === 'fail') cls += 'status-fail';
+      else cls += 'status-unknown';
+      el.className = cls;
+      el.title = status === 'pass' ? 'Pile-up filter passed' : (status === 'fail' ? 'Pile-up detected' : 'Pile-up status unknown');
+    }
+
+    function autofillUpdatedThreshold() {
+      try {
+        const thrBox = document.getElementById('updated-threshold');
+        if (!thrBox) return;
+        if (selected.length === 0) return;
+        const filename = selected[selected.length - 1];
+        const info = getEventInfo(filename);
+        if (!info || !summaryData || !summaryData[info.eventId]) return;
+  const evt = toWaveformFrame(summaryData[info.eventId]);
+  const oldThr = evt.detection_threshold_mV;
+        // Always reflect the current event's threshold so it updates per channel/event
+        thrBox.value = String(oldThr);
+        // Also set placeholder as hint with unit, preserves negative sign context
+        thrBox.placeholder = `${oldThr} mV`;
+      } catch (_) {
+        // no-op
+      }
+    }
+
+    async function maybeUpdateMarkersForCurrent(includeThresholdOverride = true) {
+      if (selected.length === 0) return;
+      const filename = selected[selected.length - 1];
+      const eventInfo = getEventInfo(filename);
+      if (!eventInfo) return;
+      const thrBox = document.getElementById('updated-threshold');
+      const useSmoothed = (smoothingActive && smoothedData.has(filename)) || document.getElementById('use-smoothed-analysis').checked;
+      const method = document.getElementById('smoothing-method').value;
+      const thrVal = (includeThresholdOverride && thrBox && thrBox.value !== '') ? thrBox.value : null;
+      const params = new URLSearchParams({
+        event_id: eventInfo.eventId,
+        use_smoothed: useSmoothed ? '1' : '0',
+        smoothing_method: method,
+      });
+      if (thrVal !== null) params.set('threshold_mV', String(thrVal));
+      try {
+        const res = await fetch('/api/update_markers?' + params.toString());
+        if (!res.ok) {
+          console.warn('update_markers failed', res.status);
+          return;
+        }
+        const j = await res.json();
+        updatedMarkers.set(filename, j);
+        // Redraw and re-run pile-up to reflect new markers and threshold line
+        plotSelected();
+        const btn = document.getElementById('run-pileup');
+        if (btn) runPileupAnalysis();
+  // If using smoothed for analysis, also refresh PSD so it uses updated markers
+  if (document.getElementById('use-smoothed-analysis').checked) {
+          const psdBtn = document.getElementById('run-psd');
+          if (psdBtn) await runPSDAnalysis();
+        }
+      } catch (e) {
+        console.warn('update_markers error', e);
+      }
+    }
+
+    // ===== Summary-based marker application (client-side, no server) =====
+    let __channelThresholdsCache = null;
+    async function loadChannelThresholdsIfNeeded() {
+      if (__channelThresholdsCache) return __channelThresholdsCache;
+      const rel = '../../Settings/batch_analyzer_settings.json';
+      try {
+        const r = await fetch(rel, { cache: 'no-cache' });
+        if (!r.ok) return null;
+        const j = await r.json();
+        const th = (j?.thresholds?.channel_thresholds_mV) || {};
+        const forced = (j?.thresholds?.forced_channel_thresholds_mV) || {};
+        const merged = { ...th, ...forced };
+        const out = {};
+        Object.keys(merged).forEach(k => { try { out[String(k).toUpperCase()] = Math.abs(parseFloat(merged[k])); } catch(_){} });
+        __channelThresholdsCache = out;
+        return out;
+      } catch (_) { return null; }
+    }
+
+    function nearestIndex(times, t) {
+      if (!Array.isArray(times) || times.length === 0 || t == null) return null;
+      let lo = 0, hi = times.length - 1;
+      while (lo < hi) { const mid = (lo + hi) >> 1; if (times[mid] < t) lo = mid + 1; else hi = mid; }
+      if (lo <= 0) return 0; if (lo >= times.length) return times.length - 1; const prev = lo - 1; return Math.abs(times[lo] - t) < Math.abs(times[prev] - t) ? lo : prev;
+    }
+
+    async function applyMarkersFromSummary() {
+      if (selected.length === 0) return false;
+      if (!summaryData) return false;
+      const filename = selected[selected.length - 1];
+      const info = getEventInfo(filename);
+      if (!info || !summaryData[info.eventId]) return false;
+      const row = toWaveformFrame(summaryData[info.eventId]);
+      const startNS = (row.event_start_time_batch != null) ? row.event_start_time_batch : row.event_start_time_ns;
+      const peakNS  = (row.event_peak_time_batch  != null) ? row.event_peak_time_batch  : row.peak_time_ns;
+      const endNS   = (row.event_end_time_batch   != null) ? row.event_end_time_batch   : row.event_end_time_ns;
+      if ([startNS, peakNS, endNS].some(v => v == null)) return false;
+      let wav = originalData.get(filename);
+      if (!wav) {
+        try { const res = await fetch('/api/data?file=' + encodeURIComponent(filename)); if (res.ok) { wav = await res.json(); originalData.set(filename, wav); } } catch(_){}
+      }
+      if (!wav || !Array.isArray(wav.times)) return false;
+      const times = wav.times.map(Number);
+      const startIdx = nearestIndex(times, startNS);
+      const peakIdx  = nearestIndex(times, peakNS);
+      const endIdx   = nearestIndex(times, endNS);
+      let thr = row.detection_threshold_mV;
+      if (thr == null) {
+        const chMap = await loadChannelThresholdsIfNeeded();
+        if (chMap && info.channel && chMap[info.channel.toUpperCase()]) {
+          thr = chMap[info.channel.toUpperCase()];
+          if (row.peak_amplitude_mV < 0) thr = -Math.abs(thr);
+        }
+      }
+      const markerObj = {
+        event_start_time_ns: startNS,
+        peak_time_ns: peakNS,
+        event_end_time_ns: endNS,
+        peak_amplitude_mV: row.peak_amplitude_mV,
+        threshold_mV: thr,
+        threshold_crossing_sample_idx: startIdx,
+        peak_sample_idx: peakIdx,
+        event_end_sample_idx: endIdx,
+        source: 'summary'
+      };
+      updatedMarkers.set(filename, markerObj);
+      autofillUpdatedThreshold();
+      return true;
+    }
+
+    // Smoothing functions
+    
+    // ================= RAW WAVEFORM SUPPORT (LeCroy .txt) =================
+    // We allow selecting raw trace files (e.g. C4--Trace--00001.txt). These can have ~20M samples, so we decimate.
+    const MAX_PLOT_POINTS_RAW = 50000; // safety upper bound for Plotly performance
+    const rawFullCache = new Map();    // filename -> { times_full, amps_full }
+
+    function parseRawLeCroy(text, filename) {
+      // Format example:
+      // LECROYWaveRunner,...\nSegments,1,SegmentSize,20000002\n...\nTime,Ampl\n-0.0005, -0.006 ...
+      const lines = text.split(/\r?\n/);
+      let headerEnded = false;
+      let times = []; let amps = [];
+      for (let i=0;i<lines.length;i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        if (!headerEnded) {
+          if (line.startsWith('Time')) { headerEnded = true; }
+          continue; // skip header lines until 'Time,Ampl'
+        }
+        const parts = line.split(/[\t,]/).map(s=>s.trim());
+        if (parts.length < 2) continue;
+        const t = parseFloat(parts[0]);
+        const a = parseFloat(parts[1]);
+        if (!Number.isFinite(t) || !Number.isFinite(a)) continue;
+        // Convert seconds -> ns, volts -> mV (assuming amplitude in V)
+        times.push(t * 1e9);
+        amps.push(a * 1000);
+      }
+      if (times.length === 0) throw new Error('No data rows parsed from raw waveform');
+      const fullLen = times.length;
+      let decTimes = times, decAmps = amps;
+      if (fullLen > MAX_PLOT_POINTS_RAW) {
+        const stride = Math.ceil(fullLen / MAX_PLOT_POINTS_RAW);
+        decTimes = []; decAmps = [];
+        for (let i=0;i<fullLen;i+=stride) { decTimes.push(times[i]); decAmps.push(amps[i]); }
+      }
+      rawFullCache.set(filename, { times_full: times, amps_full: amps });
+      return { times: decTimes, amps: decAmps, raw: true, decimated: decTimes.length < fullLen, full_length: fullLen };
+    }
+
+    async function fetchWaveformData(fn) {
+      // Existing CSV (per-event) path -> server API
+      // Unified path now: /api/data handles .csv and .txt; .txt may be huge so we optionally request full
+      const isRaw = fn.toLowerCase().endsWith('.txt');
+      const fullToggle = document.getElementById('raw-full-res-checkbox');
+      const wantFull = isRaw && fullToggle && fullToggle.checked;
+      // Safety: confirm before loading extremely large raw file fully (prevents browser crash)
+      const LARGE_FULL_WARN_BYTES = 120 * 1024 * 1024; // 120 MB threshold for warning
+      const sizeCache = window.__RAW_SIZE_CACHE || (window.__RAW_SIZE_CACHE = new Map());
+      const fullConfirmSet = window.__RAW_FULL_CONFIRM || (window.__RAW_FULL_CONFIRM = new Set());
+      let fileSizeBytes = sizeCache.get(fn);
+      if (isRaw && wantFull && fileSizeBytes == null) {
+        // Quick HEAD to get size once
+        try {
+          const headRes = await fetch('/api/data?file=' + encodeURIComponent(fn), { method: 'HEAD' });
+          const sz = headRes.headers.get('Content-Length');
+          if (sz) { fileSizeBytes = parseInt(sz,10)||0; sizeCache.set(fn, fileSizeBytes); }
+        } catch(_) {}
+      }
+      if (isRaw && wantFull && fileSizeBytes != null && fileSizeBytes > LARGE_FULL_WARN_BYTES && !fullConfirmSet.has(fn)) {
+        const mb = (fileSizeBytes/1024/1024).toFixed(1);
+        const proceed = window.confirm(`Full resolution load of ${fn} (~${mb} MB JSON) may freeze the browser. Load anyway?`);
+        if (!proceed) {
+          // Revert toggle & fallback to decimated request
+            if (fullToggle) fullToggle.checked = false;
+            // Update status to show we reverted
+            try { updateRawResolutionStatus(originalData.get(fn)||null); } catch(_) {}
+            return fetchWaveformData(fn); // re-enter with wantFull false
+        }
+        fullConfirmSet.add(fn);
+      }
+      if (isRaw && wantFull && rawFullCache.has(fn)) {
+        // Use cached full only if we are certain it's full (stored under wantFull path earlier)
+        const c = rawFullCache.get(fn);
+        if (c && Array.isArray(c.times_full) && c.times_full.length) {
+          return { times: c.times_full, amps: c.amps_full, raw:true, decimated:false, full_length: c.times_full.length };
+        }
+      }
+      // Include full flag or let server auto-decide; pass max_points only if not full and user hasn't chosen full
+      let url = '/api/data?file=' + encodeURIComponent(fn);
+      if (isRaw) {
+        if (wantFull) url += '&full=1'; else url += '&max_points=' + MAX_PLOT_POINTS_RAW;
+      }
+      const loadingDiv = document.getElementById('loading');
+      const progressSpan = document.getElementById('loading-progress');
+      const barWrap = document.getElementById('loading-bar-wrap');
+      const bar = document.getElementById('loading-bar');
+      function showProgressUI(){ if (loadingDiv){ loadingDiv.style.display='block'; } if(progressSpan){progressSpan.style.display='inline';} if(barWrap){barWrap.style.display='block';} }
+      function hideProgressUI(){ if(progressSpan){progressSpan.style.display='none';} if(barWrap){barWrap.style.display='none';} if(bar){bar.style.width='0%';} }
+      let j;
+      if (isRaw && window.ReadableStream && !wantFull) {
+        try {
+          showProgressUI();
+          let totalBytes = 0;
+          try { const head = await fetch(url, { method:'HEAD'}); const sz = head.headers.get('Content-Length'); if (sz) totalBytes = parseInt(sz,10)||0; } catch(_){ }
+          const res = await fetch(url);
+          if (!res.ok) { hideProgressUI(); const e = await res.json().catch(()=>({error:res.statusText})); throw new Error(e.error||res.statusText); }
+          const reader = res.body.getReader();
+          const chunks = [];
+          let received = 0;
+            while (true) {
+              const {done, value} = await reader.read();
+              if (done) break;
+              if (value) {
+                chunks.push(value);
+                received += value.length;
+                if (totalBytes > 0) {
+                  const pct = Math.min(99, Math.floor((received/totalBytes)*100));
+                  if (bar) bar.style.width = pct + '%';
+                  if (progressSpan) progressSpan.textContent = pct + '%';
+                } else if (bar) {
+                  bar.style.width = ((received/1e6)%100).toFixed(1)+'%';
+                }
+              }
+            }
+          const blob = new Blob(chunks, {type:'application/json'});
+          j = JSON.parse(await blob.text());
+          if (bar) bar.style.width = '100%'; if (progressSpan) progressSpan.textContent='100%';
+          setTimeout(()=>{ hideProgressUI(); if (loadingDiv) loadingDiv.style.display='none'; }, 350);
+        } catch(e){ hideProgressUI(); if (loadingDiv) loadingDiv.style.display='none'; throw e; }
+      } else {
+        const res = await fetch(url);
+        if (!res.ok) { const e = await res.json().catch(()=>({error:res.statusText})); throw new Error(e.error||res.statusText); }
+        j = await res.json();
+      }
+      if (isRaw) {
+        // If we want full but server returned decimated (future enhancement) we could re-request; for now assume full.
+        if (wantFull && !j.decimated) {
+          rawFullCache.set(fn, { times_full: j.times, amps_full: j.amps });
+        }
+        // Attach server meta info for annotation
+        j._server_meta = { decimated: j.decimated, target: j.target_points, reason: j.downsample_reason };
+        // Mark as raw so downstream logic (legend/status) recognizes it even if server didn't set 'raw'
+        if (!j.raw) j.raw = true;
+        // Ensure full_length present for status computations
+        if (!j.full_length) j.full_length = j.times?.length || 0;
+      }
+      return j;
+    }
+
+    function annotateRawInLegend(name, wfObj) {
+      if (!wfObj || !wfObj.raw) return name;
+      let extra = 'raw';
+      if (wfObj.decimated) {
+        const target = wfObj._server_meta?.target || wfObj.times.length;
+        const reason = wfObj._server_meta?.reason === 'auto_large_file' ? 'auto' : (wfObj._server_meta?.reason || 'decimated');
+        const mode = wfObj.decimation_mode || wfObj._server_meta?.mode || ''; 
+        extra += ` ${reason}${mode?':' + mode:''}(${wfObj.times.length}/${wfObj.full_length}` + (target?`~${target}`:'') + `)`;
+      }
+      return name + ' [' + extra + ']';
+    }
+
+    // Adaptive resolution for raw traces (client-side local refinement on zoom)
+    // Strategy: keep full raw arrays cached when available (after full load or progressive fetch in future).
+    // If only decimated version is present and user zooms into small window containing < ADAPTIVE_MAX_POINTS_FULL threshold
+    // we request full file once (if not already cached) then extract the window slice for display.
+    const ADAPTIVE_MAX_POINTS_FULL = 150000; // upper bound for pushing full segment when window is narrow
+    let lastAdaptiveWindow = null; // track to avoid redundant recompute
+
+    async function ensureFullRawCached(filename){
+      if (rawFullCache.has(filename)) return rawFullCache.get(filename);
+      try {
+        const res = await fetch('/api/data?file=' + encodeURIComponent(filename) + '&full=1');
+        if (!res.ok) return null;
+        const j = await res.json();
+        if (j && j.times && j.amps) {
+          rawFullCache.set(filename, { times_full: j.times, amps_full: j.amps });
+          return rawFullCache.get(filename);
+        }
+      } catch(_){ return null; }
+      return null;
+    }
+
+    function sliceSeriesByRange(fullTimes, fullAmps, x0, x1){
+      if (!fullTimes || !fullAmps) return null;
+      // Binary search for indices
+      let lo = 0, hi = fullTimes.length - 1;
+      while (lo < hi && fullTimes[lo] < x0) lo++;
+      while (hi > lo && fullTimes[hi] > x1) hi--;
+      const sliceLen = hi - lo + 1;
+      if (sliceLen <= 0) return { times: [], amps: [] };
+      return { times: fullTimes.slice(lo, hi+1), amps: fullAmps.slice(lo, hi+1) };
+    }
+
+    async function attemptAdaptiveUpgrade(filename, x0, x1){
+      const wf = originalData.get(filename);
+      if (!wf || !wf.raw) return false;
+      if (!wf.decimated) return false; // already full
+      // Debounce if window unchanged
+      if (lastAdaptiveWindow && lastAdaptiveWindow.fn === filename && Math.abs(lastAdaptiveWindow.x0 - x0) < 1e-9 && Math.abs(lastAdaptiveWindow.x1 - x1) < 1e-9) return false;
+      lastAdaptiveWindow = { fn: filename, x0, x1 };
+      const approxSpan = x1 - x0;
+      if (approxSpan <= 0) return false;
+      // Heuristic: estimate points in window using decimated density ratio
+      const densityRatio = wf.full_length / (wf.times.length || 1); // e.g., 400 (full/decimated)
+      const estWindowPoints = Math.min(wf.full_length, Math.ceil(densityRatio * (wf.times.length / (wf.times[wf.times.length-1]-wf.times[0])) * approxSpan));
+      if (estWindowPoints > ADAPTIVE_MAX_POINTS_FULL) return false;
+      // Fetch full if needed
+      const fullCache = await ensureFullRawCached(filename);
+      if (!fullCache) return false;
+      const sliced = sliceSeriesByRange(fullCache.times_full, fullCache.amps_full, x0, x1);
+      if (!sliced || sliced.times.length === 0) return false;
+      // If slice still huge limit to ADAPTIVE_MAX_POINTS_FULL using min/max decimation locally
+      if (sliced.times.length > ADAPTIVE_MAX_POINTS_FULL) {
+        const stride = Math.ceil(sliced.times.length / ADAPTIVE_MAX_POINTS_FULL);
+        const tt = [], aa = [];
+        for (let i=0;i<sliced.times.length;i+=stride){ tt.push(sliced.times[i]); aa.push(sliced.amps[i]); }
+        sliced.times = tt; sliced.amps = aa;
+      }
+      // Replace plotted data for this filename with adaptive slice while retaining metadata
+      const upgraded = {
+        ...wf,
+        times: sliced.times,
+        amps: sliced.amps,
+        decimated: false,
+        adaptive_upgrade: true,
+        full_window: [x0, x1]
+      };
+      originalData.set(filename, upgraded);
+      // Replot asynchronously to avoid nested Plotly calls during relayout
+      setTimeout(()=>{ try { plotSelected(); } catch(_){} },0);
+      return true;
+    }
+
+    // === Raw resolution UI controls ===
+    function ensureRawResolutionControls() {
+      if (document.getElementById('raw-resolution-controls')) return;
+      const sidebar = document.getElementById('left');
+      if (!sidebar) return;
+      const wrap = document.createElement('div');
+      wrap.id = 'raw-resolution-controls';
+      wrap.style.margin = '8px 0 4px';
+      wrap.style.padding = '6px 8px';
+      wrap.style.border = '1px solid #ddd';
+      wrap.style.borderRadius = '4px';
+      wrap.style.background = '#fafafa';
+      wrap.innerHTML = `
+        <div style="font-size:11px; font-weight:600; margin-bottom:4px;">Raw Waveform</div>
+        <label style="display:flex; align-items:center; gap:6px; font-size:12px; cursor:pointer;">
+          <input type="checkbox" id="raw-full-res-checkbox" /> Full resolution
+        </label>
+        <div id="raw-res-hint" style="font-size:11px; color:#555; margin-top:4px; line-height:1.3;">Large raw traces are decimated for performance. Enable full resolution to view all samples.</div>
+        <div id="raw-res-status" style="font-size:11px; margin-top:3px; color:#1e3a8a; font-family:monospace;"></div>
+      `;
+      sidebar.insertBefore(wrap, sidebar.firstChild);
+      const cb = wrap.querySelector('#raw-full-res-checkbox');
+      cb.addEventListener('change', () => { plotSelected(); });
+    }
+    function updateRawResolutionControls() {
+      ensureRawResolutionControls();
+      const wrap = document.getElementById('raw-resolution-controls');
+      if (!wrap) return;
+      const cb = document.getElementById('raw-full-res-checkbox');
+      const show = selected.length === 1 && window.RAW_FILE_SET && window.RAW_FILE_SET.has(selected[0]);
+      wrap.style.display = show ? 'block' : 'none';
+      if (!show && cb) cb.checked = false; // reset when leaving raw context
+      // Refresh status text when controls become visible
+      if (show) {
+        try {
+          const wf = originalData.get(selected[0]);
+            updateRawResolutionStatus(wf || null);
+        } catch(_) {}
+      } else {
+        try { updateRawResolutionStatus(null); } catch(_) {}
+      }
+    }
+    function updateRawResolutionStatus(wf){
+      const el = document.getElementById('raw-res-status');
+      if (!el){ return; }
+      if (!wf || !wf.raw){ el.textContent=''; return; }
+      const pts = wf.times?.length || 0;
+      const full = wf.full_length || pts;
+      if (!wf.decimated){
+        if (wf.adaptive_upgrade) {
+          el.textContent = `Resolution: full (${pts.toLocaleString()} pts, adaptive)`;
+        } else {
+          el.textContent = `Resolution: full (${pts.toLocaleString()} pts)`;
+        }
+      } else {
+        const pct = full? (pts/full*100):100;
+        const ratio = full && pts? (full/pts):1;
+        el.textContent = `Resolution: ${pts.toLocaleString()} / ${full.toLocaleString()} (${pct.toFixed(3)}% , 1:${ratio.toFixed(1)}) mode=${wf.decimation_mode||'minmax'}`;
+      }
+    }
+    // Initialize once DOM loaded
+    document.addEventListener('DOMContentLoaded', () => { ensureRawResolutionControls(); updateRawResolutionControls(); });
+    async function applySmoothingToFile(filename, method) {
+      try {
+        const response = await fetch('/api/smooth', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            file: filename,
+            method: method,
+            param: buildSmoothingParam()
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`Server returned ${response.status}: ${await response.text()}`);
+        }
+
+        const result = await response.json();
+        return result;
+      } catch (error) {
+        console.error('Smoothing error:', error);
+        throw error;
+      }
+    }
+
+    // Batch analyzer integration for smoothing with marker recalculation
+    async function applyBatchAnalyzerSmoothing(filename, method) {
+      try {
+        const eventInfo = getEventInfo(filename);
+        if (!eventInfo || !summaryData || !summaryData[eventInfo.eventId]) {
+          throw new Error('Event summary data required for batch analyzer integration');
+        }
+
+        const event = summaryData[eventInfo.eventId];
+        const smoothingParam = buildSmoothingParam();
+        
+        const requestData = {
+          file: filename,
+          method: method,
+          param: smoothingParam,
+          // Enable batch analyzer pipeline
+          use_batch_analyzer: true,
+          marker_mode: 'ef',
+          // Batch analyzer settings (match defaults from config)
+          std_multiplier: CONFIG.BATCH_ANALYZER.STD_MULTIPLIER,
+          dwell_samples: CONFIG.BATCH_ANALYZER.DWELL_SAMPLES,
+          // Pass event context for marker recalculation
+          event_context: {
+            event_id: eventInfo.eventId,
+            channel: eventInfo.channel,
+            event_start_ns: event.event_start_time_ns || 0,
+            event_end_ns: event.event_end_time_ns || 0,
+            peak_time_ns: event.peak_time_ns || 0,
+            detection_threshold_mV: event.detection_threshold_mV || 0,
+            // Include EFraw markers if available for comparison
+            event_start_time_EFraw: event.event_start_time_EFraw,
+            event_end_time_EFraw: event.event_end_time_EFraw,
+            event_start_time_EFdynamic: event.event_start_time_EFdynamic,
+            event_end_time_EFdynamic: event.event_end_time_EFdynamic
+          }
+        };
+        
+        const response = await fetch('/api/batch_smooth', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(requestData)
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Batch analyzer returned ${response.status}: ${await response.text()}`);
+        }
+        
+        const result = await response.json();
+        
+        // Validate response has required data
+        if (!result.smoothed_times || !result.smoothed_amps) {
+          throw new Error('Invalid batch analyzer smoothing response: missing waveform data');
+        }
+        
+        return result;
+      } catch (error) {
+        console.error('Batch analyzer smoothing error:', error);
+        throw error;
+      }
+    }
+
+    async function runSmoothing() {
+      if (selected.length === 0) return;
+
+      const method = document.getElementById('smoothing-method').value;
+      const statusDiv = document.getElementById('smoothing-status');
+      const smoothButton = document.getElementById('apply-smoothing');
+      const originalButton = document.getElementById('show-original');
+
+      try {
+        smoothButton.disabled = true;
+        const paramStr = buildSmoothingParam();
+        statusDiv.textContent = `Applying ${method} smoothing (${paramStr || 'default'})...`;
+
+        // Store original data if not already stored
+        for (const filename of selected) {
+          if (!originalData.has(filename)) {
+            const original = await fetchData(filename);
+            originalData.set(filename, original);
+          }
+        }
+
+        // Apply batch analyzer smoothing to selected files
+        const results = [];
+        for (const filename of selected) {
+          statusDiv.textContent = `Processing ${filename} with batch analyzer...`;
+          
+          try {
+            // Try batch analyzer integration first
+            const result = await applyBatchAnalyzerSmoothing(filename, method);
+            results.push(result);
+
+            // Store smoothed data
+            smoothedData.set(filename, {
+              times: result.smoothed_times || result.times,
+              amps: result.smoothed_amps || result.amps,
+              metadata: result.metadata || {}
+            });
+            
+            // Update summary data with returned markers (server names it 'markers')
+            if (result.markers && summaryData) {
+              const eventInfo2 = getEventInfo(filename);
+              if (eventInfo2 && summaryData[eventInfo2.eventId]) {
+                summaryData[eventInfo2.eventId].event_start_time_batch = result.markers.event_start_time_ns;
+                summaryData[eventInfo2.eventId].event_peak_time_batch = result.markers.peak_time_ns;
+                summaryData[eventInfo2.eventId].event_end_time_batch = result.markers.event_end_time_ns;
+                console.log(`Updated batch markers for ${eventInfo2.eventId}:`, result.markers);
+              }
+            }
+            
+          } catch (batchError) {
+            console.warn(`Batch analyzer failed for ${filename}, falling back to simple smoothing:`, batchError);
+            // Fallback to simple smoothing if batch analyzer fails
+            const result = await applySmoothingToFile(filename, method);
+            results.push(result);
+
+            // Store smoothed data
+            smoothedData.set(filename, {
+              times: result.times,
+              amps: result.amps,
+              metadata: result.metadata || {}
+            });
+          }
+        }
+
+        // Update status with results
+        let statusText = `Smoothing completed (${method}):\n`;
+        results.forEach((result, i) => {
+          statusText += `${selected[i]}: smoothed successfully\n`;
+          const pts = (result.smoothed_times || result.times || []).length;
+          statusText += `  ${pts} points processed\n`;
+          if (result.stdout) {
+            // Extract metrics from stdout if available
+            const stdout = result.stdout;
+            const noiseMatch = stdout.match(/Noise reduction: ([\d.]+)%/);
+            const peakMatch = stdout.match(/Peak change: ([\d.]+)%/);
+            if (noiseMatch) statusText += `  Noise reduction: ${noiseMatch[1]}%\n`;
+            if (peakMatch) statusText += `  Peak change: ${peakMatch[1]}%\n`;
+          }
+        });
+        statusDiv.textContent = statusText;
+
+        smoothingActive = true;
+        originalButton.disabled = false;
+        originalButton.style.background = '#ffeb3b';
+
+  // Replot with smoothed data
+  plotSelected();
+
+  // Auto-apply markers using default threshold (no override)
+  await maybeUpdateMarkersForCurrent(false);
+  // Refresh PSD and Pile-up to reflect updated markers
+  await runPSDAnalysis();
+  await runPileupAnalysis();
+
+      } catch (error) {
+        statusDiv.textContent = `Error: ${error.message}`;
+      } finally {
+        smoothButton.disabled = false;
+      }
+    }
+
+    // Auto-apply smoothing when enabling smoothed analysis (acts like clicking the button)
+  document.getElementById('use-smoothed-analysis').addEventListener('change', async (e) => {
+      const checked = e.target.checked;
+      if (checked) {
+        try {
+          await runSmoothing();
+        } catch (err) {
+          console.error('Auto-smoothing via toggle failed:', err);
+        }
+    // Ensure updated markers exist using smoothed series so PSD/Pile-up can use them (default threshold)
+    await maybeUpdateMarkersForCurrent(false);
+        // Run PSD and Pile-up; they will use overrides automatically per toggle state
+        await runPSDAnalysis();
+        await runPileupAnalysis();
+      } else {
+        // Toggle turned OFF: disable smoothing visuals and re-run analyses with original waveform/markers
+        smoothingActive = false;
+        const overlaySmooth = document.getElementById('overlay-smooth');
+        if (overlaySmooth) overlaySmooth.checked = false;
+        await runPSDAnalysis();
+        await runPileupAnalysis();
+      }
+      // Replot to reflect any smoothed overlays or revert
+      plotSelected();
+    });
+    // Apply markers button and threshold listeners
+    document.getElementById('apply-updated-markers').addEventListener('click', async () => {
+      try {
+        const applied = await applyMarkersFromSummary();
+        if (applied) {
+          plotSelected();
+          await runPSDAnalysis();
+          await runPileupAnalysis();
+          return;
+        }
+      } catch (e) { console.warn('Summary marker apply failed; falling back to server', e); }
+      await maybeUpdateMarkersForCurrent(true);
+    });
+    document.getElementById('updated-threshold').addEventListener('change', async () => {
+      const btn = document.getElementById('apply-updated-markers');
+      if (btn) btn.disabled = selected.length === 0;
+    });
+
+    async function showOriginal() {
+      smoothingActive = false;
+      const originalButton = document.getElementById('show-original');
+      originalButton.style.background = '#e8e8e8';
+      // Turn off smoothed analysis toggle and overlay to ensure original-only view and analysis
+      const smToggle = document.getElementById('use-smoothed-analysis');
+      if (smToggle) smToggle.checked = false;
+      const overlaySmooth = document.getElementById('overlay-smooth');
+      if (overlaySmooth) overlaySmooth.checked = false;
+      plotSelected();
+      // Ensure analyses are re-run with original values
+      await runPSDAnalysis();
+      await runPileupAnalysis();
+    }
+
+    function updateSmoothingButtons() {
+      const smoothButton = document.getElementById('apply-smoothing');
+      const originalButton = document.getElementById('show-original');
+      const statusDiv = document.getElementById('smoothing-status');
+      const applyMarkersBtn = document.getElementById('apply-updated-markers');
+      const eventFinderBtn = document.getElementById('run-event-finder');
+
+      smoothButton.disabled = selected.length === 0;
+      if (applyMarkersBtn) applyMarkersBtn.disabled = selected.length === 0;
+      if (eventFinderBtn) eventFinderBtn.disabled = selected.length === 0;
+
+      if (selected.length === 0) {
+        statusDiv.textContent = 'Select a waveform file to apply smoothing';
+        originalButton.disabled = true;
+        originalButton.style.background = '#e8e8e8';
+      }
+    }
+
+    document.getElementById('refresh').onclick = refresh;
+    document.getElementById('clear').onclick = () => {
+      selected = [];
+      currentIndex = -1;
+      document.querySelectorAll('#files li').forEach(x => x.classList.remove('sel'));
+      document.getElementById('plot').innerHTML = '';
+      document.getElementById('meta').textContent = '';
+      document.getElementById('psd-results').textContent = 'Select a waveform file to run PSD analysis';
+      const pileupDiv = document.getElementById('pileup-results');
+      if (pileupDiv) pileupDiv.textContent = 'Select a waveform file to run pile-up detection';
+      document.getElementById('smoothing-status').textContent = 'Select a waveform file to apply smoothing';
+
+      // Clear smoothing data
+      originalData.clear();
+      smoothedData.clear();
+      smoothingActive = false;
+
+      // Clear pile-up state
+  quasiThresholds.clear();
+  quasiAlphas.clear();
+  qtailStarts.clear();
+  qtailFractions.clear();
+      setPileupIndicator('unknown');
+
+      updateNavButtons();
+      updatePSDButton();
+      updatePileupButton();
+      updateSmoothingButtons();
+      // Clear fixed axis lock
+      fixedYRange = null;
+    };
+    document.getElementById('filter').addEventListener('input', renderFiles);
+    document.getElementById('prev').onclick = () => {
+      navigateToIndex(currentIndex - 1);
+      // Auto-run pile-up detection when moving to the previous file
+      const btn = document.getElementById('run-pileup');
+      if (btn) {
+        runPileupAnalysis();
+      }
+    };
+    document.getElementById('next').onclick = () => {
+      navigateToIndex(currentIndex + 1);
+      // Auto-run pile-up detection when moving to the next file
+      // Note: runPileupAnalysis() internally checks selection and summary data
+      const btn = document.getElementById('run-pileup');
+      if (btn) {
+        runPileupAnalysis();
+      }
+    };
+
+    // Add event listeners for new controls
+    document.getElementById('fixYAxis').addEventListener('change', (e) => {
+      if (!e.target.checked) fixedYRange = null;
+      plotSelected();
+    });
+    document.getElementById('yRange').addEventListener('input', plotSelected);
+
+    // Marker visibility controls
+    document.getElementById('show-efraw-markers')?.addEventListener('change', plotSelected);
+    document.getElementById('show-efdynamic-markers')?.addEventListener('change', plotSelected);
+    document.getElementById('show-batch-markers')?.addEventListener('change', plotSelected);
+
+    // PSD Analysis event listener
+    document.getElementById('run-psd').onclick = runPSDAnalysis;
+    // Re-run PSD when Qtail fraction changes to update marker immediately
+    const qtailInput = document.getElementById('qtail-fraction');
+    if (qtailInput) {
+      qtailInput.addEventListener('change', () => {
+        if (selected.length > 0) runPSDAnalysis();
+      });
+      qtailInput.addEventListener('keyup', (e) => {
+        if (e.key === 'Enter' && selected.length > 0) runPSDAnalysis();
+      });
+    }
+
+    // Pile-up Detection event listener
+    const runPileupBtn = document.getElementById('run-pileup');
+    if (runPileupBtn) runPileupBtn.onclick = runPileupAnalysis;
+
+    // Smoothing event listeners
+    document.getElementById('apply-smoothing').onclick = runSmoothing;
+    document.getElementById('show-original').onclick = showOriginal;
+    document.getElementById('overlay-smooth').addEventListener('change', plotSelected);
+
+    // Event_Finder Modular Analysis event listeners
+    document.getElementById('run-event-finder').onclick = runEventFinderAnalysis;
+    document.getElementById('use-config-override').addEventListener('change', (e) => {
+      const overridesDiv = document.getElementById('threshold-overrides');
+      overridesDiv.style.display = e.target.checked ? 'block' : 'none';
+    });
+
+
+
+    // initial load
+    refresh();
+  </script>
+</body>
+
+</html>

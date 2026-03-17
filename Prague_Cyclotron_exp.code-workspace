@@ -1,0 +1,16 @@
+{
+	"folders": [
+		{
+			"path": "../../../ikp358/FZJ_GSI_RUB/CBM/NCAL_FSD/Prague_Cyclotron_exp"
+		},
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"python-envs.defaultEnvManager": "ms-python.python:conda",
+		"python-envs.defaultPackageManager": "ms-python.python:conda",
+		"python.condaPath": "/home/dachi/miniconda3/bin/conda",
+		"python.defaultInterpreterPath": "/home/dachi/miniconda3/envs/conda_env/bin/python"
+	}
+}
