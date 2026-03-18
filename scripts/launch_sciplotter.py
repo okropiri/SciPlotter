@@ -13,6 +13,9 @@ import urllib.request
 import webbrowser
 from pathlib import Path
 
+from sciplotter_backend import runtime
+from sciplotter_backend.server import run_server
+
 
 DEFAULT_HOST = os.environ.get("SCIPLOTTER_HOST", "127.0.0.1")
 DEFAULT_PORT = int(os.environ.get("SCIPLOTTER_PORT", "5000"))
@@ -26,6 +29,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     parser.add_argument("--timeout", type=float, default=20.0)
     parser.add_argument("--no-browser", action="store_true")
+    parser.add_argument("--server", action="store_true", help=argparse.SUPPRESS)
     return parser.parse_args()
 
 
@@ -48,12 +52,15 @@ def is_server_ready(host: str, port: int) -> bool:
         return False
 
 
+def build_server_command(host: str, port: int) -> list[str]:
+    if getattr(sys, "frozen", False):
+        return [sys.executable, "--server", "--host", host, "--port", str(port)]
+    return [sys.executable, str(APP_ENTRY), "--host", host, "--port", str(port)]
+
+
 def start_server(host: str, port: int) -> subprocess.Popen[bytes]:
-    log_dir = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "sciplotter"
-    if sys.platform == "win32":
-        log_dir = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData/Local")) / "SciPlotter"
-    elif sys.platform == "darwin":
-        log_dir = Path.home() / "Library/Caches/SciPlotter"
+    runtime.ensure_runtime_dirs()
+    log_dir = runtime.user_cache_dir()
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / "server.log"
     log_handle = log_file.open("ab")
@@ -66,7 +73,7 @@ def start_server(host: str, port: int) -> subprocess.Popen[bytes]:
         startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
 
     return subprocess.Popen(
-        [sys.executable, str(APP_ENTRY), "--host", host, "--port", str(port)],
+        build_server_command(host, port),
         cwd=str(PROJECT_ROOT),
         stdout=log_handle,
         stderr=subprocess.STDOUT,
@@ -92,6 +99,10 @@ def launch_browser(url: str) -> None:
 
 def main() -> int:
     args = parse_args()
+    if args.server:
+        run_server(args.host, args.port)
+        return 0
+
     app_url = build_url(args.host, args.port)
 
     if not is_server_ready(args.host, args.port):

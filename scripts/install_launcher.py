@@ -15,7 +15,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 LAUNCH_SCRIPT = PROJECT_ROOT / "scripts" / "launch_sciplotter.py"
 ICON_PATH = PROJECT_ROOT / "assets" / "launcher-icon.png"
 APP_NAME = "SciPlotter"
-COMMENT = "Launch the Cyclotron Analysis Suite"
+COMMENT = "Launch SciPlotter"
 
 
 def run_command(args: list[str]) -> None:

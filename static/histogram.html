@@ -429,7 +429,7 @@
             };
             const clearBtn = {
                 name: 'Clear Interactions',
-                title: 'Clear Interactions: remove current box or lasso selections, markers, and selection outlines.',
+                title: 'Clear Interactions: delete any markers or selections from the plot, including selection outlines.',
                 icon: {
                     width: 512,
                     height: 512,
@@ -464,7 +464,7 @@
                 { match: 'lasso select', title: 'Lasso Select: draw a freeform outline to select points inside it.' },
                 { match: 'ellipse select', title: 'Ellipse Select: drag an ellipse to select points inside it.' },
                 { match: 'marker mode', title: 'Marker Mode: click a point to place a persistent marker label on the plot.' },
-                { match: 'clear interactions', title: 'Clear Interactions: remove current selections, markers, and selection outlines.' },
+                { match: 'clear interactions', title: 'Clear Interactions: delete any markers or selections from the plot, including selection outlines.' },
                 { match: 'show closest data on hover', title: 'Hover Closest: show hover data for the point nearest the cursor.' },
                 { match: 'compare data on hover', title: 'Hover Compare: compare hover values for all traces at the same position.' },
                 { match: 'toggle spike lines', title: 'Toggle Spikelines: show or hide guide lines that follow the cursor.' },
@@ -953,7 +953,7 @@
                 ? 'Use lasso/select on the 2D plot to inspect a subset.'
                 : 'Selection statistics are available for 2D lasso/select.';
             setHistogramSelectionMeta(null, placeholder);
-            flashStatus(gd, 'Cleared selections and markers');
+            flashStatus(gd, 'Deleted markers and cleared selections');
         }
 
         async function applyEllipseSelection(gd, ellipse) {

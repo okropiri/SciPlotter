@@ -7,8 +7,10 @@ import os
 from statistics import median
 from typing import Any, Dict, List, Optional, Tuple
 
+from . import runtime
+
 # BASE_DIR points at the "waveforms" directory by default.
-DEFAULT_BASE_DIR = os.environ.get('WAVEFORM_BASE_DIR', os.path.abspath(os.path.join(os.getcwd(), 'waveforms')))
+DEFAULT_BASE_DIR = runtime.default_waveform_base_dir()
 BASE_DIR = os.path.abspath(DEFAULT_BASE_DIR)
 
 # Optional manual override for summary CSV path
