@@ -44,6 +44,9 @@ def healthz():
 
 @bp.get('/favicon.ico')
 def favicon():
+    png = os.path.join(STATIC_DIR, 'favicon.png')
+    if os.path.exists(png):
+        return send_from_directory(STATIC_DIR, 'favicon.png')
     svg = os.path.join(STATIC_DIR, 'favicon.svg')
     if os.path.exists(svg):
         return send_from_directory(STATIC_DIR, 'favicon.svg')

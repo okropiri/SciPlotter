@@ -4,13 +4,19 @@
 <head>
   <meta charset='utf-8' />
   <title>Per-event waveform viewer</title>
-  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="icon" href="favicon.png" type="image/png" />
   <!-- Plotly: prefer local file with CDN fallback for offline/LAN use -->
   <script src="https://cdn.plot.ly/plotly-2.27.0.min.js" defer></script>
   <style>
     :root {
       --files-height: 140px;
-      --header-height: 56px;
+      --header-height: 76px;
+      --brand-bg: #021535;
+      --brand-cyan: #1B76B3;
+      --brand-cyan-strong: #145A88;
+      --brand-pink: #AD47B7;
+      --brand-pink-soft: rgba(173, 71, 183, 0.14);
+      --brand-pink-ring: rgba(173, 71, 183, 0.28);
       --surface-0: #f9fafb;
       --surface-1: #fafbfc;
       --surface-2: #ffffff;
@@ -18,7 +24,7 @@
       --border-strong: #d1d5db;
       --text-strong: #111827;
       --text-muted: #6b7280;
-      --accent: #2563eb;
+      --accent: var(--brand-pink);
     }
 
     body {
@@ -35,8 +41,7 @@
       align-items: center;
       justify-content: space-between;
       padding: 0 16px;
-      background: #0f172a;
-      /* slate-900 */
+      background: var(--brand-bg);
       color: #fff;
       border-bottom: 1px solid rgba(255, 255, 255, 0.08);
       box-sizing: border-box;
@@ -70,7 +75,7 @@
     }
 
     .tab.active {
-      background: #1e293b;
+      background: var(--brand-pink);
       color: #fff;
     }
 
@@ -124,7 +129,9 @@
     }
 
     #files li.sel {
-      background: #eff6ff;
+      background: var(--brand-pink-soft);
+      color: var(--brand-pink);
+      box-shadow: inset 3px 0 0 var(--brand-pink);
     }
 
     #controls {
@@ -173,18 +180,26 @@
       height: 26px;
       padding: 3px 10px;
       border-radius: 4px;
-      border: 1px solid var(--border-strong);
-      background: var(--surface-2);
-      color: #374151;
+      border: 1px solid var(--brand-cyan-strong);
+      background: linear-gradient(180deg, var(--brand-cyan) 0%, var(--brand-cyan-strong) 100%);
+      color: #fff;
       font: inherit;
       font-weight: 600;
-      box-shadow: none;
+      box-shadow: 0 8px 18px rgba(27, 118, 179, 0.22);
       cursor: pointer;
     }
 
     button:hover {
-      background: #f3f4f6;
-      border-color: #9ca3af;
+      background: linear-gradient(180deg, #2285ca 0%, #166391 100%);
+      border-color: var(--brand-cyan-strong);
+    }
+
+    button:disabled {
+      background: #d7e6f0;
+      border-color: #bfd0db;
+      color: #6b7280;
+      box-shadow: none;
+      cursor: not-allowed;
     }
 
     input[type='text'],
@@ -207,11 +222,11 @@
     select:focus {
       outline: none;
       border-color: var(--accent);
-      box-shadow: 0 0 0 1.5px rgba(37, 99, 235, 0.12);
+      box-shadow: 0 0 0 2px var(--brand-pink-ring);
     }
 
     input[type='checkbox'] {
-      accent-color: var(--accent);
+      accent-color: var(--brand-pink);
     }
 
     .nav-btn {
@@ -267,11 +282,11 @@
       height: 16px;
       margin-left: 6px;
       border-radius: 50%;
-      background: #eff6ff;
-      color: #2563eb;
+      background: var(--brand-pink-soft);
+      color: var(--brand-pink);
       font-size: 12px;
       line-height: 16px;
-      border: 1px solid #bfdbfe;
+      border: 1px solid rgba(173, 71, 183, 0.28);
       cursor: help;
       user-select: none;
     }
@@ -400,9 +415,9 @@
     #cancel-directory,
     #cancel-browser,
     #summary-cancel {
-      background: #fff !important;
-      color: #374151 !important;
-      border: 1px solid var(--border-strong) !important;
+      background: linear-gradient(180deg, var(--brand-cyan) 0%, var(--brand-cyan-strong) 100%) !important;
+      color: #fff !important;
+      border: 1px solid var(--brand-cyan-strong) !important;
     }
 
     #apply-directory,
@@ -412,9 +427,28 @@
     #run-event-finder,
     #apply-smoothing,
     #apply-updated-markers {
-      background: #2563eb !important;
-      border: 1px solid #2563eb !important;
+      background: linear-gradient(180deg, var(--brand-cyan) 0%, var(--brand-cyan-strong) 100%) !important;
+      border: 1px solid var(--brand-cyan-strong) !important;
       color: #fff !important;
+    }
+
+    #browse-directory,
+    #change-directory,
+    #go-home,
+    #go-up,
+    #close-browser,
+    #close-summary-picker,
+    #browseSummary,
+    #apply-feature-filter,
+    #clear-feature-filter,
+    #clear-hist,
+    #render-hist,
+    #plot-settings-close,
+    #plot-settings-reset,
+    #plot-settings-apply {
+      background: linear-gradient(180deg, var(--brand-cyan) 0%, var(--brand-cyan-strong) 100%) !important;
+      color: #fff !important;
+      border-color: var(--brand-cyan-strong) !important;
     }
 
     #directory-browser,
