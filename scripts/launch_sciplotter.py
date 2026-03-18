@@ -13,6 +13,7 @@ import urllib.request
 import webbrowser
 from pathlib import Path
 
+from sciplotter_backend import linux_integration
 from sciplotter_backend import runtime
 from sciplotter_backend.server import run_server
 
@@ -102,6 +103,12 @@ def main() -> int:
     if args.server:
         run_server(args.host, args.port)
         return 0
+
+    if sys.platform.startswith('linux'):
+        try:
+            linux_integration.integrate_appimage()
+        except Exception:
+            pass
 
     app_url = build_url(args.host, args.port)
 

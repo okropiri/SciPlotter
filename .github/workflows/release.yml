@@ -22,7 +22,9 @@ jobs:
             artifact_path: dist/release/SciPlotter-macos.zip
           - os: ubuntu-latest
             artifact_name: SciPlotter-linux
-            artifact_path: dist/release/SciPlotter-linux.AppImage
+            artifact_path: |
+              dist/release/SciPlotter-linux.AppImage
+              dist/release/SciPlotter-linux.deb
 
     steps:
       - name: Check out source
@@ -67,3 +69,4 @@ jobs:
             release-assets/SciPlotter-windows/SciPlotter-windows.exe
             release-assets/SciPlotter-macos/SciPlotter-macos.zip
             release-assets/SciPlotter-linux/SciPlotter-linux.AppImage
+            release-assets/SciPlotter-linux/SciPlotter-linux.deb

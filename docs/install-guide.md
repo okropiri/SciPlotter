@@ -14,6 +14,7 @@ The repository is configured to produce one native artifact per operating system
 - Windows: `SciPlotter-windows.exe`
 - macOS: `SciPlotter-macos.zip` containing `SciPlotter.app`
 - Linux: `SciPlotter-linux.AppImage`
+- Linux: `SciPlotter-linux.deb`
 
 Important constraint:
 
@@ -98,8 +99,13 @@ The zip contains `SciPlotter.app`.
 Build result:
 
 - `dist/release/SciPlotter-linux.AppImage`
+- `dist/release/SciPlotter-linux.deb`
 
 The Linux build script assembles the AppImage from the PyInstaller onedir output and downloads `appimagetool` automatically to `.tools/appimagetool.AppImage` if it is not already present.
+
+The `.deb` package installs SciPlotter into `/opt/SciPlotter`, provides `/usr/bin/sciplotter`, and installs a desktop file and icon so the application appears in the menu immediately after installation.
+
+The AppImage now performs user-level desktop integration on launch by writing a desktop entry into the user's local applications directory and copying the icon into the user's icon theme directory. That makes the AppImage show up in the app menu more easily after first launch.
 
 If you only want the raw PyInstaller directory or a tarball instead of an AppImage:
 

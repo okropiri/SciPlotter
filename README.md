@@ -14,7 +14,7 @@ Download the package that matches your operating system:
 
 - Windows: `SciPlotter-windows.exe`
 - macOS: `SciPlotter-macos.zip`
-- Linux: `SciPlotter-linux.AppImage`
+- Linux: `SciPlotter-linux.deb` or `SciPlotter-linux.AppImage`
 
 ## Install
 
@@ -35,6 +35,23 @@ If macOS blocks the app the first time, open it from Finder with `Open` so Gatek
 
 ### Linux
 
+For Debian or Ubuntu based systems, the easiest install is the `.deb` package.
+
+#### Debian or Ubuntu
+
+1. Download `SciPlotter-linux.deb` from the latest release.
+2. Install it with your package manager or with:
+
+```bash
+sudo apt install ./SciPlotter-linux.deb
+```
+
+3. Launch `SciPlotter` from the app menu.
+
+The `.deb` package installs a desktop entry, icon, and launcher automatically.
+
+#### Portable AppImage
+
 1. Download `SciPlotter-linux.AppImage` from the latest release.
 2. Make it executable:
 
@@ -47,6 +64,10 @@ chmod +x SciPlotter-linux.AppImage
 ```bash
 ./SciPlotter-linux.AppImage
 ```
+
+When SciPlotter is launched from the AppImage on Linux, it now tries to create a desktop entry automatically in the user application menu so it appears in the app list more easily.
+
+If you use AppImageLauncher, you can also choose its normal integration flow.
 
 ## Run From Source
 
@@ -78,6 +99,11 @@ python scripts/build_release.py --clean
 ```
 
 Generated release files are written to `dist/release/`.
+
+On Linux, the build now produces both:
+
+- `SciPlotter-linux.AppImage`
+- `SciPlotter-linux.deb`
 
 ## How SciPlotter Resolves Paths
 

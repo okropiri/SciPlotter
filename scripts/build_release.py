@@ -16,6 +16,7 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from build_linux_appimage import build_appimage  # noqa: E402
+from build_linux_deb import build_deb  # noqa: E402
 
 
 APP_NAME = 'SciPlotter'
@@ -40,6 +41,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--target', choices=['auto', 'windows', 'macos', 'linux'], default='auto')
     parser.add_argument('--clean', action='store_true', help='Delete previous build output for the selected target before packaging.')
     parser.add_argument('--skip-appimage', action='store_true', help='On Linux, keep the PyInstaller directory only and skip AppImage assembly.')
+    parser.add_argument('--version', default=os.environ.get('SCIPLOTTER_VERSION') or os.environ.get('GITHUB_REF_NAME', 'v1.0.0').lstrip('v'))
     return parser.parse_args()
 
 
@@ -98,34 +100,48 @@ def build_pyinstaller(target: str) -> Path:
     return dist_dir
 
 
-def package_release_artifact(target: str, dist_dir: Path, *, skip_appimage: bool) -> Path:
+def package_release_artifact(target: str, dist_dir: Path, *, skip_appimage: bool, version: str) -> list[Path]:
     RELEASE_ROOT.mkdir(parents=True, exist_ok=True)
 
     if target == 'windows':
         built_exe = dist_dir / f'{APP_NAME}.exe'
         artifact = RELEASE_ROOT / 'SciPlotter-windows.exe'
         shutil.copy2(built_exe, artifact)
-        return artifact
+        return [artifact]
 
     if target == 'macos':
         built_app = dist_dir / f'{APP_NAME}.app'
         archive_base = RELEASE_ROOT / 'SciPlotter-macos'
         archive_path = Path(shutil.make_archive(str(archive_base), 'zip', root_dir=built_app.parent, base_dir=built_app.name))
-        return archive_path
+        return [archive_path]
 
     built_dir = dist_dir / APP_NAME
+    artifacts: list[Path] = []
     if skip_appimage:
         archive_base = RELEASE_ROOT / 'SciPlotter-linux'
         archive_path = Path(shutil.make_archive(str(archive_base), 'gztar', root_dir=dist_dir, base_dir=APP_NAME))
-        return archive_path
+        artifacts.append(archive_path)
+    else:
+        artifact = RELEASE_ROOT / 'SciPlotter-linux.AppImage'
+        artifacts.append(
+            build_appimage(
+                built_dir,
+                artifact,
+                icon_path=ICON_PATH,
+                tool_path=PROJECT_ROOT / '.tools' / 'appimagetool.AppImage',
+            )
+        )
 
-    artifact = RELEASE_ROOT / 'SciPlotter-linux.AppImage'
-    return build_appimage(
-        built_dir,
-        artifact,
-        icon_path=ICON_PATH,
-        tool_path=PROJECT_ROOT / '.tools' / 'appimagetool.AppImage',
+    deb_artifact = RELEASE_ROOT / 'SciPlotter-linux.deb'
+    artifacts.append(
+        build_deb(
+            built_dir,
+            deb_artifact,
+            icon_path=ICON_PATH,
+            version=version,
+        )
     )
+    return artifacts
 
 
 def main() -> int:
@@ -139,8 +155,9 @@ def main() -> int:
         clean_target(target)
 
     dist_dir = build_pyinstaller(target)
-    artifact = package_release_artifact(target, dist_dir, skip_appimage=args.skip_appimage)
-    print(f'Created release artifact: {artifact}')
+    artifacts = package_release_artifact(target, dist_dir, skip_appimage=args.skip_appimage, version=args.version)
+    for artifact in artifacts:
+        print(f'Created release artifact: {artifact}')
     return 0
 
 
