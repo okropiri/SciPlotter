@@ -16,4 +16,7 @@ release-assets/
 .vscode/
 request.log
 
+# Local user workspace files
+Prague_Cyclotron_exp.code-workspace
+
 .DS_Store
