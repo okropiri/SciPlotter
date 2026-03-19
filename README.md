@@ -18,6 +18,16 @@ https://github.com/okropiri/SciPlotter/releases
 
 Then open the latest release and download the file for your operating system from the Release assets section.
 
+## Sample Histogram Data
+
+The repository also includes a large example summary CSV for the Histogram page:
+
+- `examples/histograms/synthetic_detector_events_summary.csv`
+
+This file is synthetic test data generated to look like detector event summaries. It is not real CERN data, but it is structured to produce sensible 1D and 2D histogram views with clear channel-to-channel differences.
+
+To use it in SciPlotter, open the Histogram page and load the CSV with the file-picker control for custom summary files.
+
 ## Download
 
 The easiest way to get SciPlotter is from the GitHub Releases page for this repository.
