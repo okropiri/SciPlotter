@@ -16,6 +16,16 @@ Download the package that matches your operating system:
 - macOS: `SciPlotter-macos.zip`
 - Linux: `SciPlotter-linux.deb` or `SciPlotter-linux.AppImage`
 
+## Which Linux Download Should I Choose?
+
+For most Linux users, the `.deb` package is the easiest and most traditional option.
+
+- `.deb`: best for Debian, Ubuntu, Linux Mint, Pop!_OS, and similar systems. It installs SciPlotter like a normal application and adds it to the app menu.
+- `AppImage`: a portable single-file version. You download one file, make it executable, and run it directly without a full install.
+- Run from source: this means running the original Python project files yourself. This is mainly for developers or advanced users, not the usual end-user install method.
+
+If you are not sure which one to choose on Linux, use the `.deb` package first.
+
 ## Install
 
 ### Windows
@@ -70,6 +80,10 @@ When SciPlotter is launched from the AppImage on Linux, it now tries to create a
 If you use AppImageLauncher, you can also choose its normal integration flow.
 
 ## Run From Source
+
+Running from source means you launch SciPlotter directly from the project code with Python instead of using an installed desktop package.
+
+This is mostly useful for development, testing, or advanced users who want direct access to the repository.
 
 If you want to run SciPlotter directly from the repository:
 

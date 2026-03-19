@@ -17,14 +17,17 @@ jobs:
           - os: windows-latest
             artifact_name: SciPlotter-windows
             artifact_path: dist/release/SciPlotter-windows.exe
+            venv_python: .venv/Scripts/python.exe
           - os: macos-latest
             artifact_name: SciPlotter-macos
             artifact_path: dist/release/SciPlotter-macos.zip
+            venv_python: .venv/bin/python
           - os: ubuntu-latest
             artifact_name: SciPlotter-linux
             artifact_path: |
               dist/release/SciPlotter-linux.AppImage
               dist/release/SciPlotter-linux.deb
+            venv_python: .venv/bin/python
 
     steps:
       - name: Check out source
@@ -36,10 +39,10 @@ jobs:
           python-version: '3.11'
 
       - name: Bootstrap build environment
-        run: python scripts/bootstrap.py --build --reuse-active
+        run: python scripts/bootstrap.py --build
 
       - name: Build packaged artifact
-        run: python scripts/build_release.py --clean
+        run: ${{ matrix.venv_python }} scripts/build_release.py --clean
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4

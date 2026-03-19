@@ -7,6 +7,19 @@ SciPlotter now supports two installation paths:
 1. Source install for development or local analysis.
 2. Native packaged desktop artifacts built with PyInstaller.
 
+## Plain-Language Install Choices
+
+For non-technical users, the packaging options mean:
+
+- `.deb`: the normal Linux installer style for Debian-based systems such as Ubuntu. This is the most traditional installed-app experience.
+- `AppImage`: a portable one-file app. You keep the file wherever you want, make it executable, and run it directly.
+- Run from source: start SciPlotter from the original Python project files. This is mainly for development or advanced users.
+
+Recommended default:
+
+- On Debian or Ubuntu based systems, choose the `.deb` package.
+- On other Linux distributions, choose the `AppImage`.
+
 ## Release Artifacts
 
 The repository is configured to produce one native artifact per operating system:
@@ -26,6 +39,10 @@ Important constraint:
 The provided GitHub Actions workflow handles that by building on native runners for each OS.
 
 ## Source Install
+
+Running from source means using the repository itself as the application rather than installing a packaged desktop build.
+
+This is useful for development, debugging, or users who want to modify the project.
 
 From the repository root:
 
@@ -120,8 +137,8 @@ The workflow file is at `.github/workflows/release.yml`.
 It does the following:
 
 1. Builds on `windows-latest`, `macos-latest`, and `ubuntu-latest`.
-2. Runs `python scripts/bootstrap.py --build --reuse-active`.
-3. Runs `python scripts/build_release.py --clean`.
+2. Runs `python scripts/bootstrap.py --build`.
+3. Runs the build with the Python executable from the created `.venv`.
 4. Uploads the per-OS artifact as a workflow artifact.
 5. On `v*` tags, publishes those assets to the GitHub release.
 
