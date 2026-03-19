@@ -56,6 +56,10 @@ def favicon():
 
 
 @bp.get('/')
+def root_html():
+    return send_from_directory(str(STATIC_DIR), 'histogram.html')
+
+
 @bp.get('/index.html')
 def index_html():
     return send_from_directory(str(STATIC_DIR), 'index.html')
