@@ -52,6 +52,7 @@ def build_deb(pyinstaller_dir: Path, output_file: Path, *, icon_path: Path, vers
     wrapper.chmod(0o755)
 
     desktop_file = package_root / 'usr' / 'share' / 'applications' / f'{PACKAGE_NAME}.desktop'
+    pixmaps_icon = Path('/usr/share/pixmaps') / f'{PACKAGE_NAME}.png'
     write_text(
         desktop_file,
         '\n'.join([
@@ -61,12 +62,16 @@ def build_deb(pyinstaller_dir: Path, output_file: Path, *, icon_path: Path, vers
             'Name=SciPlotter',
             'Comment=Launch SciPlotter',
             f'Exec=/usr/bin/{PACKAGE_NAME}',
-            f'Icon={PACKAGE_NAME}',
+            f'Icon={pixmaps_icon}',
             'Terminal=false',
             'Categories=Science;',
             '',
         ]),
     )
+
+    pixmaps_dest = package_root / 'usr' / 'share' / 'pixmaps' / f'{PACKAGE_NAME}.png'
+    pixmaps_dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(icon_path, pixmaps_dest)
 
     icon_dest = package_root / 'usr' / 'share' / 'icons' / 'hicolor' / '512x512' / 'apps' / f'{PACKAGE_NAME}.png'
     icon_dest.parent.mkdir(parents=True, exist_ok=True)

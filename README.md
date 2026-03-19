@@ -68,9 +68,21 @@ For Debian or Ubuntu based systems, the easiest install is the `.deb` package.
 sudo apt install ./SciPlotter-linux.deb
 ```
 
+Use `./` so `apt` treats the `.deb` as a local file in the current folder. Without `./`, `apt` may try to look for a package with that name in online repositories instead.
+
 3. Launch `SciPlotter` from the app menu.
 
 The `.deb` package installs a desktop entry, icon, and launcher automatically.
+
+If you see a warning saying the download was performed unsandboxed because the file could not be accessed by user `_apt`, the installation usually still succeeded. That warning can happen when installing a local `.deb` from a folder with restricted permissions, such as `Downloads`.
+
+To remove the Debian package later, use:
+
+```bash
+sudo apt remove sciplotter
+```
+
+The installed application is shown to users as `SciPlotter`, but the Debian package name is lowercase `sciplotter`, which is the standard package-manager naming convention.
 
 #### Portable AppImage
 

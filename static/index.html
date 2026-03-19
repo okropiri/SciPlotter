@@ -6,7 +6,20 @@
   <title>Per-event waveform viewer</title>
   <link rel="icon" href="favicon.png" type="image/png" />
   <!-- Plotly: prefer local file with CDN fallback for offline/LAN use -->
-  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js" defer></script>
+  <script>
+    (function() {
+      var local = document.createElement('script');
+      local.src = 'vendor/plotly-2.27.0.min.js';
+      local.defer = true;
+      local.onerror = function() {
+        var cdn = document.createElement('script');
+        cdn.src = 'https://cdn.plot.ly/plotly-2.27.0.min.js';
+        cdn.defer = true;
+        document.head.appendChild(cdn);
+      };
+      document.head.appendChild(local);
+    })();
+  </script>
   <style>
     :root {
       --files-height: 140px;

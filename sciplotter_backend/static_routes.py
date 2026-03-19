@@ -66,6 +66,15 @@ def histogram_html():
     return send_from_directory(str(STATIC_DIR), 'histogram.html')
 
 
+@bp.get('/assets/<path:filename>')
+def bundled_assets(filename: str):
+    assets_dir = runtime.assets_dir()
+    fpath = assets_dir / filename
+    if fpath.is_file():
+        return send_from_directory(str(assets_dir), filename)
+    return ('Not Found', 404)
+
+
 @bp.get('/admin/requests')
 def admin_requests():
     # Keep this for debugging connectivity (optional).
