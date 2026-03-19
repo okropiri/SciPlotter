@@ -6,6 +6,18 @@ Creator: Dachi Okropiridze
 
 SciPlotter runs as a local desktop app that starts its own local backend and opens the user interface in the browser. It can be used directly from source or installed from packaged desktop releases.
 
+## Where Do I Download It?
+
+If you want to install SciPlotter, do not download files from the main repository file list.
+
+The main repository page contains the source code.
+
+For installation, go to the GitHub Releases page:
+
+https://github.com/okropiri/SciPlotter/releases
+
+Then open the latest release and download the file for your operating system from the Release assets section.
+
 ## Download
 
 The easiest way to get SciPlotter is from the GitHub Releases page for this repository.
