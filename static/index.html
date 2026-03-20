@@ -48,7 +48,7 @@
     }
 
     /* Top header */
-    .site-header {
+    #shared-header .site-header {
       height: var(--header-height);
       display: flex;
       align-items: center;
@@ -60,18 +60,18 @@
       box-sizing: border-box;
     }
 
-    .site-header .brand {
+    #shared-header .site-header .brand {
       font-weight: 600;
       letter-spacing: 0.2px;
     }
 
-    .tabs {
+    #shared-header .tabs {
       display: flex;
       gap: 8px;
       align-items: center;
     }
 
-    .tab {
+    #shared-header .tab {
       display: inline-block;
       padding: 8px 12px;
       color: #cbd5e1;
@@ -82,12 +82,12 @@
       font-size: 14px;
     }
 
-    .tab:hover {
+    #shared-header .tab:hover {
       background: rgba(255, 255, 255, 0.08);
       color: #fff;
     }
 
-    .tab.active {
+    #shared-header .tab.active {
       background: var(--brand-pink);
       color: #fff;
     }
@@ -535,7 +535,7 @@
         if (holder) { holder.innerHTML = html; }
         // Now mark active tab
         try {
-          document.querySelectorAll('.tabs .tab').forEach(function(a){
+          holder.querySelectorAll('.tab').forEach(function(a){
             if (a.getAttribute('data-tab') === window.ACTIVE_TAB) a.classList.add('active');
           });
         } catch (e) {}

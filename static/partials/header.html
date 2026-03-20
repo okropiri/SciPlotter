@@ -1,6 +1,6 @@
 <style>
   :root { --header-height: 76px; }
-  .site-header {
+  :is(#shared-header, #site-header) .site-header {
     height: var(--header-height);
     display: flex; align-items: center; justify-content: space-between;
     padding: 0 16px 0 8px; background: var(--brand-bg, #021535); color: #fff;
@@ -8,7 +8,7 @@
     box-sizing: border-box;
     box-shadow: 0 10px 24px rgba(2, 21, 53, 0.28);
   }
-  .site-header .brand {
+  :is(#shared-header, #site-header) .site-header .brand {
     display: inline-flex;
     align-items: center;
     gap: 0;
@@ -17,8 +17,8 @@
     color: inherit;
     margin-right: 20px;
   }
-  .site-header .brand:hover { color: inherit; }
-  .brand-mark {
+  :is(#shared-header, #site-header) .site-header .brand:hover { color: inherit; }
+  :is(#shared-header, #site-header) .brand-mark {
     width: 250px;
     height: 68px;
     flex: 0 0 auto;
@@ -26,23 +26,34 @@
     object-fit: contain;
     object-position: left center;
   }
-  .tabs { display: flex; gap: 8px; align-items: center; }
-  .tab { display: inline-block; padding: 8px 12px; color: #dbeafe; text-decoration: none; border-radius: 999px; transition: background 120ms, color 120ms, box-shadow 120ms; font-size: 14px; line-height: 1; }
-  .tab:hover { background: rgba(173, 71, 183, 0.18); color: #fff; box-shadow: inset 0 0 0 1px rgba(173, 71, 183, 0.34); }
-  .tab.active { background: var(--brand-pink, #AD47B7); color: #fff; box-shadow: 0 8px 18px rgba(173, 71, 183, 0.32); }
+  :is(#shared-header, #site-header) .header-divider {
+    width: 1px;
+    height: 34px;
+    margin-right: 18px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.28) 50%, rgba(255,255,255,0.08) 100%);
+    flex: 0 0 auto;
+  }
+  :is(#shared-header, #site-header) .tabs { display: flex; gap: 8px; align-items: center; }
+  :is(#shared-header, #site-header) .tab { display: inline-block; padding: 8px 12px; color: #dbeafe; text-decoration: none; border-radius: 6px; transition: background 120ms, color 120ms, box-shadow 120ms; font-size: 14px; line-height: 1; }
+  :is(#shared-header, #site-header) .tab:hover { background: rgba(173, 71, 183, 0.18); color: #fff; box-shadow: inset 0 0 0 1px rgba(173, 71, 183, 0.34); }
+  :is(#shared-header, #site-header) .tab.active { background: var(--brand-pink, #AD47B7); color: #fff; box-shadow: 0 8px 18px rgba(173, 71, 183, 0.32); }
   @media (max-width: 760px) {
-    .site-header {
+    :is(#shared-header, #site-header) .site-header {
       padding: 0 10px 0 4px;
       gap: 8px;
     }
-    .brand-mark {
+    :is(#shared-header, #site-header) .brand-mark {
       width: 168px;
       height: 46px;
     }
-    .tabs {
+    :is(#shared-header, #site-header) .header-divider {
+      height: 24px;
+      margin-right: 10px;
+    }
+    :is(#shared-header, #site-header) .tabs {
       gap: 4px;
     }
-    .tab {
+    :is(#shared-header, #site-header) .tab {
       padding: 7px 10px;
       font-size: 13px;
     }

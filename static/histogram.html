@@ -19,6 +19,7 @@
         const DEFAULT_FONT_FAMILY = CONTROL_TEXT_FONT_FAMILY;
         let EXPORT_WIDTH = null;  // user-chosen pixel width for plot & exports
         let EXPORT_HEIGHT = null; // user-chosen pixel height for plot & exports
+        let PLOT_SIZE_APPLY_TIMER = null;
 
         function normalizeHistogramFontFamily(value, fallback = DEFAULT_FONT_FAMILY) {
             if (typeof value !== 'string') return fallback;
@@ -63,6 +64,9 @@
                 const persisted = {
                     width: HISTOGRAM_PLOT_UI.width,
                     height: HISTOGRAM_PLOT_UI.height,
+                        titleText: HISTOGRAM_PLOT_UI.titleText,
+                        xLabelText: HISTOGRAM_PLOT_UI.xLabelText,
+                        yLabelText: HISTOGRAM_PLOT_UI.yLabelText,
                     titleFontSize: HISTOGRAM_PLOT_UI.titleFontSize,
                     axisFontSize: HISTOGRAM_PLOT_UI.axisFontSize,
                     titleFontFamily: HISTOGRAM_PLOT_UI.titleFontFamily,
@@ -76,6 +80,7 @@
             HISTOGRAM_PLOT_UI.titleText = '';
             HISTOGRAM_PLOT_UI.xLabelText = '';
             HISTOGRAM_PLOT_UI.yLabelText = '';
+                saveHistogramPlotUiState();
         }
 
         function hasCustomPlotSize() {
@@ -87,6 +92,14 @@
             const hInput = document.getElementById('plot-height-input');
             if (wInput) wInput.value = String(hasCustomPlotSize() ? EXPORT_WIDTH : (HISTOGRAM_PLOT_UI.width || DEFAULT_EXPORT_WIDTH));
             if (hInput) hInput.value = String(hasCustomPlotSize() ? EXPORT_HEIGHT : (HISTOGRAM_PLOT_UI.height || DEFAULT_EXPORT_HEIGHT));
+        }
+
+        function readPlotSizeControls() {
+            const width = parseInt(document.getElementById('plot-width-input')?.value || '', 10);
+            const height = parseInt(document.getElementById('plot-height-input')?.value || '', 10);
+            if (!Number.isFinite(width) || !Number.isFinite(height)) return null;
+            if (width < 200 || height < 200) return null;
+            return { width, height };
         }
 
         function applyPlotHostSizing() {
@@ -136,30 +149,32 @@
         }
 
         function syncPlotSettingsForm(mode, xKey, yKey, orientation, histnorm) {
-            const defaults = getDefaultHistogramTexts(mode, xKey, yKey, orientation, histnorm);
-            const titleInput = document.getElementById('plot-title-input');
-            const xInput = document.getElementById('plot-x-label-input');
-            const yInput = document.getElementById('plot-y-label-input');
-            const titleSize = document.getElementById('plot-title-font-size');
-            const axisSize = document.getElementById('plot-axis-font-size');
-            const titleFamily = document.getElementById('plot-title-font-family');
-            const axisFamily = document.getElementById('plot-axis-font-family');
-            if (titleInput) {
-                titleInput.value = HISTOGRAM_PLOT_UI.titleText || '';
-                titleInput.placeholder = defaults.title;
+            const fontSize = document.getElementById('plot-font-size-input');
+            const fontFamily = document.getElementById('plot-font-family-input');
+            if (fontSize) {
+                fontSize.value = String(HISTOGRAM_PLOT_UI.titleFontSize || HISTOGRAM_PLOT_UI.axisFontSize || DEFAULT_TITLE_FONT_SIZE);
             }
-            if (xInput) {
-                xInput.value = HISTOGRAM_PLOT_UI.xLabelText || '';
-                xInput.placeholder = defaults.x;
+            if (fontFamily) {
+                fontFamily.value = HISTOGRAM_PLOT_UI.titleFontFamily || HISTOGRAM_PLOT_UI.axisFontFamily || DEFAULT_FONT_FAMILY;
             }
-            if (yInput) {
-                yInput.value = HISTOGRAM_PLOT_UI.yLabelText || '';
-                yInput.placeholder = defaults.y;
-            }
-            if (titleSize) titleSize.value = String(HISTOGRAM_PLOT_UI.titleFontSize || DEFAULT_TITLE_FONT_SIZE);
-            if (axisSize) axisSize.value = String(HISTOGRAM_PLOT_UI.axisFontSize || DEFAULT_AXIS_FONT_SIZE);
-            if (titleFamily) titleFamily.value = HISTOGRAM_PLOT_UI.titleFontFamily || DEFAULT_FONT_FAMILY;
-            if (axisFamily) axisFamily.value = HISTOGRAM_PLOT_UI.axisFontFamily || DEFAULT_FONT_FAMILY;
+        }
+
+        function applySharedFontControls() {
+            const fontFamily = document.getElementById('plot-font-family-input')?.value || DEFAULT_FONT_FAMILY;
+            const fontSize = Math.max(8, parseInt(document.getElementById('plot-font-size-input')?.value || String(DEFAULT_TITLE_FONT_SIZE), 10) || DEFAULT_TITLE_FONT_SIZE);
+            HISTOGRAM_PLOT_UI.titleFontFamily = fontFamily;
+            HISTOGRAM_PLOT_UI.axisFontFamily = fontFamily;
+            HISTOGRAM_PLOT_UI.titleFontSize = fontSize;
+            HISTOGRAM_PLOT_UI.axisFontSize = fontSize;
+            saveHistogramPlotUiState();
+            syncPlotSettingsForm(
+                document.querySelector('input[name="hist-type"]:checked')?.value || '1d',
+                document.getElementById('axis-x')?.value || 'X',
+                document.getElementById('axis-y')?.value || 'Y',
+                document.getElementById('orientation')?.value || 'v',
+                document.getElementById('histnorm')?.value || ''
+            );
+            relayoutHistogramAppearance();
         }
 
         function applyHistogramLayoutAppearance(layout, mode, xKey, yKey, orientation, histnorm) {
@@ -240,6 +255,7 @@
             maybeSet('xLabelText', ev?.['xaxis.title.text'] ?? ev?.xaxis?.title?.text);
             maybeSet('yLabelText', ev?.['yaxis.title.text'] ?? ev?.yaxis?.title?.text);
             if (changed) {
+                saveHistogramPlotUiState();
                 syncPlotSettingsForm(
                     document.querySelector('input[name="hist-type"]:checked')?.value || '1d',
                     document.getElementById('axis-x')?.value || 'X',
@@ -250,29 +266,44 @@
             }
         }
 
-        function setPresetPlotSize(gd) {
-            const wStr = (document.getElementById('plot-width-input')?.value || '').trim();
-            const hStr = (document.getElementById('plot-height-input')?.value || '').trim();
-            const w = parseInt(wStr, 10);
-            const h = parseInt(hStr, 10);
-            if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) { alert('Invalid size'); return; }
-            EXPORT_WIDTH = w;
-            EXPORT_HEIGHT = h;
-            HISTOGRAM_PLOT_UI.width = w;
-            HISTOGRAM_PLOT_UI.height = h;
+        async function applyPlotSize(width, height, gd = document.getElementById('histogram-plot')) {
+            EXPORT_WIDTH = width;
+            EXPORT_HEIGHT = height;
+            HISTOGRAM_PLOT_UI.width = width;
+            HISTOGRAM_PLOT_UI.height = height;
             saveHistogramPlotUiState();
             syncPlotSizeControls();
             applyPlotHostSizing();
-            try { Plotly.relayout(gd, { width: w, height: h, autosize: false }); } catch(e) { console.warn('Relayout size failed', e); }
+            if (!window.Plotly || !gd || !gd.data) {
+                renderPlaceholder();
+                return;
+            }
+            try {
+                await Plotly.relayout(gd, { width, height, autosize: false });
+            } catch(e) {
+                console.warn('Relayout size failed', e);
+            }
+            requestAnimationFrame(() => centerPlot(gd));
         }
 
-        function resetPresetPlotSize(gd) {
-            EXPORT_WIDTH = Number(HISTOGRAM_PLOT_UI.width) || DEFAULT_EXPORT_WIDTH;
-            EXPORT_HEIGHT = Number(HISTOGRAM_PLOT_UI.height) || DEFAULT_EXPORT_HEIGHT;
-            saveHistogramPlotUiState();
-            syncPlotSizeControls();
-            applyPlotHostSizing();
-            try { Plotly.relayout(gd, { width: EXPORT_WIDTH, height: EXPORT_HEIGHT, autosize: false }); } catch(e) { console.warn('Reset size relayout failed', e); }
+        function schedulePlotSizeApply(gd = document.getElementById('histogram-plot')) {
+            if (PLOT_SIZE_APPLY_TIMER) window.clearTimeout(PLOT_SIZE_APPLY_TIMER);
+            PLOT_SIZE_APPLY_TIMER = window.setTimeout(() => {
+                PLOT_SIZE_APPLY_TIMER = null;
+                const size = readPlotSizeControls();
+                if (!size) return;
+                applyPlotSize(size.width, size.height, gd);
+            }, 140);
+        }
+
+        function commitPlotSizeFromControls(gd = document.getElementById('histogram-plot')) {
+            if (PLOT_SIZE_APPLY_TIMER) {
+                window.clearTimeout(PLOT_SIZE_APPLY_TIMER);
+                PLOT_SIZE_APPLY_TIMER = null;
+            }
+            const size = readPlotSizeControls();
+            if (!size) return;
+            applyPlotSize(size.width, size.height, gd);
         }
 
         // --- Marker-aware export helpers ---
@@ -548,9 +579,10 @@
                 ['btn-export', 'Export: open export options for PNG or PDF output.'],
                 ['btn-png', 'PNG Export: download the current plot as a PNG image.'],
                 ['btn-pdf', 'PDF Export: download the current plot as a PDF file.'],
-                ['btn-size', 'Set Size: apply the width and height values to the plot and exports.'],
-                ['btn-size-reset', 'Default Size: restore automatic plot sizing.'],
-                ['btn-plot-settings', 'Settings: open plot title, font, and label settings.'],
+                ['plot-width-input', 'Plot width in pixels. Changes apply automatically.'],
+                ['plot-height-input', 'Plot height in pixels. Changes apply automatically.'],
+                ['plot-font-family-input', 'Common font for the plot title and axis labels.'],
+                ['plot-font-size-input', 'Common font size for the plot title and axis labels.'],
             ];
             extraTooltips.forEach(([id, tooltip]) => {
                 const el = document.getElementById(id);
@@ -568,11 +600,6 @@
                     { modebarLabel: 'zoom out', label: 'Zoom Out' },
                     { modebarLabel: 'auto fit', label: 'Auto Fit' },
                     { modebarLabel: 'reset axes', label: 'Reset' },
-                ],
-            },
-            {
-                label: 'Navigate',
-                actions: [
                     { modebarLabel: 'zoom', label: 'Zoom' },
                     { modebarLabel: 'pan', label: 'Pan' },
                 ],
@@ -608,10 +635,48 @@
             ).trim().toLowerCase();
         }
 
+        function buildToolbarLensIcon() {
+            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.setAttribute('viewBox', '0 0 24 24');
+            svg.setAttribute('aria-hidden', 'true');
+
+            const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            circle.setAttribute('cx', '10');
+            circle.setAttribute('cy', '10');
+            circle.setAttribute('r', '5.2');
+            circle.setAttribute('fill', 'none');
+            circle.setAttribute('stroke', 'currentColor');
+            circle.setAttribute('stroke-width', '1.8');
+
+            const area = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            area.setAttribute('x', '7.2');
+            area.setAttribute('y', '7.2');
+            area.setAttribute('width', '5.6');
+            area.setAttribute('height', '5.6');
+            area.setAttribute('rx', '0.8');
+            area.setAttribute('fill', 'none');
+            area.setAttribute('stroke', 'currentColor');
+            area.setAttribute('stroke-width', '1.3');
+            area.setAttribute('stroke-dasharray', '1.4 1.2');
+
+            const handle = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            handle.setAttribute('d', 'M13.8 13.8L19 19');
+            handle.setAttribute('fill', 'none');
+            handle.setAttribute('stroke', 'currentColor');
+            handle.setAttribute('stroke-width', '1.8');
+            handle.setAttribute('stroke-linecap', 'round');
+
+            svg.appendChild(circle);
+            svg.appendChild(area);
+            svg.appendChild(handle);
+            return svg;
+        }
+
         function renderHistogramToolbarActions(gd) {
             const container = document.getElementById('hist-toolbar-tools');
-            if (!container || !gd) return;
+            if (!container) return 0;
             container.innerHTML = '';
+            let missingActionCount = 0;
 
             HISTOGRAM_TOOLBAR_SECTIONS.forEach((section) => {
                 const sectionEl = document.createElement('section');
@@ -626,38 +691,54 @@
 
                 section.actions.forEach((action) => {
                     const sourceButton = findModebarButton(gd, action.modebarLabel);
-                    if (!sourceButton) return;
 
                     const button = document.createElement('button');
                     button.type = 'button';
                     button.className = 'hist-tool-btn';
                     button.dataset.modebarLabel = action.modebarLabel;
-                    const title = String(sourceButton.getAttribute('title') || sourceButton.getAttribute('aria-label') || action.label).trim();
+                    const title = String(sourceButton?.getAttribute('title') || sourceButton?.getAttribute('aria-label') || action.label).trim();
                     button.title = title;
                     button.setAttribute('aria-label', title);
-
                     const iconWrap = document.createElement('span');
                     iconWrap.className = 'hist-tool-btn-icon';
-                    const sourceSvg = sourceButton.querySelector('svg');
-                    if (sourceSvg) iconWrap.appendChild(sourceSvg.cloneNode(true));
-
+                    if (!sourceButton) {
+                        missingActionCount += 1;
+                        button.classList.add('is-placeholder');
+                        button.disabled = true;
+                    } else if (action.modebarLabel === 'zoom') {
+                        iconWrap.appendChild(buildToolbarLensIcon());
+                    } else {
+                        const sourceSvg = sourceButton.querySelector('svg');
+                        if (sourceSvg) iconWrap.appendChild(sourceSvg.cloneNode(true));
+                    }
                     button.appendChild(iconWrap);
-                    button.addEventListener('click', (event) => {
-                        event.preventDefault();
-                        sourceButton.click();
-                        requestAnimationFrame(() => syncHistogramToolbarButtons(gd));
-                    });
+                    if (sourceButton) {
+                        button.addEventListener('click', (event) => {
+                            event.preventDefault();
+                            sourceButton.click();
+                            requestAnimationFrame(() => syncHistogramToolbarButtons(gd));
+                        });
+                    }
                     buttonsEl.appendChild(button);
                 });
 
-                if (buttonsEl.childElementCount) {
-                    sectionEl.appendChild(labelEl);
-                    sectionEl.appendChild(buttonsEl);
-                    container.appendChild(sectionEl);
-                }
+                sectionEl.appendChild(labelEl);
+                sectionEl.appendChild(buttonsEl);
+                container.appendChild(sectionEl);
             });
 
-            syncHistogramToolbarButtons(gd);
+            if (gd) syncHistogramToolbarButtons(gd);
+            return missingActionCount;
+        }
+
+        function ensureHistogramToolbarHydrated(gd, attempt = 0) {
+            if (!gd || !gd.isConnected) return;
+            const missingActionCount = renderHistogramToolbarActions(gd);
+            if (missingActionCount === 0) return;
+            if (attempt >= 20) return;
+            window.setTimeout(() => {
+                ensureHistogramToolbarHydrated(gd, attempt + 1);
+            }, 50);
         }
 
         function syncHistogramToolbarButtons(gd) {
@@ -690,11 +771,13 @@
             if (!gd || !labelNeedle) return null;
             const needle = String(labelNeedle).trim().toLowerCase();
             const buttons = gd.querySelectorAll('.modebar-btn');
+            let partialMatch = null;
             for (const button of buttons) {
                 const label = getModebarButtonLabel(button);
-                if (options.exact ? label === needle : label.includes(needle)) return button;
+                if (label === needle) return button;
+                if (!options.exact && !partialMatch && label.includes(needle)) partialMatch = button;
             }
-            return null;
+            return options.exact ? null : partialMatch;
         }
 
         function updateMarkerModebarButton(gd) {
@@ -1151,49 +1234,108 @@
             return { xIndex, yIndex };
         }
 
+        function getVisibleProjectionRange(gd, axisName, edges) {
+            const axis = gd?._fullLayout?.[axisName];
+            if (!axis || !Array.isArray(edges) || edges.length < 2) return null;
+            const rawRange = Array.isArray(axis.range) && axis.range.length === 2
+                ? axis.range.map((value) => Number(value))
+                : null;
+            const edgeMin = Number(edges[0]);
+            const edgeMax = Number(edges[edges.length - 1]);
+            if (!Number.isFinite(edgeMin) || !Number.isFinite(edgeMax)) return null;
+            if (!rawRange || !rawRange.every(Number.isFinite)) {
+                return { min: edgeMin, max: edgeMax };
+            }
+            const min = Math.max(edgeMin, Math.min(rawRange[0], rawRange[1]));
+            const max = Math.min(edgeMax, Math.max(rawRange[0], rawRange[1]));
+            if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) return null;
+            return { min, max };
+        }
+
+        function getVisibleProjectionBinWindow(edges, visibleRange) {
+            if (!Array.isArray(edges) || edges.length < 2 || !visibleRange) return null;
+            let startIndex = -1;
+            let endIndex = -1;
+            for (let idx = 0; idx < edges.length - 1; idx++) {
+                const lo = Number(edges[idx]);
+                const hi = Number(edges[idx + 1]);
+                if (!Number.isFinite(lo) || !Number.isFinite(hi)) continue;
+                const overlaps = hi > visibleRange.min && lo < visibleRange.max;
+                if (!overlaps) continue;
+                if (startIndex < 0) startIndex = idx;
+                endIndex = idx;
+            }
+            if (startIndex < 0 || endIndex < 0) return null;
+            return {
+                startIndex,
+                endIndex,
+                range: [visibleRange.min, visibleRange.max],
+            };
+        }
+
         function buildProjectionState(gd, axis, startIndex, endIndex) {
             const grid = getProjectionGrid(gd);
             const context = gd?.__histSelectionContext || {};
             if (!grid || context.mode !== '2d') return null;
+            const visibleXRange = getVisibleProjectionRange(gd, 'xaxis', grid.xEdges);
+            const visibleYRange = getVisibleProjectionRange(gd, 'yaxis', grid.yEdges);
+            const visibleXWindow = getVisibleProjectionBinWindow(grid.xEdges, visibleXRange);
+            const visibleYWindow = getVisibleProjectionBinWindow(grid.yEdges, visibleYRange);
+            if (!visibleXWindow || !visibleYWindow) return null;
+
             const lo = Math.max(0, Math.min(startIndex, endIndex));
             const hi = Math.max(startIndex, endIndex);
 
             if (axis === 'column') {
-                const hiClamped = Math.min(grid.binsX - 1, hi);
+                const loClamped = Math.max(visibleXWindow.startIndex, lo);
+                const hiClamped = Math.min(visibleXWindow.endIndex, hi);
+                if (hiClamped < loClamped) return null;
                 const counts = [];
-                for (let yi = 0; yi < grid.binsY; yi++) {
+                const centers = [];
+                for (let yi = visibleYWindow.startIndex; yi <= visibleYWindow.endIndex; yi++) {
                     let total = 0;
-                    for (let xi = lo; xi <= hiClamped; xi++) total += grid.matrix[yi][xi] || 0;
+                    for (let xi = loClamped; xi <= hiClamped; xi++) total += grid.matrix[yi][xi] || 0;
                     counts.push(total);
+                    centers.push(grid.yCenters[yi]);
                 }
                 return {
                     axis,
-                    startIndex: lo,
+                    startIndex: loClamped,
                     endIndex: hiClamped,
                     counts,
-                    centers: grid.yCenters.slice(),
+                    centers,
                     xKey: context.xKey,
                     yKey: context.yKey,
-                    highlightRange: { x: [grid.xEdges[lo], grid.xEdges[hiClamped + 1]], y: [grid.yEdges[0], grid.yEdges[grid.yEdges.length - 1]] },
+                    highlightRange: {
+                        x: [grid.xEdges[loClamped], grid.xEdges[hiClamped + 1]],
+                        y: visibleYWindow.range,
+                    },
                 };
             }
 
-            const hiClamped = Math.min(grid.binsY - 1, hi);
+            const loClamped = Math.max(visibleYWindow.startIndex, lo);
+            const hiClamped = Math.min(visibleYWindow.endIndex, hi);
+            if (hiClamped < loClamped) return null;
             const counts = [];
-            for (let xi = 0; xi < grid.binsX; xi++) {
+            const centers = [];
+            for (let xi = visibleXWindow.startIndex; xi <= visibleXWindow.endIndex; xi++) {
                 let total = 0;
-                for (let yi = lo; yi <= hiClamped; yi++) total += grid.matrix[yi][xi] || 0;
+                for (let yi = loClamped; yi <= hiClamped; yi++) total += grid.matrix[yi][xi] || 0;
                 counts.push(total);
+                centers.push(grid.xCenters[xi]);
             }
             return {
                 axis,
-                startIndex: lo,
+                startIndex: loClamped,
                 endIndex: hiClamped,
                 counts,
-                centers: grid.xCenters.slice(),
+                centers,
                 xKey: context.xKey,
                 yKey: context.yKey,
-                highlightRange: { x: [grid.xEdges[0], grid.xEdges[grid.xEdges.length - 1]], y: [grid.yEdges[lo], grid.yEdges[hiClamped + 1]] },
+                highlightRange: {
+                    x: visibleXWindow.range,
+                    y: [grid.yEdges[loClamped], grid.yEdges[hiClamped + 1]],
+                },
             };
         }
 
@@ -1637,9 +1779,6 @@
             const exportToggle = document.getElementById('btn-export');
             const pngB = document.getElementById('btn-png');
             const pdfB = document.getElementById('btn-pdf');
-            const sizeB = document.getElementById('btn-size');
-            const defB = document.getElementById('btn-size-reset');
-            const settingsB = document.getElementById('btn-plot-settings');
             const closeExportMenu = () => {
                 if (!exportMenu) return;
                 exportMenu.classList.remove('open');
@@ -1657,9 +1796,6 @@
             }
             if (pngB) pngB.onclick = () => { exportPlotPNG(gd); closeExportMenu(); };
             if (pdfB) pdfB.onclick = () => { exportPlotPDF(gd); closeExportMenu(); };
-            if (sizeB) sizeB.onclick = () => { setPresetPlotSize(gd); requestAnimationFrame(()=>centerPlot(gd)); };
-            if (defB) defB.onclick = () => { resetPresetPlotSize(gd); requestAnimationFrame(()=>centerPlot(gd)); };
-            if (settingsB) settingsB.onclick = () => openPlotSettings();
             if (!document.body.dataset.histExportMenuBound) {
                 document.addEventListener('click', (event) => {
                     const menu = document.getElementById('export-menu');
@@ -1672,7 +1808,7 @@
                 document.body.dataset.histExportMenuBound = '1';
             }
             applyHistogramTooltips(gd);
-            renderHistogramToolbarActions(gd);
+            ensureHistogramToolbarHydrated(gd);
             syncRightPanelChrome();
         }
 
@@ -1709,80 +1845,131 @@
             });
         }
 
-        function wireEditablePlotText(gd) {
-            if (!gd) return;
-            const editableTargets = [
-                { selector: '.g-gtitle, .g-gtitle text, .gtitle, .gtitle text', kind: 'title', label: 'plot title' },
-                { selector: '.g-xtitle, .g-xtitle text, .xtitle, .xtitle text', kind: 'x', label: 'X axis label' },
-                { selector: '.g-ytitle, .g-ytitle text, .ytitle, .ytitle text', kind: 'y', label: 'Y axis label' },
+        function getEditablePlotTextMatch(target) {
+            if (!(target instanceof Element)) return null;
+            const mappings = [
+                { selectors: ['.g-gtitle', '.gtitle'], key: 'titleText' },
+                { selectors: ['.g-xtitle', '.xtitle'], key: 'xLabelText' },
+                { selectors: ['.g-ytitle', '.ytitle'], key: 'yLabelText' },
             ];
-
-            const resolveEditableTarget = (source, clientX, clientY) => {
-                if (source instanceof Element) {
-                    for (const candidate of editableTargets) {
-                        const node = source.closest(candidate.selector);
-                        if (node && gd.contains(node)) {
-                            return { ...candidate, node };
-                        }
-                    }
+            for (const mapping of mappings) {
+                for (const selector of mapping.selectors) {
+                    const container = target.closest(selector);
+                    if (!container) continue;
+                    const textNode = container.querySelector('text') || container;
+                    return { ...mapping, container, textNode };
                 }
+            }
+            return null;
+        }
 
-                if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) return null;
+        function removeEditablePlotTextEditor(gd) {
+            if (!gd?.__plotTextEditor) return;
+            gd.__plotTextEditor.editor.remove();
+            gd.__plotTextEditor = null;
+        }
 
-                for (const candidate of editableTargets) {
-                    const nodes = Array.from(gd.querySelectorAll(candidate.selector));
-                    for (const node of nodes) {
-                        const rect = node.getBoundingClientRect();
-                        if (!rect || (!rect.width && !rect.height)) continue;
-                        const padX = Math.max(6, rect.width * 0.08);
-                        const padY = Math.max(6, rect.height * 0.4);
-                        const withinX = clientX >= (rect.left - padX) && clientX <= (rect.right + padX);
-                        const withinY = clientY >= (rect.top - padY) && clientY <= (rect.bottom + padY);
-                        if (withinX && withinY) {
-                            return { ...candidate, node };
-                        }
-                    }
-                }
+        async function commitEditablePlotTextEditor(gd) {
+            const activeEditor = gd?.__plotTextEditor;
+            if (!activeEditor) return;
+            const nextValue = activeEditor.editor.value.trim();
+            const changed = nextValue !== activeEditor.initialValue;
+            removeEditablePlotTextEditor(gd);
+            if (!changed) return;
+            HISTOGRAM_PLOT_UI[activeEditor.key] = nextValue;
+            saveHistogramPlotUiState();
+            await relayoutHistogramAppearance();
+        }
 
-                return null;
+        function openEditablePlotTextEditor(gd, match) {
+            if (!gd || !match?.container) return;
+            const host = document.getElementById('plot-host') || gd.parentElement || gd;
+            if (!host) return;
+
+            removeEditablePlotTextEditor(gd);
+
+            const titleRect = match.container.getBoundingClientRect();
+            const hostRect = host.getBoundingClientRect();
+            if (!titleRect.width && !titleRect.height) return;
+
+            const currentValue = typeof HISTOGRAM_PLOT_UI[match.key] === 'string' && HISTOGRAM_PLOT_UI[match.key]
+                ? HISTOGRAM_PLOT_UI[match.key]
+                : (match.textNode?.textContent || '').trim();
+            const textStyle = window.getComputedStyle(match.textNode || match.container);
+            const editor = document.createElement('input');
+            editor.type = 'text';
+            editor.className = 'plot-text-inline-editor';
+            editor.value = currentValue;
+            editor.setAttribute('aria-label', 'Edit plot text');
+
+            const baseWidth = Math.max(titleRect.width, titleRect.height, 120);
+            const editorWidth = Math.min(Math.max(Math.ceil(baseWidth) + 28, 160), Math.max(160, host.clientWidth - 16));
+            const centeredLeft = titleRect.left - hostRect.left + host.scrollLeft + (titleRect.width / 2) - (editorWidth / 2);
+            const maxLeft = Math.max(8, host.scrollLeft + host.clientWidth - editorWidth - 8);
+            const editorLeft = Math.min(Math.max(host.scrollLeft + 8, centeredLeft), maxLeft);
+            const editorTop = Math.max(host.scrollTop + 8, titleRect.top - hostRect.top + host.scrollTop + (titleRect.height / 2) - 19);
+
+            editor.style.left = `${editorLeft}px`;
+            editor.style.top = `${editorTop}px`;
+            editor.style.width = `${editorWidth}px`;
+            editor.style.fontFamily = textStyle.fontFamily || 'inherit';
+            editor.style.fontSize = textStyle.fontSize || '14px';
+            editor.style.fontWeight = textStyle.fontWeight || '600';
+
+            const commit = async () => {
+                if (!gd?.__plotTextEditor?.editor?.isConnected) return;
+                await commitEditablePlotTextEditor(gd);
             };
+            const cancel = () => removeEditablePlotTextEditor(gd);
 
-            editableTargets.forEach(({ selector, label }) => {
-                gd.querySelectorAll(selector).forEach((node) => {
-                    node.style.cursor = 'text';
-                    node.setAttribute('title', `Double-click to edit ${label}`);
-                });
+            editor.addEventListener('keydown', async (event) => {
+                if (event.key === 'Escape') {
+                    event.preventDefault();
+                    cancel();
+                    return;
+                }
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    await commit();
+                }
+            });
+            editor.addEventListener('blur', () => {
+                commit().catch((error) => console.warn('Inline plot text commit failed', error));
+            });
+            editor.addEventListener('dblclick', (event) => {
+                event.stopPropagation();
+            });
+            editor.addEventListener('pointerdown', (event) => {
+                event.stopPropagation();
             });
 
+            host.appendChild(editor);
+            gd.__plotTextEditor = {
+                editor,
+                key: match.key,
+                initialValue: currentValue,
+            };
+
+            requestAnimationFrame(() => {
+                editor.focus();
+                editor.select();
+            });
+        }
+
+        function wireEditablePlotText(gd) {
+            if (!gd) return;
+            removeEditablePlotTextEditor(gd);
             if (gd.__plotTextEditorBound) return;
-            gd.__plotTextEditorBound = true;
-
-            gd.addEventListener('dblclick', async (ev) => {
-                const source = ev.target && ev.target.nodeType === 3 ? ev.target.parentElement : ev.target;
-                const match = resolveEditableTarget(source instanceof Element ? source : null, ev.clientX, ev.clientY);
+            const handleDoubleClick = (event) => {
+                const match = getEditablePlotTextMatch(event.target);
                 if (!match) return;
-
-                ev.preventDefault();
-                ev.stopPropagation();
-                if (typeof ev.stopImmediatePropagation === 'function') ev.stopImmediatePropagation();
-                try { window.getSelection()?.removeAllRanges(); } catch (_) {}
-
-                const current = (match.node.textContent || '').trim();
-                const next = window.prompt(`Edit ${match.label}`, current);
-                if (next === null) return;
-                const value = String(next).trim();
-                if (match.kind === 'title') HISTOGRAM_PLOT_UI.titleText = value;
-                if (match.kind === 'x') HISTOGRAM_PLOT_UI.xLabelText = value;
-                if (match.kind === 'y') HISTOGRAM_PLOT_UI.yLabelText = value;
-                syncPlotSettingsForm(
-                    document.querySelector('input[name="hist-type"]:checked')?.value || '1d',
-                    document.getElementById('axis-x')?.value || 'X',
-                    document.getElementById('axis-y')?.value || 'Y',
-                    document.getElementById('orientation')?.value || 'v',
-                    document.getElementById('histnorm')?.value || ''
-                );
-                await relayoutHistogramAppearance();
-            }, true);
+                event.preventDefault();
+                event.stopPropagation();
+                openEditablePlotTextEditor(gd, match);
+            };
+            gd.addEventListener('dblclick', handleDoubleClick, true);
+            gd.__plotTextEditorBound = true;
+            gd.__plotTextDoubleClickHandler = handleDoubleClick;
         }
 
         function centerPlot(gd) {
@@ -1843,7 +2030,7 @@
             color: var(--text-strong);
         }
 
-        .site-header {
+        body > .site-header {
             height: var(--header-height);
             display: flex;
             align-items: center;
@@ -1855,18 +2042,38 @@
             box-sizing: border-box;
         }
 
-        .site-header .brand {
+        body > .site-header .brand {
+            display: inline-flex;
+            align-items: center;
+            gap: 0;
+            min-width: 0;
+            text-decoration: none;
+            color: inherit;
+            margin-right: 20px;
             font-weight: 600;
             letter-spacing: 0.2px;
         }
 
-        .tabs {
+        body > .site-header .brand:hover {
+            color: inherit;
+        }
+
+        body > .site-header .brand-mark {
+            width: 250px;
+            height: 68px;
+            flex: 0 0 auto;
+            display: block;
+            object-fit: contain;
+            object-position: left center;
+        }
+
+        body > .site-header .tabs {
             display: flex;
             gap: 8px;
             align-items: center;
         }
 
-        .tab {
+        body > .site-header .tab {
             display: inline-block;
             padding: 8px 12px;
             color: #cbd5e1;
@@ -1876,15 +2083,36 @@
             font-size: 14px;
         }
 
-        .tab:hover {
+        body > .site-header .tab:hover {
             background: rgba(255, 255, 255, 0.08);
             color: #fff;
         }
 
-        .tab.active {
+        body > .site-header .tab.active {
             background: var(--brand-pink);
             color: #fff;
             box-shadow: 0 8px 18px rgba(173, 71, 183, 0.3);
+        }
+
+        @media (max-width: 760px) {
+            body > .site-header {
+                padding: 0 10px 0 4px;
+                gap: 8px;
+            }
+
+            body > .site-header .brand-mark {
+                width: 168px;
+                height: 46px;
+            }
+
+            body > .site-header .tabs {
+                gap: 4px;
+            }
+
+            body > .site-header .tab {
+                padding: 7px 10px;
+                font-size: 13px;
+            }
         }
 
         /* Main app split layout */
@@ -1960,7 +2188,7 @@
             margin: 0;
             flex: 1;
             min-width: 0;
-            font-size: 27px;
+            font-size: 14px;
             line-height: 1.05;
             letter-spacing: -0.03em;
             color: var(--text-strong);
@@ -2163,7 +2391,7 @@
 
         @media (max-width: 980px) {
             #left {
-                width: 332px;
+                width: var(--hist-side-panel-width);
                 padding: 14px 12px 18px;
             }
 
@@ -2174,7 +2402,8 @@
 
         /* ── Left Panel: Compact Modern Design ── */
         #left {
-            width: 334px;
+            width: var(--hist-side-panel-width);
+            flex-basis: var(--hist-side-panel-width);
             padding: 10px 10px 16px;
             background: #fafbfc;
             border-right: 1px solid #e5e7eb;
@@ -2642,7 +2871,7 @@
         #c3WindowNs,
         #binsX,
         #binsY {
-            width: 72px !important;
+            width: 36px !important;
         }
 
         #binsx-row,
@@ -2862,7 +3091,8 @@
 
         #hist-meta {
             grid-column: 2;
-            width: 100%;
+            width: var(--hist-side-panel-width);
+            min-width: var(--hist-side-panel-width);
             max-width: var(--hist-side-panel-width);
             min-height: 0;
             height: 100%;
@@ -2889,7 +3119,7 @@
             top: -18px;
             z-index: 5;
             padding: 16px 14px 14px 14px;
-            margin: -18px -8px 12px;
+            margin: -18px -8px 0px;
             background: linear-gradient(180deg, rgba(244,247,251,0.97) 0%, rgba(244,247,251,0.9) 78%, rgba(244,247,251,0) 100%);
             backdrop-filter: blur(10px);
         }
@@ -3057,6 +3287,24 @@
             user-select: none;
         }
 
+        .plot-text-inline-editor {
+            position: absolute;
+            z-index: 80;
+            min-height: 38px;
+            padding: 0 12px;
+            color: var(--text-strong);
+            background: rgba(255, 255, 255, 0.98);
+            border: 1px solid rgba(20, 90, 136, 0.34);
+            border-radius: 4px;
+            box-shadow: 0 12px 30px rgba(15, 23, 42, 0.14);
+            outline: none;
+        }
+
+        .plot-text-inline-editor:focus {
+            border-color: rgba(27, 118, 179, 0.72);
+            box-shadow: 0 0 0 3px rgba(27, 118, 179, 0.16), 0 12px 30px rgba(15, 23, 42, 0.14);
+        }
+
         /* Mid-row controls between side panels */
         #export-anchor {
             position: relative;
@@ -3082,6 +3330,7 @@
             display: grid;
             gap: 5px;
             align-content: start;
+            justify-items: center;
             background: transparent;
             padding: 0;
             border: 0;
@@ -3123,6 +3372,11 @@
             border-left: 1px solid rgba(148, 163, 184, 0.28);
         }
 
+        #export-anchor > .export-group.hist-tool-section {
+            padding-left: 0;
+            border-left: 0;
+        }
+
         .hist-tool-section:first-child {
             padding-left: 0;
             border-left: 0;
@@ -3134,7 +3388,9 @@
             letter-spacing: 0.04em;
             color: var(--text-muted);
             text-transform: uppercase;
-            padding-left: 2px;
+            padding-left: 0;
+            text-align: left;
+            justify-self: stretch;
         }
 
         .hist-tool-section-buttons {
@@ -3142,18 +3398,19 @@
             flex-wrap: nowrap;
             gap: 6px;
             align-items: center;
+            justify-content: center;
         }
 
         .hist-tool-btn {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            width: 32px;
-            height: 32px;
-            min-height: 32px;
-            min-width: 32px;
+            width: 26px;
+            height: 26px;
+            min-height: 26px;
+            min-width: 26px;
             padding: 0;
-            border-radius: 8px;
+            border-radius: 4px;
             border: 1px solid rgba(194, 207, 221, 0.9);
             background: #fff;
             color: var(--text-muted);
@@ -3180,8 +3437,8 @@
             width: auto;
             height: auto;
             min-width: auto;
-            height: 32px;
-            min-height: 32px;
+            height: 26px;
+            min-height: 26px;
             padding: 0 12px;
             border-radius: var(--control-button-radius);
             font-weight: 700;
@@ -3209,20 +3466,53 @@
         }
 
         .hist-tool-btn-icon {
-            width: 16px;
-            height: 16px;
+            width: 14px;
+            height: 14px;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            flex: 0 0 16px;
+            flex: 0 0 14px;
         }
 
         .hist-tool-btn-icon svg {
-            width: 16px;
-            height: 16px;
+            width: 14px;
+            height: 14px;
             display: block;
             fill: currentColor;
             stroke: currentColor;
+        }
+
+        .hist-tool-btn-text {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 0;
+            padding: 0;
+            font-size: 10px;
+            font-weight: 700;
+            line-height: 1;
+            letter-spacing: 0.01em;
+            white-space: nowrap;
+        }
+
+        .hist-tool-btn--placeholder {
+            width: auto;
+            min-width: 26px;
+            padding: 0 8px;
+        }
+
+        .hist-tool-btn.is-placeholder,
+        .hist-tool-btn.is-placeholder:hover,
+        .hist-tool-btn.is-placeholder:focus-visible {
+            color: #94a3b8;
+            background: rgba(255, 255, 255, 0.92);
+            border-color: rgba(203, 213, 225, 0.95);
+            box-shadow: inset 0 1px 1px rgba(15, 23, 42, 0.02);
+        }
+
+        .hist-tool-btn:disabled {
+            cursor: default;
+            opacity: 1;
         }
 
         .export-menu {
@@ -3285,9 +3575,93 @@
 
         #btn-png,
         #btn-pdf,
-        #btn-export,
-        #btn-plot-settings {
+        #btn-export {
             min-width: 0;
+        }
+
+        .hist-tool-section-buttons--plot {
+            gap: 8px;
+        }
+
+        .hist-tool-section-buttons--fonts {
+            gap: 8px;
+        }
+
+        .hist-tool-size-field {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            min-width: 0;
+            color: var(--text-muted);
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .hist-tool-size-field-label {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 12px;
+            color: var(--text-muted);
+        }
+
+        .hist-tool-size-field input {
+            width: 78px;
+            min-width: 78px;
+            height: 26px;
+            padding: 3px 8px;
+            font-size: 12px;
+            font-family: inherit;
+            text-align: center;
+            color: var(--text-strong);
+            background: #fff;
+            border: 1px solid rgba(194, 207, 221, 0.9);
+            border-radius: 4px;
+            box-shadow: inset 0 1px 1px rgba(15, 23, 42, 0.03);
+            box-sizing: border-box;
+        }
+
+        .hist-tool-select,
+        .hist-tool-size-input {
+            height: 26px;
+            min-height: 26px;
+            padding: 3px 8px;
+            font-size: 12px;
+            font-family: inherit;
+            color: var(--text-strong);
+            background: #fff;
+            border: 1px solid rgba(194, 207, 221, 0.9);
+            border-radius: 4px;
+            box-shadow: inset 0 1px 1px rgba(15, 23, 42, 0.03);
+            box-sizing: border-box;
+        }
+
+        .hist-tool-select {
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            width: 146px;
+            min-width: 146px;
+            padding-right: 24px;
+            background-image: linear-gradient(45deg, transparent 50%, #6b7280 50%), linear-gradient(135deg, #6b7280 50%, transparent 50%);
+            background-position: calc(100% - 14px) 11px, calc(100% - 9px) 11px;
+            background-size: 5px 5px, 5px 5px;
+            background-repeat: no-repeat;
+        }
+
+        .hist-tool-size-input {
+            width: 78px;
+            min-width: 78px;
+            text-align: center;
+        }
+
+        .hist-tool-size-field input:focus,
+        .hist-tool-select:focus,
+        .hist-tool-size-input:focus {
+            outline: none;
+            border-color: rgba(20, 90, 136, 0.38);
+            box-shadow: 0 0 0 3px rgba(27, 118, 179, 0.14);
         }
 
         @media (hover: none) {
@@ -3602,138 +3976,6 @@
             }
         }
 
-        #plot-settings-modal {
-            display: none;
-            position: fixed;
-            inset: 0;
-            background: rgba(15, 23, 42, 0.38);
-            z-index: 1200;
-        }
-        #plot-settings-modal .modal-card {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: min(640px, calc(100vw - 40px));
-            background: #fafbfc;
-            border: 1px solid #e5e7eb;
-            border-radius: 6px;
-            box-shadow: 0 18px 42px rgba(15, 23, 42, 0.18);
-            overflow: hidden;
-            font-family: "Segoe UI", "Inter", "Helvetica Neue", Arial, sans-serif;
-        }
-        #plot-settings-modal .modal-head,
-        #plot-settings-modal .modal-foot {
-            padding: 10px 12px;
-            background: #fafbfc;
-            border-bottom: 1px solid #e5e7eb;
-        }
-        #plot-settings-modal .modal-foot {
-            border-top: 1px solid #e5e7eb;
-            border-bottom: 0;
-            display: flex;
-            justify-content: flex-end;
-            gap: 6px;
-        }
-        #plot-settings-modal .modal-body {
-            padding: 12px;
-            display: grid;
-            gap: 10px;
-        }
-        #plot-settings-modal .field-grid {
-            display: grid;
-            grid-template-columns: 120px 1fr;
-            gap: 6px 10px;
-            align-items: center;
-        }
-        #plot-settings-modal .field-grid label {
-            font-weight: 600;
-            font-size: 12px;
-            color: #6b7280;
-        }
-        #plot-settings-modal .size-grid {
-            display: grid;
-            grid-template-columns: 120px 1fr;
-            gap: 6px 10px;
-            align-items: center;
-        }
-        #plot-settings-modal .size-grid > label {
-            font-weight: 600;
-            font-size: 12px;
-            color: #6b7280;
-        }
-        #plot-settings-modal .size-controls {
-            display: flex;
-            flex-wrap: nowrap;
-            gap: 6px;
-            align-items: center;
-            min-width: 0;
-        }
-        #plot-settings-modal .size-actions {
-            margin-left: auto;
-            display: inline-flex;
-            align-items: center;
-            justify-content: flex-end;
-            gap: 6px;
-            padding-left: 6px;
-            flex: 0 0 auto;
-        }
-        #plot-settings-modal .size-label {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            min-height: 26px;
-            font-size: 12px;
-            font-weight: 600;
-            color: #6b7280;
-            white-space: nowrap;
-        }
-        #plot-settings-modal input[type="text"],
-        #plot-settings-modal input[type="number"],
-        #plot-settings-modal select {
-            width: 100%;
-            box-sizing: border-box;
-            min-height: 26px;
-            height: 26px;
-            padding: 3px 8px;
-            font-size: 12px;
-            font-family: inherit;
-            color: #111827;
-            background: #fff;
-            border: 1px solid #d1d5db;
-            border-radius: 4px;
-            box-shadow: none;
-        }
-        #plot-settings-modal .size-controls input[type="number"] {
-            width: 72px;
-            min-width: 72px;
-            flex: 0 0 72px;
-        }
-        #plot-settings-modal .size-controls button {
-            min-width: 0;
-            white-space: nowrap;
-        }
-
-        #plot-settings-modal input[type="text"]:focus,
-        #plot-settings-modal input[type="number"]:focus,
-        #plot-settings-modal select:focus {
-            outline: none;
-            border-color: var(--brand-pink);
-            box-shadow: 0 0 0 2px var(--brand-pink-ring);
-        }
-        #plot-settings-modal .hint {
-            font-size: 12px;
-            color: #6b7280;
-            line-height: 1.4;
-        }
-
-        #plot-settings-modal .modal-head strong {
-            font-size: 12px;
-            color: #111827;
-            letter-spacing: 0.04em;
-            text-transform: none;
-        }
-
         @media (max-width: 1180px) {
             :root {
                 --hist-side-panel-width: 332px;
@@ -3804,80 +4046,19 @@
             }
         }
 
-        #plot-settings-modal .modal-head button,
-        #plot-settings-modal .modal-foot button,
-        #plot-settings-modal .size-controls button {
-            min-height: 26px;
-            height: 26px;
-            padding: 3px 10px;
-            font-size: 12px;
-            font-family: inherit;
-            font-weight: 600;
-            letter-spacing: 0;
-            border-radius: 4px;
-            border: 1px solid var(--brand-cyan-strong);
-            background: linear-gradient(180deg, var(--brand-cyan) 0%, var(--brand-cyan-strong) 100%);
-            color: #fff;
-            box-shadow: 0 8px 18px rgba(27, 118, 179, 0.2);
-            cursor: pointer;
-            transition: transform 120ms ease, box-shadow 120ms ease, background-color 120ms ease, border-color 120ms ease;
-        }
-
-        #plot-settings-modal .modal-head button:hover,
-        #plot-settings-modal .modal-foot button:hover,
-        #plot-settings-modal .size-controls button:hover {
-            transform: translateY(-1px);
-            background: linear-gradient(180deg, #2285ca 0%, #166391 100%);
-            border-color: var(--brand-cyan-strong);
-        }
-
-        #plot-settings-modal .modal-head button:active,
-        #plot-settings-modal .modal-foot button:active,
-        #plot-settings-modal .size-controls button:active {
-            transform: translateY(0);
-        }
-
-        #plot-settings-modal .modal-head button:disabled,
-        #plot-settings-modal .modal-foot button:disabled,
-        #plot-settings-modal .size-controls button:disabled {
-            background: #d7e6f0;
-            border-color: #bfd0db;
-            color: #6b7280;
-            box-shadow: none;
-            cursor: not-allowed;
-        }
-
-        #plot-settings-apply {
-            background: linear-gradient(180deg, var(--brand-cyan) 0%, var(--brand-cyan-strong) 100%) !important;
-            border-color: var(--brand-cyan-strong) !important;
-            color: #fff !important;
-        }
-
-        #plot-settings-apply:hover {
-            background: linear-gradient(180deg, #2285ca 0%, #166391 100%) !important;
-            border-color: var(--brand-cyan-strong) !important;
-        }
     </style>
-    <script>
-        // Shared header activation
-        window.ACTIVE_TAB = 'histogram';
-        function loadHeader(){
-            fetch('partials/header.html').then(r=>r.text()).then(html=>{
-                var h = document.getElementById('shared-header');
-                if (h) h.innerHTML = html;
-                try {
-                    document.querySelectorAll('.tabs .tab').forEach(function(a){
-                        if (a.getAttribute('data-tab') === window.ACTIVE_TAB) a.classList.add('active');
-                    });
-                } catch(e){}
-            }).catch(()=>{});
-        }
-        document.addEventListener('DOMContentLoaded', loadHeader);
-    </script>
 </head>
 
 <body>
-    <div id="shared-header"></div>
+    <header class="site-header">
+        <a class="brand" href="histogram.html" aria-label="SciPlotter home">
+            <img class="brand-mark" src="SciPlotter_logo.png" alt="SciPlotter logo" />
+        </a>
+        <nav class="tabs">
+            <a class="tab" data-tab="waveforms" href="index.html">Waveforms</a>
+            <a class="tab active" data-tab="histogram" href="histogram.html">Histogram</a>
+        </nav>
+    </header>
     <div id="app">
         <div id="app-toolbar-row">
             <div id="plot-toolbar-row">
@@ -3893,7 +4074,53 @@
                                         <button id="btn-pdf" title="Download PDF (vector if possible)">PDF</button>
                                     </div>
                                 </div>
-                                <button id="btn-plot-settings" class="hist-tool-btn hist-tool-btn--general" title="Open plot title and font settings">Settings</button>
+                            </div>
+                        </div>
+                        <div class="toolbar-divider" aria-hidden="true"></div>
+                        <div class="export-group hist-tool-section" id="export-group-plot">
+                            <span class="group-label hist-tool-section-label">Plot</span>
+                            <div class="hist-tool-section-buttons hist-tool-section-buttons--plot">
+                                <label class="hist-tool-size-field" for="plot-width-input">
+                                    <span class="hist-tool-size-field-label">X</span>
+                                    <input id="plot-width-input" type="number" min="200" step="10" value="1000" title="Plot width in pixels">
+                                </label>
+                                <label class="hist-tool-size-field" for="plot-height-input">
+                                    <span class="hist-tool-size-field-label">Y</span>
+                                    <input id="plot-height-input" type="number" min="200" step="10" value="800" title="Plot height in pixels">
+                                </label>
+                            </div>
+                        </div>
+                        <div class="toolbar-divider" aria-hidden="true"></div>
+                        <div class="export-group hist-tool-section" id="export-group-fonts">
+                            <span class="group-label hist-tool-section-label">Fonts</span>
+                            <div class="hist-tool-section-buttons hist-tool-section-buttons--fonts">
+                                <select id="plot-font-family-input" class="hist-tool-select" title="Common font for the plot title and axis labels">
+                                    <option value="Arial, Helvetica, sans-serif">Arial</option>
+                                    <option value="Arial Black, Gadget, sans-serif">Arial Black</option>
+                                    <option value="Verdana, Geneva, sans-serif">Verdana</option>
+                                    <option value="Tahoma, Geneva, sans-serif">Tahoma</option>
+                                    <option value="Trebuchet MS, Helvetica, sans-serif">Trebuchet MS</option>
+                                    <option value="Segoe UI, Tahoma, Geneva, Verdana, sans-serif">Segoe UI</option>
+                                    <option value="Calibri, Candara, Segoe, Segoe UI, Optima, Arial, sans-serif">Calibri</option>
+                                    <option value="Candara, Calibri, Segoe, Segoe UI, Optima, Arial, sans-serif">Candara</option>
+                                    <option value="Helvetica, Arial, sans-serif">Helvetica</option>
+                                    <option value="Geneva, Tahoma, Verdana, sans-serif">Geneva</option>
+                                    <option value="Optima, Segoe, Segoe UI, Candara, Calibri, Arial, sans-serif">Optima</option>
+                                    <option value="Times New Roman, Times, serif">Times New Roman</option>
+                                    <option value="Georgia, serif">Georgia</option>
+                                    <option value="Palatino Linotype, Book Antiqua, Palatino, serif">Palatino</option>
+                                    <option value="Book Antiqua, Palatino Linotype, Palatino, serif">Book Antiqua</option>
+                                    <option value="Garamond, Baskerville, Times New Roman, serif">Garamond</option>
+                                    <option value="Baskerville, Times New Roman, serif">Baskerville</option>
+                                    <option value="Courier New, Courier, monospace">Courier New</option>
+                                    <option value="Lucida Console, Monaco, monospace">Lucida Console</option>
+                                    <option value="Monaco, Consolas, Lucida Console, monospace">Monaco</option>
+                                    <option value="Consolas, Monaco, Lucida Console, monospace">Consolas</option>
+                                    <option value="Lucida Sans Unicode, Lucida Grande, sans-serif">Lucida Sans</option>
+                                    <option value="Impact, Haettenschweiler, Arial Narrow Bold, sans-serif">Impact</option>
+                                    <option value="Comic Sans MS, Comic Sans, cursive">Comic Sans MS</option>
+                                </select>
+                                <input id="plot-font-size-input" class="hist-tool-size-input" type="number" min="8" max="48" step="1" value="20" title="Common font size for the plot title and axis labels">
                             </div>
                         </div>
                         <div class="toolbar-divider" aria-hidden="true"></div>
@@ -4132,106 +4359,6 @@
                 <div id="hist-meta" class="meta">
                 </div>
             </div>
-            <div id="plot-settings-modal" aria-hidden="true">
-                <div class="modal-card">
-                    <div class="modal-head" style="display:flex; justify-content:space-between; align-items:center;">
-                        <strong>Plot settings</strong>
-                        <button id="plot-settings-close" class="btn-secondary" type="button">Close</button>
-                    </div>
-                    <div class="modal-body">
-                        <div class="hint">Double-click the plot title or axis labels to edit them directly. These changes stay on the plot only.</div>
-                        <div class="size-grid">
-                            <label for="plot-width-input">Plot Size</label>
-                            <div class="size-controls">
-                                <span class="size-label">X</span>
-                                <input id="plot-width-input" type="number" min="200" step="10" value="1000" title="Plot width in pixels">
-                                <span class="size-label">Y</span>
-                                <input id="plot-height-input" type="number" min="200" step="10" value="600" title="Plot height in pixels">
-                                <div class="size-actions">
-                                    <button id="btn-size" class="btn-secondary" type="button" title="Set custom size for plot & exports">Set</button>
-                                    <button id="btn-size-reset" class="btn-secondary" type="button" title="Reset to default auto sizing">Default</button>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="field-grid">
-                            <label for="plot-title-input">Title text</label>
-                            <input id="plot-title-input" type="text" placeholder="Default plot title">
-
-                            <label for="plot-x-label-input">X label</label>
-                            <input id="plot-x-label-input" type="text" placeholder="Default X label">
-
-                            <label for="plot-y-label-input">Y label</label>
-                            <input id="plot-y-label-input" type="text" placeholder="Default Y label">
-
-                            <label for="plot-title-font-family">Title font</label>
-                            <select id="plot-title-font-family">
-                                <option value="Arial, Helvetica, sans-serif">Arial</option>
-                                <option value="Arial Black, Gadget, sans-serif">Arial Black</option>
-                                <option value="Verdana, Geneva, sans-serif">Verdana</option>
-                                <option value="Tahoma, Geneva, sans-serif">Tahoma</option>
-                                <option value="Trebuchet MS, Helvetica, sans-serif">Trebuchet MS</option>
-                                <option value="Segoe UI, Tahoma, Geneva, Verdana, sans-serif">Segoe UI</option>
-                                <option value="Calibri, Candara, Segoe, Segoe UI, Optima, Arial, sans-serif">Calibri</option>
-                                <option value="Candara, Calibri, Segoe, Segoe UI, Optima, Arial, sans-serif">Candara</option>
-                                <option value="Helvetica, Arial, sans-serif">Helvetica</option>
-                                <option value="Geneva, Tahoma, Verdana, sans-serif">Geneva</option>
-                                <option value="Optima, Segoe, Segoe UI, Candara, Calibri, Arial, sans-serif">Optima</option>
-                                <option value="Times New Roman, Times, serif">Times New Roman</option>
-                                <option value="Georgia, serif">Georgia</option>
-                                <option value="Palatino Linotype, Book Antiqua, Palatino, serif">Palatino</option>
-                                <option value="Book Antiqua, Palatino Linotype, Palatino, serif">Book Antiqua</option>
-                                <option value="Garamond, Baskerville, Times New Roman, serif">Garamond</option>
-                                <option value="Baskerville, Times New Roman, serif">Baskerville</option>
-                                <option value="Courier New, Courier, monospace">Courier New</option>
-                                <option value="Lucida Console, Monaco, monospace">Lucida Console</option>
-                                <option value="Monaco, Consolas, Lucida Console, monospace">Monaco</option>
-                                <option value="Consolas, Monaco, Lucida Console, monospace">Consolas</option>
-                                <option value="Lucida Sans Unicode, Lucida Grande, sans-serif">Lucida Sans</option>
-                                <option value="Impact, Haettenschweiler, Arial Narrow Bold, sans-serif">Impact</option>
-                                <option value="Comic Sans MS, Comic Sans, cursive">Comic Sans MS</option>
-                            </select>
-
-                            <label for="plot-title-font-size">Title size</label>
-                            <input id="plot-title-font-size" type="number" min="8" max="48" step="1" value="20">
-
-                            <label for="plot-axis-font-family">Axis font</label>
-                            <select id="plot-axis-font-family">
-                                <option value="Arial, Helvetica, sans-serif">Arial</option>
-                                <option value="Arial Black, Gadget, sans-serif">Arial Black</option>
-                                <option value="Verdana, Geneva, sans-serif">Verdana</option>
-                                <option value="Tahoma, Geneva, sans-serif">Tahoma</option>
-                                <option value="Trebuchet MS, Helvetica, sans-serif">Trebuchet MS</option>
-                                <option value="Segoe UI, Tahoma, Geneva, Verdana, sans-serif">Segoe UI</option>
-                                <option value="Calibri, Candara, Segoe, Segoe UI, Optima, Arial, sans-serif">Calibri</option>
-                                <option value="Candara, Calibri, Segoe, Segoe UI, Optima, Arial, sans-serif">Candara</option>
-                                <option value="Helvetica, Arial, sans-serif">Helvetica</option>
-                                <option value="Geneva, Tahoma, Verdana, sans-serif">Geneva</option>
-                                <option value="Optima, Segoe, Segoe UI, Candara, Calibri, Arial, sans-serif">Optima</option>
-                                <option value="Times New Roman, Times, serif">Times New Roman</option>
-                                <option value="Georgia, serif">Georgia</option>
-                                <option value="Palatino Linotype, Book Antiqua, Palatino, serif">Palatino</option>
-                                <option value="Book Antiqua, Palatino Linotype, Palatino, serif">Book Antiqua</option>
-                                <option value="Garamond, Baskerville, Times New Roman, serif">Garamond</option>
-                                <option value="Baskerville, Times New Roman, serif">Baskerville</option>
-                                <option value="Courier New, Courier, monospace">Courier New</option>
-                                <option value="Lucida Console, Monaco, monospace">Lucida Console</option>
-                                <option value="Monaco, Consolas, Lucida Console, monospace">Monaco</option>
-                                <option value="Consolas, Monaco, Lucida Console, monospace">Consolas</option>
-                                <option value="Lucida Sans Unicode, Lucida Grande, sans-serif">Lucida Sans</option>
-                                <option value="Impact, Haettenschweiler, Arial Narrow Bold, sans-serif">Impact</option>
-                                <option value="Comic Sans MS, Comic Sans, cursive">Comic Sans MS</option>
-                            </select>
-
-                            <label for="plot-axis-font-size">Axis size</label>
-                            <input id="plot-axis-font-size" type="number" min="8" max="40" step="1" value="15">
-                        </div>
-                    </div>
-                    <div class="modal-foot">
-                        <button id="plot-settings-reset" class="btn-secondary" type="button">Reset text/settings</button>
-                        <button id="plot-settings-apply" class="btn-primary" type="button">Apply</button>
-                    </div>
-                </div>
-            </div>
         </div>
     </div>
 
@@ -4246,27 +4373,6 @@
         let LAST_META_MAIN = '';
         let LAST_META_SELECTION = null;
         let LAST_META_SELECTION_PLACEHOLDER = 'Use lasso/select on the 2D plot to inspect a subset.';
-
-        function openPlotSettings() {
-            const modal = document.getElementById('plot-settings-modal');
-            if (!modal) return;
-            syncPlotSettingsForm(
-                document.querySelector('input[name="hist-type"]:checked')?.value || '1d',
-                document.getElementById('axis-x')?.value || 'X',
-                document.getElementById('axis-y')?.value || 'Y',
-                document.getElementById('orientation')?.value || 'v',
-                document.getElementById('histnorm')?.value || ''
-            );
-            modal.style.display = 'block';
-            modal.setAttribute('aria-hidden', 'false');
-        }
-
-        function closePlotSettings() {
-            const modal = document.getElementById('plot-settings-modal');
-            if (!modal) return;
-            modal.style.display = 'none';
-            modal.setAttribute('aria-hidden', 'true');
-        }
 
         async function relayoutHistogramAppearance() {
             const gd = document.getElementById('histogram-plot');
@@ -4315,45 +4421,6 @@
                 await renderHistogram();
             }
             requestAnimationFrame(() => centerPlot(gd));
-        }
-
-        function applyPlotSettingsFromForm() {
-            HISTOGRAM_PLOT_UI.titleText = (document.getElementById('plot-title-input')?.value || '').trim();
-            HISTOGRAM_PLOT_UI.xLabelText = (document.getElementById('plot-x-label-input')?.value || '').trim();
-            HISTOGRAM_PLOT_UI.yLabelText = (document.getElementById('plot-y-label-input')?.value || '').trim();
-            HISTOGRAM_PLOT_UI.titleFontFamily = document.getElementById('plot-title-font-family')?.value || DEFAULT_FONT_FAMILY;
-            HISTOGRAM_PLOT_UI.axisFontFamily = document.getElementById('plot-axis-font-family')?.value || DEFAULT_FONT_FAMILY;
-            HISTOGRAM_PLOT_UI.titleFontSize = Math.max(8, parseInt(document.getElementById('plot-title-font-size')?.value || String(DEFAULT_TITLE_FONT_SIZE), 10) || DEFAULT_TITLE_FONT_SIZE);
-            HISTOGRAM_PLOT_UI.axisFontSize = Math.max(8, parseInt(document.getElementById('plot-axis-font-size')?.value || String(DEFAULT_AXIS_FONT_SIZE), 10) || DEFAULT_AXIS_FONT_SIZE);
-            saveHistogramPlotUiState();
-            syncPlotSettingsForm(
-                document.querySelector('input[name="hist-type"]:checked')?.value || '1d',
-                document.getElementById('axis-x')?.value || 'X',
-                document.getElementById('axis-y')?.value || 'Y',
-                document.getElementById('orientation')?.value || 'v',
-                document.getElementById('histnorm')?.value || ''
-            );
-            relayoutHistogramAppearance();
-            closePlotSettings();
-        }
-
-        function resetPlotSettingsForm() {
-            HISTOGRAM_PLOT_UI.titleText = '';
-            HISTOGRAM_PLOT_UI.xLabelText = '';
-            HISTOGRAM_PLOT_UI.yLabelText = '';
-            HISTOGRAM_PLOT_UI.titleFontFamily = DEFAULT_FONT_FAMILY;
-            HISTOGRAM_PLOT_UI.axisFontFamily = DEFAULT_FONT_FAMILY;
-            HISTOGRAM_PLOT_UI.titleFontSize = DEFAULT_TITLE_FONT_SIZE;
-            HISTOGRAM_PLOT_UI.axisFontSize = DEFAULT_AXIS_FONT_SIZE;
-            saveHistogramPlotUiState();
-            syncPlotSettingsForm(
-                document.querySelector('input[name="hist-type"]:checked')?.value || '1d',
-                document.getElementById('axis-x')?.value || 'X',
-                document.getElementById('axis-y')?.value || 'Y',
-                document.getElementById('orientation')?.value || 'v',
-                document.getElementById('histnorm')?.value || ''
-            );
-            relayoutHistogramAppearance();
         }
 
         // Robust CSV parser (handles quotes, commas in fields, CRLF/LF)
@@ -4675,69 +4742,68 @@
             return `<strong>${label}:</strong> ${formatMetaNumber(value)}`;
         }
 
-        function appendMetaStatRow(container, label, value, formatter = formatMetaNumber) {
-            const row = document.createElement('div');
-            row.className = 'meta-stat-row';
-
-            const labelEl = document.createElement('div');
-            labelEl.className = 'meta-stat-label';
-            labelEl.textContent = label;
-
-            const valueEl = document.createElement('div');
-            valueEl.className = 'meta-stat-value';
-            const formattedValue = formatter(value);
-            valueEl.textContent = formattedValue;
-            if (formattedValue === 'n/a') valueEl.classList.add('is-muted');
-
-            row.appendChild(labelEl);
-            row.appendChild(valueEl);
-            container.appendChild(row);
-        }
-
-        function appendMetaStatsColumn(container, stat, showSeriesLabel) {
-            if (!stat) return;
-            const column = document.createElement('div');
-            column.className = 'meta-stats-column';
-            if (showSeriesLabel && stat.label) {
-                const seriesLabel = document.createElement('div');
-                seriesLabel.className = 'meta-stats-series-label';
-                seriesLabel.textContent = stat.label;
-                column.appendChild(seriesLabel);
-            }
-            appendMetaStatRow(column, 'Count', stat.n, formatMetaCount);
-            appendMetaStatRow(column, 'Min', stat.min);
-            appendMetaStatRow(column, 'Max', stat.max);
-            appendMetaStatRow(column, 'Mean', stat.mean);
-            appendMetaStatRow(column, 'Median', stat.median);
-            appendMetaStatRow(column, 'Stdv', stat.stdDev);
-            container.appendChild(column);
-        }
-
         function renderStructuredMetaBody(container, content, fallbackText) {
-            const series = Array.isArray(content?.series) ? content.series : [];
+            const series = Array.isArray(content?.series) ? content.series.filter(Boolean) : [];
             const notes = Array.isArray(content?.notes) ? content.notes.filter(Boolean) : [];
-            container.innerHTML = '';
-            container.classList.add('has-grid');
 
             if (!series.length && !notes.length) {
-                container.textContent = fallbackText;
                 container.classList.remove('has-grid');
+                container.textContent = fallbackText;
                 return;
             }
 
+            container.classList.add('has-grid');
+            container.replaceChildren();
+
             if (series.length) {
-                const statsGrid = document.createElement('div');
-                const visibleSeries = series.slice(0, 2);
-                statsGrid.className = 'meta-stats-grid';
-                statsGrid.dataset.columns = String(Math.min(visibleSeries.length, 2) || 1);
-                visibleSeries.forEach((stat) => appendMetaStatsColumn(statsGrid, stat, visibleSeries.length > 1));
-                container.appendChild(statsGrid);
+                const grid = document.createElement('div');
+                grid.className = 'meta-stats-grid';
+                grid.dataset.columns = String(Math.min(Math.max(series.length, 1), 2));
+
+                series.forEach((entry) => {
+                    const column = document.createElement('div');
+                    column.className = 'meta-stats-column';
+
+                    if (entry.label) {
+                        const seriesLabel = document.createElement('div');
+                        seriesLabel.className = 'meta-stats-series-label';
+                        seriesLabel.textContent = entry.label;
+                        column.appendChild(seriesLabel);
+                    }
+
+                    [
+                        ['Count', formatMetaCount(entry.n)],
+                        ['Min', formatMetaNumber(entry.min)],
+                        ['Max', formatMetaNumber(entry.max)],
+                        ['Mean', formatMetaNumber(entry.mean)],
+                        ['Median', formatMetaNumber(entry.median)],
+                        ['Std dev', formatMetaNumber(entry.stdDev)],
+                    ].forEach(([label, value]) => {
+                        const row = document.createElement('div');
+                        row.className = 'meta-stat-row';
+
+                        const labelEl = document.createElement('span');
+                        labelEl.className = 'meta-stat-label';
+                        labelEl.textContent = label;
+
+                        const valueEl = document.createElement('span');
+                        valueEl.className = 'meta-stat-value';
+                        valueEl.textContent = value;
+
+                        row.append(labelEl, valueEl);
+                        column.appendChild(row);
+                    });
+
+                    grid.appendChild(column);
+                });
+
+                container.appendChild(grid);
             }
 
             notes.forEach((note) => {
                 const noteEl = document.createElement('div');
                 noteEl.className = 'meta-note';
-                noteEl.textContent = note;
+                noteEl.textContent = String(note);
                 container.appendChild(noteEl);
             });
         }
@@ -5571,7 +5637,15 @@
             ];
         }
 
-        function renderPlaceholder() {
+        async function waitForPlotlyReady(maxAttempts = 120, delayMs = 50) {
+            for (let attempt = 0; attempt <= maxAttempts; attempt++) {
+                if (window.Plotly) return true;
+                await new Promise((resolve) => window.setTimeout(resolve, delayMs));
+            }
+            return false;
+        }
+
+        async function renderPlaceholder() {
             const el = document.getElementById('histogram-plot');
             const mode = document.querySelector('input[name="hist-type"]:checked').value;
             const xLabel = document.getElementById('axis-x')?.value || 'X';
@@ -5585,7 +5659,7 @@
             applyEmptyPlaceholderAppearance(layout, mode);
             if (window.Plotly && el) {
                 // Draw an empty frame to reserve space
-                Plotly.newPlot(el, [], layout, buildPlotConfig(el));
+                await Plotly.newPlot(el, [], layout, buildPlotConfig(el));
                 wireEditablePlotText(el);
                 bindMarkerInteractions(el);
                 redrawMarkers(el);
@@ -6748,6 +6822,7 @@
             const fSel = document.getElementById('axis-f');
             const sel = document.getElementById('summarySource');
             const initialMode = document.querySelector('input[name="hist-type"]:checked')?.value || '2d';
+            const startupTasks = [waitForPlotlyReady(), fetchSummaryHeaders()];
             EXPORT_WIDTH = Number(HISTOGRAM_PLOT_UI.width) || DEFAULT_EXPORT_WIDTH;
             EXPORT_HEIGHT = Number(HISTOGRAM_PLOT_UI.height) || DEFAULT_EXPORT_HEIGHT;
             setMode(initialMode);
@@ -6793,15 +6868,13 @@
                 }).catch(() => { });
             }
 
-            // Load headers from selected summary CSV
-            fetchSummaryHeaders().then(headers => {
-                if (!headers || !headers.length) return;
+            const [plotlyReady, headers] = await Promise.all(startupTasks);
+
+            if (headers && headers.length) {
                 restoreOrDefaultFeatureSelections(headers, [], { useCustomDefaults: false });
-                // Populate dynamic channel checkboxes based on the dataset
-                populateChannelsDynamic();
+                await populateChannelsDynamic();
                 xSel.disabled = false; ySel.disabled = false;
                 requestAnimationFrame(syncFeatureSelectWidths);
-                // Initial toggle for phase shift row
                 const xKey0 = xSel.value;
                 const yKey0 = ySel.value;
                 const mode0 = document.querySelector('input[name="hist-type"]:checked')?.value || '2d';
@@ -6811,9 +6884,7 @@
                     psRow.style.display = showPhaseShift ? 'flex' : 'none';
                 }
                 setMode(mode0);
-                summarizeSelection();
-                renderPlaceholder();
-            });
+            }
 
             function wire(id) { const e = document.getElementById(id); if (e) e.addEventListener('change', summarizeSelection); }
             document.getElementById('hist-1d').addEventListener('change', () => {
@@ -7105,17 +7176,7 @@
                 await rerenderHistogramFromUpdate({ preserveRanges: !enabled });
             });
 
-            document.getElementById('plot-settings-close')?.addEventListener('click', closePlotSettings);
-            document.getElementById('plot-settings-apply')?.addEventListener('click', applyPlotSettingsFromForm);
-            document.getElementById('plot-settings-reset')?.addEventListener('click', resetPlotSettingsForm);
-            document.getElementById('plot-settings-modal')?.addEventListener('click', (e) => {
-                if (e.target?.id === 'plot-settings-modal') closePlotSettings();
-            });
             document.addEventListener('keydown', (e) => {
-                if (e.key === 'Escape' && document.getElementById('plot-settings-modal')?.style.display === 'block') {
-                    closePlotSettings();
-                    return;
-                }
                 if (e.key === 'Escape') {
                     const gd = document.getElementById('histogram-plot');
                     if (deactivateActiveInteractionTool(gd)) {
@@ -7125,14 +7186,28 @@
                 }
             });
             ['plot-width-input', 'plot-height-input'].forEach((id) => {
-                document.getElementById(id)?.addEventListener('keydown', (e) => {
-                    if (e.key === 'Enter') {
-                        e.preventDefault();
-                        const gd = document.getElementById('histogram-plot');
-                        setPresetPlotSize(gd);
-                        requestAnimationFrame(() => centerPlot(gd));
-                    }
+                const input = document.getElementById(id);
+                if (!input) return;
+                input.addEventListener('input', () => {
+                    schedulePlotSizeApply(document.getElementById('histogram-plot'));
                 });
+                input.addEventListener('change', () => {
+                    commitPlotSizeFromControls(document.getElementById('histogram-plot'));
+                });
+                input.addEventListener('keydown', (e) => {
+                    if (e.key !== 'Enter') return;
+                    e.preventDefault();
+                    commitPlotSizeFromControls(document.getElementById('histogram-plot'));
+                });
+            });
+            document.getElementById('plot-font-family-input')?.addEventListener('change', () => {
+                applySharedFontControls();
+            });
+            document.getElementById('plot-font-size-input')?.addEventListener('input', () => {
+                applySharedFontControls();
+            });
+            document.getElementById('plot-font-size-input')?.addEventListener('change', () => {
+                applySharedFontControls();
             });
             ['axis-x', 'axis-y', 'orientation', 'histnorm'].forEach((id) => {
                 document.getElementById(id)?.addEventListener('change', () => {
@@ -7157,23 +7232,21 @@
                 });
             });
 
-            // First render
             summarizeSelection();
-            renderPlaceholder();
-            // When headers and defaults are set (async), auto-fill bounds
-            fetchSummaryHeaders().then(async () => {
+            if (plotlyReady) {
+                await renderPlaceholder();
+            }
+            if (headers && headers.length) {
                 await autoFillFeatureMinMax('x');
                 await autoFillFeatureMinMax('y');
                 await autoFillFeatureMinMax('f');
-                // Show Y filter row if 2D is selected by default
                 if (document.getElementById('hist-2d').checked) {
                     document.getElementById('y-filter-row').style.display = 'flex';
                 }
-                // Ensure C3 advanced row visibility matches current selection
                 const isC3 = document.getElementById('axis-f')?.value === 'C3_Filter';
                 document.getElementById('f-filter-row').style.display = isC3 ? 'none' : 'flex';
                 document.getElementById('c3-adv-row').style.display = isC3 ? 'flex' : 'none';
-            });
+            }
         });
     </script>
 </body>
