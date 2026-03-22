@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 768 768" role="img" aria-labelledby="title desc">
-  <title id="title">Sci Plotter logo</title>
-  <desc id="desc">PNG-backed Sci Plotter logo.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 768 768" role="img" aria-labelledby="title desc">
+  <title id="title">Sci Plotter favicon</title>
+  <desc id="desc">PNG-backed Sci Plotter favicon based on the approved logo.</desc>
   <image href="favicon.png" x="0" y="0" width="768" height="768" preserveAspectRatio="xMidYMid slice"/>
 </svg>

@@ -51,7 +51,7 @@ def favicon():
         return send_from_directory(str(STATIC_DIR), 'favicon.png')
     svg = STATIC_DIR / 'favicon.svg'
     if svg.exists():
-        return send_from_directory(str(STATIC_DIR), 'favicon.svg')
+        return send_from_directory(str(STATIC_DIR), 'favicon.svg', mimetype='image/svg+xml')
     return ('', 204)
 
 

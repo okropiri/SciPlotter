@@ -11,16 +11,24 @@
   :is(#shared-header, #site-header) .site-header .brand {
     display: inline-flex;
     align-items: center;
-    gap: 0;
+    gap: 4px;
     min-width: 0;
     text-decoration: none;
     color: inherit;
     margin-right: 20px;
   }
+  :is(#shared-header, #site-header) .brand-text {
+    font-family: "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    color: #fff;
+    white-space: nowrap;
+  }
   :is(#shared-header, #site-header) .site-header .brand:hover { color: inherit; }
   :is(#shared-header, #site-header) .brand-mark {
-    width: 250px;
-    height: 68px;
+    width: 76px;
+    height: 52px;
     flex: 0 0 auto;
     display: block;
     object-fit: contain;
@@ -43,8 +51,11 @@
       gap: 8px;
     }
     :is(#shared-header, #site-header) .brand-mark {
-      width: 168px;
-      height: 46px;
+      width: 90px;
+      height: 40px;
+    }
+    :is(#shared-header, #site-header) .brand-text {
+      font-size: 17px;
     }
     :is(#shared-header, #site-header) .header-divider {
       height: 24px;
@@ -61,7 +72,8 @@
 </style>
 <header class="site-header">
   <a class="brand" href="histogram.html" aria-label="SciPlotter home">
-    <img class="brand-mark" src="SciPlotter_logo.png" alt="SciPlotter logo" />
+    <img class="brand-mark" src="assets/SciPlotter_logo.svg" alt="SciPlotter logo" />
+    <span class="brand-text">Sci Plotter</span>
   </a>
   <nav class="tabs">
     <a class="tab" data-tab="waveforms" href="index.html">Waveforms</a>

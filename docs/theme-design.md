@@ -64,6 +64,29 @@ button:disabled,
 
 Apply neon pink only to focus, selection, outline, and active-highlight states.
 
+## Textboxtextbox Pattern
+
+Use `textboxtextbox` as the standard two-column control pattern for histogram side-panel rows that follow:
+
+- `text [box] | text [box]`
+- same input box dimensions on both sides
+- one vertical divider separating the two logical columns
+- left and right label/input spacing kept visually balanced
+
+This pattern is the standard for:
+
+- Binning
+- Axes & Scale numeric min/max rows
+- Colors (2D) Z scale min/max row
+
+For numeric `textboxtextbox` fields:
+
+- use native `type="number"` inputs
+- keep the same hover modifier arrows as the Plot header `X` and `Y` inputs
+- do not replace those modifiers with custom arrow buttons unless browser behavior forces a fallback
+
+The visual goal is one reusable control language across the histogram left panel, not separate one-off row designs.
+
 ## Notes
 
 - `#021535` is the dominant exact background pixel from the logo.
