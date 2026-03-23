@@ -24,14 +24,27 @@
         const DEFAULT_AXIS_FONT_SIZE = 15;
         const DEFAULT_HISTOGRAM_TEXT_COLOR = '#334155';
         const DEFAULT_HISTOGRAM_HIGHLIGHT_COLOR = 'rgba(250, 204, 21, 0.35)';
+        const DEFAULT_HISTOGRAM_1D_PLOT_COLOR = '#1f77b4';
         const CONTROL_TEXT_FONT_FAMILY = '"Segoe UI", "Inter", "Helvetica Neue", Arial, sans-serif';
         const CONTROL_NUMBER_FONT_FAMILY = 'ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace';
         const DEFAULT_FONT_FAMILY = CONTROL_TEXT_FONT_FAMILY;
+        const HISTOGRAM_WATERMARK_LOGO_SRC = 'assets/logo_transparent.svg';
+        const HISTOGRAM_WATERMARK_TEXT_SRC = createHistogramSvgDataUrl(`
+            <svg xmlns="http://www.w3.org/2000/svg" width="220" height="54" viewBox="0 0 220 54">
+                <rect width="220" height="54" fill="none" />
+                <g transform="translate(46 13)">
+                    <text x="0" y="20" text-anchor="start" font-family="&quot;Inter&quot;, &quot;Segoe UI&quot;, &quot;Helvetica Neue&quot;, Arial, sans-serif" font-size="22" font-weight="700" letter-spacing="0.4px" fill="#c8ced8" xml:space="preserve">Sci Plotter</text>
+                    <text x="2" y="37" text-anchor="start" font-family="&quot;Inter&quot;, &quot;Segoe UI&quot;, &quot;Helvetica Neue&quot;, Arial, sans-serif" font-size="10" font-weight="500" letter-spacing="0.08em" fill="#c8ced8" xml:space="preserve">by Dachi Okropiridze</text>
+                </g>
+            </svg>
+        `);
         const HISTOGRAM_RECENT_FONT_LIMIT = 3;
         const HISTOGRAM_RECENT_COLOR_LIMIT = 10;
         const HISTOGRAM_HISTORY_LIMIT = 80;
         let HISTOGRAM_FONT_SIZE_APPLY_TIMER = null;
         const HISTOGRAM_COLOR_SWATCHES = [
+            '#1B76B3',
+            '#AD47B7',
             '#0f172a',
             '#1e293b',
             '#334155',
@@ -339,6 +352,7 @@
             const fallback = {
                 width: DEFAULT_EXPORT_WIDTH,
                 height: DEFAULT_EXPORT_HEIGHT,
+                customSizeEnabled: false,
                 titleText: '',
                 xLabelText: '',
                 yLabelText: '',
@@ -358,6 +372,7 @@
                 titleScript: 'normal',
                 titleColor: '',
                 titleHighlightColor: '',
+                plot1dColor: DEFAULT_HISTOGRAM_1D_PLOT_COLOR,
                 xLabelBold: false,
                 xLabelItalic: false,
                 xLabelUnderline: false,
@@ -380,6 +395,7 @@
                     ...parsed,
                     width: Number.isFinite(parsed?.width) ? Number(parsed.width) : fallback.width,
                     height: Number.isFinite(parsed?.height) ? Number(parsed.height) : fallback.height,
+                    customSizeEnabled: parsed?.customSizeEnabled === true,
                     titleFontSize: Number.isFinite(parsed?.titleFontSize) && parsed.titleFontSize >= 8 ? Number(parsed.titleFontSize) : fallback.titleFontSize,
                     axisFontSize: Number.isFinite(parsed?.axisFontSize) && parsed.axisFontSize >= 8 ? Number(parsed.axisFontSize) : fallback.axisFontSize,
                     xLabelFontSize: Number.isFinite(parsed?.xLabelFontSize) && parsed.xLabelFontSize >= 8 ? Number(parsed.xLabelFontSize) : (Number.isFinite(parsed?.axisFontSize) && parsed.axisFontSize >= 8 ? Number(parsed.axisFontSize) : fallback.xLabelFontSize),
@@ -402,6 +418,7 @@
                         : fallback.recentColors,
                     titleColor: normalizeHistogramColor(parsed?.titleColor, fallback.titleColor),
                     titleHighlightColor: normalizeHistogramHighlightColor(parsed?.titleHighlightColor, fallback.titleHighlightColor),
+                    plot1dColor: normalizeHistogramColor(parsed?.plot1dColor, fallback.plot1dColor),
                     xLabelColor: normalizeHistogramColor(parsed?.xLabelColor, fallback.xLabelColor),
                     xLabelHighlightColor: normalizeHistogramHighlightColor(parsed?.xLabelHighlightColor, fallback.xLabelHighlightColor),
                     yLabelColor: normalizeHistogramColor(parsed?.yLabelColor, fallback.yLabelColor),
@@ -424,6 +441,7 @@
                 const persisted = {
                     width: HISTOGRAM_PLOT_UI.width,
                     height: HISTOGRAM_PLOT_UI.height,
+                    customSizeEnabled: HISTOGRAM_PLOT_UI.customSizeEnabled === true,
                     titleText: HISTOGRAM_PLOT_UI.titleText,
                     xLabelText: HISTOGRAM_PLOT_UI.xLabelText,
                     yLabelText: HISTOGRAM_PLOT_UI.yLabelText,
@@ -450,6 +468,7 @@
                     titleScript: HISTOGRAM_PLOT_UI.titleScript || 'normal',
                     titleColor: normalizeHistogramColor(HISTOGRAM_PLOT_UI.titleColor, ''),
                     titleHighlightColor: normalizeHistogramHighlightColor(HISTOGRAM_PLOT_UI.titleHighlightColor, ''),
+                    plot1dColor: normalizeHistogramColor(HISTOGRAM_PLOT_UI.plot1dColor, DEFAULT_HISTOGRAM_1D_PLOT_COLOR),
                     xLabelBold: !!HISTOGRAM_PLOT_UI.xLabelBold,
                     xLabelItalic: !!HISTOGRAM_PLOT_UI.xLabelItalic,
                     xLabelUnderline: !!HISTOGRAM_PLOT_UI.xLabelUnderline,
@@ -488,6 +507,10 @@
             } catch (_) {
                 return null;
             }
+        }
+
+        function createHistogramSessionSummaryToken(name = 'summary') {
+            return `${String(name || 'summary').slice(0, 80)}::${Date.now()}::${Math.random().toString(36).slice(2, 10)}`;
         }
 
         function normalizeHistogramHistoryNumber(value) {
@@ -588,14 +611,15 @@
             return {
                 controls: captureHistogramControlState(),
                 plotUi: cloneHistogramHistoryValue(HISTOGRAM_PLOT_UI) || {},
-                localSummary: cloneHistogramHistoryValue(LOCAL_SUMMARY),
-                cachedSummary: cloneHistogramHistoryValue(CACHED_SUMMARY),
+                localSummaryToken: LOCAL_SUMMARY_TOKEN || null,
                 exportWidth: normalizeHistogramHistoryNumber(EXPORT_WIDTH),
                 exportHeight: normalizeHistogramHistoryNumber(EXPORT_HEIGHT),
                 lastXRange: cloneHistogramHistoryValue(LAST_X_RANGE),
                 lastYRange: cloneHistogramHistoryValue(LAST_Y_RANGE),
                 markers: cloneHistogramHistoryValue(MARKERS) || [],
                 markerIdSeq: normalizeHistogramHistoryNumber(MARKER_ID_SEQ) || 0,
+                drawShapes: cloneHistogramHistoryValue(DRAW_SHAPES) || [],
+                drawAnnotations: cloneHistogramHistoryValue(DRAW_ANNOTATIONS) || [],
                 markerMode: !!MARKER_MODE,
                 ellipseSelectionMode: !!ELLIPSE_SELECTION_MODE,
                 projectionMode: !!PROJECTION_MODE,
@@ -670,12 +694,16 @@
                 if (exportMenu) exportMenu.classList.remove('open');
                 if (exportToggle) exportToggle.setAttribute('aria-expanded', 'false');
 
-                LOCAL_SUMMARY = cloneHistogramHistoryValue(snapshot.localSummary);
-                CACHED_SUMMARY = cloneHistogramHistoryValue(snapshot.cachedSummary);
+                LOCAL_SUMMARY_TOKEN = snapshot.localSummaryToken || null;
+                LOCAL_SUMMARY = LOCAL_SUMMARY_TOKEN ? (HISTOGRAM_SESSION_SUMMARIES.get(LOCAL_SUMMARY_TOKEN) || null) : null;
+                if (LOCAL_SUMMARY) prepareSummaryDataset(LOCAL_SUMMARY);
+                CACHED_SUMMARY = null;
                 EXPORT_WIDTH = normalizeHistogramHistoryNumber(snapshot.exportWidth);
                 EXPORT_HEIGHT = normalizeHistogramHistoryNumber(snapshot.exportHeight);
                 LAST_X_RANGE = cloneHistogramHistoryValue(snapshot.lastXRange);
                 LAST_Y_RANGE = cloneHistogramHistoryValue(snapshot.lastYRange);
+                DRAW_SHAPES = cloneHistogramHistoryValue(snapshot.drawShapes) || [];
+                DRAW_ANNOTATIONS = cloneHistogramHistoryValue(snapshot.drawAnnotations) || [];
 
                 Object.keys(HISTOGRAM_PLOT_UI).forEach((key) => {
                     delete HISTOGRAM_PLOT_UI[key];
@@ -827,7 +855,9 @@
         }
 
         function hasCustomPlotSize() {
-            return Number.isFinite(EXPORT_WIDTH) && EXPORT_WIDTH > 0 && Number.isFinite(EXPORT_HEIGHT) && EXPORT_HEIGHT > 0;
+            return HISTOGRAM_PLOT_UI.customSizeEnabled === true
+                && Number.isFinite(EXPORT_WIDTH) && EXPORT_WIDTH > 0
+                && Number.isFinite(EXPORT_HEIGHT) && EXPORT_HEIGHT > 0;
         }
 
         function syncPlotSizeControls() {
@@ -845,6 +875,23 @@
             return { width, height };
         }
 
+        function getDefaultLivePlotSize() {
+            const width = Number.isFinite(HISTOGRAM_PLOT_UI.width) && HISTOGRAM_PLOT_UI.width > 0
+                ? HISTOGRAM_PLOT_UI.width
+                : DEFAULT_EXPORT_WIDTH;
+            const height = Number.isFinite(HISTOGRAM_PLOT_UI.height) && HISTOGRAM_PLOT_UI.height > 0
+                ? HISTOGRAM_PLOT_UI.height
+                : DEFAULT_EXPORT_HEIGHT;
+            return { width, height };
+        }
+
+        function getTargetHistogramHeight(gd = document.getElementById('histogram-plot')) {
+            if (hasCustomPlotSize()) return EXPORT_HEIGHT;
+            const liveHeight = Number(gd?.clientHeight);
+            if (Number.isFinite(liveHeight) && liveHeight > 0) return liveHeight;
+            return getDefaultLivePlotSize().height;
+        }
+
         function applyPlotHostSizing() {
             const gd = document.getElementById('histogram-plot');
             const host = document.getElementById('plot-host');
@@ -854,29 +901,44 @@
                 gd.style.height = EXPORT_HEIGHT + 'px';
                 host.classList.add('has-custom-size');
             } else {
-                gd.style.width = '100%';
-                gd.style.height = 'calc(100vh - var(--header-height) - 150px)';
+                const defaultSize = getDefaultLivePlotSize();
+                gd.style.width = `min(100%, ${defaultSize.width}px)`;
+                gd.style.height = `${defaultSize.height}px`;
                 host.classList.remove('has-custom-size');
             }
+        }
+
+        function applyHistogramLayoutSizing(layout) {
+            if (!layout || typeof layout !== 'object') return layout;
+            if (hasCustomPlotSize()) {
+                layout.width = EXPORT_WIDTH;
+                layout.height = EXPORT_HEIGHT;
+                layout.autosize = false;
+            } else {
+                delete layout.width;
+                delete layout.height;
+                layout.autosize = true;
+            }
+            return layout;
         }
 
         function getDefaultHistogramTexts(mode, xKey, yKey, orientation, histnorm) {
             if (mode === '1d') {
                 if (orientation === 'h') {
                     return {
-                        title: `1D Histogram — ${xKey}`,
+                        title: `${xKey}`,
                         x: histnorm || 'Count',
                         y: isDtFeature(xKey) ? 'Δt (ns)' : xKey,
                     };
                 }
                 return {
-                    title: `1D Histogram — ${xKey}`,
+                    title: `${xKey}`,
                     x: isDtFeature(xKey) ? 'Δt (ns)' : xKey,
                     y: histnorm || 'Count',
                 };
             }
             return {
-                title: `2D Histogram — ${xKey} vs ${yKey}`,
+                title: `${xKey} vs ${yKey}`,
                 x: xKey,
                 y: yKey,
             };
@@ -1055,6 +1117,11 @@
         }
 
         function getHistogramEditorHtml(textKey, fallbackText = '') {
+            if (isHistogramDrawAnnotationTextKey(textKey)) {
+                const annotation = getHistogramDrawAnnotationByKey(textKey);
+                if (annotation?.text) return sanitizeHistogramTextMarkup(annotation.text);
+                return escapeHistogramTextHtml(fallbackText);
+            }
             const storedValue = HISTOGRAM_PLOT_UI[textKey];
             if (typeof storedValue === 'string' && storedValue) return sanitizeHistogramTextMarkup(storedValue);
             return escapeHistogramTextHtml(fallbackText);
@@ -1910,6 +1977,17 @@
                 fallbackDisplayColor: DEFAULT_HISTOGRAM_HIGHLIGHT_COLOR,
                 allowClear: true,
             },
+            plot1d: {
+                elementId: 'plot-1d-color-picker',
+                styleKey: 'plot1dColor',
+                normalizeValue: normalizeHistogramColor,
+                fallbackDisplayColor: DEFAULT_HISTOGRAM_1D_PLOT_COLOR,
+                allowClear: false,
+                getValue: () => getHistogramOneDimensionalPlotColor(),
+                onCommit: (value) => {
+                    applyHistogramOneDimensionalPlotColor(value);
+                },
+            },
         };
 
         function createHistogramColorPicker(definition = {}) {
@@ -1921,6 +1999,10 @@
                 allowClear: definition.allowClear,
                 swatches: HISTOGRAM_COLOR_SWATCHES,
                 onCommit: (value) => {
+                    if (typeof definition.onCommit === 'function') {
+                        definition.onCommit(value);
+                        return;
+                    }
                     applySelectedTextColorStyle(definition.styleKey, value);
                 },
             });
@@ -1929,7 +2011,10 @@
         function syncHistogramColorPickerState(selectedStyle = {}) {
             const pickerRegistry = window.__sciplotterColorPickers || {};
             Object.entries(HISTOGRAM_COLOR_PICKER_DEFINITIONS).forEach(([pickerKey, definition]) => {
-                pickerRegistry[pickerKey]?.setValue(selectedStyle?.[definition.styleKey] || '');
+                const pickerValue = typeof definition.getValue === 'function'
+                    ? definition.getValue(selectedStyle)
+                    : (selectedStyle?.[definition.styleKey] || '');
+                pickerRegistry[pickerKey]?.setValue(pickerValue || '');
             });
         }
 
@@ -1942,6 +2027,20 @@
                 pickerRegistry[pickerKey] = picker;
             });
             window.__sciplotterColorPickers = pickerRegistry;
+            syncHistogramColorPickerState();
+        }
+
+        function getHistogramOneDimensionalPlotColor() {
+            return normalizeHistogramColor(HISTOGRAM_PLOT_UI.plot1dColor, DEFAULT_HISTOGRAM_1D_PLOT_COLOR);
+        }
+
+        async function applyHistogramOneDimensionalPlotColor(value) {
+            HISTOGRAM_PLOT_UI.plot1dColor = normalizeHistogramColor(value, getHistogramOneDimensionalPlotColor());
+            saveHistogramPlotUiState();
+            syncHistogramColorPickerState();
+            const mode = document.querySelector('input[name="hist-type"]:checked')?.value || '2d';
+            if (mode !== '1d') return;
+            await rerenderHistogramFromUpdate({ preserveRanges: true, summarize: false });
         }
 
         function syncPlotSettingsForm(mode, xKey, yKey, orientation, histnorm) {
@@ -2199,6 +2298,9 @@
                 ...(layout.activeselection || {}),
                 fillcolor: 'rgba(0,0,0,0)',
             };
+            layout.paper_bgcolor = '#ffffff';
+            layout.plot_bgcolor = '#ffffff';
+            applyHistogramWatermark(layout);
             if (hasCustomPlotSize()) {
                 layout.width = EXPORT_WIDTH;
                 layout.height = EXPORT_HEIGHT;
@@ -2209,6 +2311,51 @@
                 layout.autosize = true;
             }
             return layout;
+        }
+
+        function createHistogramSvgDataUrl(markup) {
+            return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(String(markup || '').trim())}`;
+        }
+
+        function applyHistogramWatermark(layout) {
+            const baseImages = Array.isArray(layout.images)
+                ? layout.images.filter((image) => !image?._sciplotterWatermark)
+                : [];
+            baseImages.push(
+                // Logo – shifted left, enlarged, and lifted so it sits above the text block
+                {
+                    _sciplotterWatermark: true,
+                    source: HISTOGRAM_WATERMARK_LOGO_SRC,
+                    xref: 'paper',
+                    yref: 'paper',
+                    x: 0.96,
+                    y: 0.08,
+                    sizex: 0.152,
+                    sizey: 0.102,
+                    xanchor: 'right',
+                    yanchor: 'bottom',
+                    sizing: 'contain',
+                    opacity: 0.5,
+                    layer: 'above',
+                },
+                // Text – nudged right while preserving its current internal formatting
+                {
+                    _sciplotterWatermark: true,
+                    source: HISTOGRAM_WATERMARK_TEXT_SRC,
+                    xref: 'paper',
+                    yref: 'paper',
+                    x: 1.01,
+                    y: 0.04,
+                    sizex: 0.185,
+                    sizey: 0.082,
+                    xanchor: 'right',
+                    yanchor: 'bottom',
+                    sizing: 'contain',
+                    opacity: 0.5,
+                    layer: 'above',
+                }
+            );
+            layout.images = baseImages;
         }
 
         function capturePlotTextEdits(ev) {
@@ -2241,6 +2388,7 @@
             EXPORT_HEIGHT = height;
             HISTOGRAM_PLOT_UI.width = width;
             HISTOGRAM_PLOT_UI.height = height;
+            HISTOGRAM_PLOT_UI.customSizeEnabled = true;
             saveHistogramPlotUiState();
             syncPlotSizeControls();
             applyPlotHostSizing();
@@ -2304,11 +2452,201 @@
             });
         }
 
+        function drawRoundedRectPath(ctx, x, y, width, height, radius) {
+            const safeRadius = Math.max(0, Math.min(radius, width / 2, height / 2));
+            ctx.beginPath();
+            ctx.moveTo(x + safeRadius, y);
+            ctx.lineTo(x + width - safeRadius, y);
+            ctx.quadraticCurveTo(x + width, y, x + width, y + safeRadius);
+            ctx.lineTo(x + width, y + height - safeRadius);
+            ctx.quadraticCurveTo(x + width, y + height, x + width - safeRadius, y + height);
+            ctx.lineTo(x + safeRadius, y + height);
+            ctx.quadraticCurveTo(x, y + height, x, y + height - safeRadius);
+            ctx.lineTo(x, y + safeRadius);
+            ctx.quadraticCurveTo(x, y, x + safeRadius, y);
+            ctx.closePath();
+        }
+
+        function drawStatsOverlayRuleToCanvas(ctx, x, y, width, height, opacity) {
+            if (!(width > 0 && height > 0)) return;
+            const gradient = ctx.createLinearGradient(x, y, x + width, y);
+            gradient.addColorStop(0, `rgba(107, 114, 128, ${opacity})`);
+            gradient.addColorStop(0.72, `rgba(107, 114, 128, ${opacity})`);
+            gradient.addColorStop(0.88, `rgba(107, 114, 128, ${opacity * 0.62})`);
+            gradient.addColorStop(1, 'rgba(107, 114, 128, 0)');
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(x, y + height * 0.38);
+            ctx.lineTo(x + width * 0.76, y + height * 0.38);
+            ctx.lineTo(x + width * 0.88, y + height * 0.30);
+            ctx.lineTo(x + width * 0.95, y + height * 0.22);
+            ctx.lineTo(x + width, y + height * 0.50);
+            ctx.lineTo(x + width * 0.95, y + height * 0.78);
+            ctx.lineTo(x + width * 0.88, y + height * 0.70);
+            ctx.lineTo(x + width * 0.76, y + height * 0.62);
+            ctx.lineTo(x, y + height * 0.62);
+            ctx.closePath();
+            ctx.fillStyle = gradient;
+            ctx.fill();
+            ctx.restore();
+        }
+
+        async function drawStatsOverlayToCanvas(ctx, gd, w, h) {
+            const sections = buildStatsOverlaySections();
+            if (!sections.length || !gd) return;
+            const size = gd?._fullLayout?._size;
+            if (!size || !Number.isFinite(size.l) || !Number.isFinite(size.t) || !Number.isFinite(size.w)) return;
+
+            const currentWidth = Math.max(1, gd.clientWidth || gd.offsetWidth || w || 1);
+            const currentHeight = Math.max(1, gd.clientHeight || gd.offsetHeight || h || 1);
+            const scaleX = w / currentWidth;
+            const scaleY = h / currentHeight;
+            const scale = Math.sqrt(scaleX * scaleY);
+
+            const paddingX = 10 * scale;
+            const paddingTop = 8 * scale;
+            const paddingBottom = 9 * scale;
+            const sectionGap = 7 * scale;
+            const rowGap = 2 * scale;
+            const rowColumnGap = 10 * scale;
+            const dividerWidth = 0.84;
+            const dividerHeight = Math.max(2, 4 * scale);
+            const dividerMarginTop = 4 * scale;
+            const dividerMarginBottom = 6 * scale;
+            const sectionDividerMargin = 7 * scale;
+            const minWidth = 148 * scale;
+            const maxWidth = Math.min(248 * scale, w - (28 * scaleX));
+            const radius = 4 * scale;
+            const desiredGapX = 14 * scaleX;
+            const desiredGapY = 14 * scaleY;
+            const borderWidth = Math.max(1, scale);
+            const titleFontSize = 10 * scale;
+            const rowFontSize = 11 * scale;
+            const titleLineHeight = titleFontSize * 1.15;
+            const rowLineHeight = rowFontSize * 1.25;
+
+            ctx.save();
+            ctx.textBaseline = 'top';
+
+            ctx.font = `700 ${titleFontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+            const titleWidths = sections.map((section) => ctx.measureText(section.title).width);
+
+            ctx.font = `${rowFontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+            let maxLabelWidth = 0;
+            let maxValueWidth = 0;
+            sections.forEach((section) => {
+                section.rows.forEach((row) => {
+                    maxLabelWidth = Math.max(maxLabelWidth, ctx.measureText(row.label).width);
+                    ctx.font = `600 ${rowFontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+                    maxValueWidth = Math.max(maxValueWidth, ctx.measureText(row.value).width);
+                    ctx.font = `${rowFontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+                });
+            });
+
+            const measuredSectionWidth = Math.max(...titleWidths, maxLabelWidth + rowColumnGap + maxValueWidth);
+            const overlayWidth = Math.max(minWidth, Math.min(maxWidth, measuredSectionWidth + paddingX * 2));
+
+            let overlayHeight = paddingTop + paddingBottom;
+            sections.forEach((section, index) => {
+                if (index > 0) overlayHeight += sectionDividerMargin * 2 + dividerHeight;
+                overlayHeight += titleLineHeight + dividerMarginTop + dividerHeight + dividerMarginBottom;
+                overlayHeight += section.rows.length * rowLineHeight;
+                if (section.rows.length > 1) overlayHeight += (section.rows.length - 1) * rowGap;
+            });
+
+            const plotRight = (size.l + size.w) * scaleX;
+            const overlayLeft = Math.max(8 * scaleX, plotRight - overlayWidth - desiredGapX);
+            const overlayTop = Math.max(8 * scaleY, (size.t * scaleY) + desiredGapY);
+
+            ctx.shadowColor = 'rgba(15, 23, 42, 0.08)';
+            ctx.shadowBlur = 10 * scale;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 4 * scale;
+            drawRoundedRectPath(ctx, overlayLeft, overlayTop, overlayWidth, overlayHeight, radius);
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.78)';
+            ctx.fill();
+
+            ctx.shadowColor = 'transparent';
+            drawRoundedRectPath(ctx, overlayLeft, overlayTop, overlayWidth, overlayHeight, radius);
+            ctx.lineWidth = borderWidth;
+            ctx.strokeStyle = 'rgba(203, 213, 225, 0.84)';
+            ctx.stroke();
+
+            let cursorY = overlayTop + paddingTop;
+            sections.forEach((section, sectionIndex) => {
+                if (sectionIndex > 0) {
+                    drawStatsOverlayRuleToCanvas(ctx, overlayLeft + paddingX, cursorY + sectionDividerMargin, (overlayWidth - (paddingX * 2)) * dividerWidth, dividerHeight, 0.16);
+                    cursorY += sectionDividerMargin * 2 + dividerHeight;
+                }
+
+                ctx.font = `700 ${titleFontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+                ctx.fillStyle = '#6b7280';
+                ctx.fillText(section.title, overlayLeft + paddingX, cursorY);
+                cursorY += titleLineHeight;
+
+                drawStatsOverlayRuleToCanvas(ctx, overlayLeft + paddingX, cursorY + dividerMarginTop, (overlayWidth - (paddingX * 2)) * dividerWidth, dividerHeight, 0.22);
+                cursorY += dividerMarginTop + dividerHeight + dividerMarginBottom;
+
+                section.rows.forEach((row, rowIndex) => {
+                    ctx.font = `${rowFontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+                    ctx.fillStyle = '#475569';
+                    ctx.fillText(row.label, overlayLeft + paddingX, cursorY);
+
+                    ctx.font = `600 ${rowFontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+                    ctx.fillStyle = '#1e293b';
+                    const valueWidth = ctx.measureText(row.value).width;
+                    ctx.fillText(row.value, overlayLeft + overlayWidth - paddingX - valueWidth, cursorY);
+
+                    cursorY += rowLineHeight;
+                    if (rowIndex < section.rows.length - 1) cursorY += rowGap;
+                });
+            });
+
+            ctx.restore();
+        }
+
+        async function drawHistogramPlotFrameDividersToCanvas(ctx, gd, w, h) {
+            if (!gd) return;
+            const size = gd?._fullLayout?._size;
+            if (!size || !Number.isFinite(size.l) || !Number.isFinite(size.t) || !Number.isFinite(size.w) || !Number.isFinite(size.h)) return;
+
+            const currentWidth = Math.max(1, gd.clientWidth || gd.offsetWidth || w || 1);
+            const currentHeight = Math.max(1, gd.clientHeight || gd.offsetHeight || h || 1);
+            const scaleX = w / currentWidth;
+            const scaleY = h / currentHeight;
+            const topLeft = size.l * scaleX;
+            const topY = size.t * scaleY;
+            const topWidth = size.w * scaleX;
+            const rightX = (size.l + size.w) * scaleX;
+            const rightHeight = size.h * scaleY;
+            const dividerWidth = Math.max(1, Math.min(scaleX, scaleY));
+
+            ctx.save();
+
+            const topGradient = ctx.createLinearGradient(topLeft, topY, topLeft + topWidth, topY);
+            topGradient.addColorStop(0, 'rgba(148, 163, 184, 0.08)');
+            topGradient.addColorStop(0.5, 'rgba(148, 163, 184, 0.34)');
+            topGradient.addColorStop(1, 'rgba(148, 163, 184, 0.08)');
+            ctx.fillStyle = topGradient;
+            ctx.fillRect(topLeft, topY, topWidth, dividerWidth);
+
+            const rightGradient = ctx.createLinearGradient(rightX, topY, rightX, topY + rightHeight);
+            rightGradient.addColorStop(0, 'rgba(148, 163, 184, 0.10)');
+            rightGradient.addColorStop(0.5, 'rgba(148, 163, 184, 0.42)');
+            rightGradient.addColorStop(1, 'rgba(148, 163, 184, 0.10)');
+            ctx.fillStyle = rightGradient;
+            ctx.fillRect(rightX, topY, dividerWidth, rightHeight);
+
+            ctx.restore();
+        }
+
         async function buildCompositeImageWithMarkers(gd, w, h){
             // Base plot image from Plotly
             const baseDataUrl = await Plotly.toImage(gd, { format:'png', width:w, height:h, scale:1 });
             // If no markers or custom selection overlays exist, return original quickly
-            if((!Array.isArray(MARKERS) || MARKERS.length===0) && !hasCustomSelectionOverlay(gd)){
+            const hasStatsOverlay = buildStatsOverlaySections().length > 0;
+            const hasPlotFrameDividers = !!gd?._fullLayout?._size;
+            if((!Array.isArray(MARKERS) || MARKERS.length===0) && !hasCustomSelectionOverlay(gd) && !hasStatsOverlay && !hasPlotFrameDividers){
                 return baseDataUrl;
             }
             // Create canvas
@@ -2321,7 +2659,9 @@
                 img.onload=()=>{ ctx.drawImage(img,0,0,w,h); resolve(); };
                 img.onerror=reject; img.src=baseDataUrl;
             });
+            await drawHistogramPlotFrameDividersToCanvas(ctx, gd, w, h);
             await drawCustomSelectionOverlayToCanvas(ctx, gd, w, h);
+            await drawStatsOverlayToCanvas(ctx, gd, w, h);
             // Helper to format numbers like existing labels
             const fmt = v => (typeof v==='number' ? v.toFixed(2) : v);
             // Draw each marker (lines + label box + text)
@@ -2447,32 +2787,12 @@
             const { jsPDF } = window.jspdf || {};
             if (!jsPDF) { alert('jsPDF not available after load'); return; }
             const pdf = new jsPDF({ orientation: wPx >= hPx ? 'landscape' : 'portrait', unit: 'pt', format: [wPt, hPt] });
-            // If no markers or custom overlays, try vector first; otherwise build composite raster including overlays.
-            let added = false;
-            if (MARKERS.length === 0 && !hasCustomSelectionOverlay(gd)) {
-                try {
-                    await ensureSvg2Pdf();
-                    if (window.svg2pdf) {
-                        const mainSvg = gd.querySelector('svg.main-svg');
-                        if (mainSvg) {
-                            const clone = mainSvg.cloneNode(true);
-                            clone.querySelectorAll('foreignObject').forEach(n => n.remove());
-                            window.svg2pdf(clone, pdf, { x: 0, y: 0, width: wPt, height: hPt });
-                            added = true;
-                        }
-                    }
-                } catch (e) {
-                    console.warn('Vector PDF path failed, will rasterize including markers:', e);
-                }
-            }
-            if(!added){
-                try {
-                    const composite = await buildCompositeImageWithMarkers(gd, wPx, hPx);
-                    pdf.addImage(composite, 'PNG', 0, 0, wPt, hPt);
-                } catch(e){
-                    alert('PDF generation failed: '+ e.message);
-                    return;
-                }
+            try {
+                const composite = await buildCompositeImageWithMarkers(gd, wPx, hPx);
+                pdf.addImage(composite, 'PNG', 0, 0, wPt, hPt);
+            } catch(e){
+                alert('PDF generation failed: '+ e.message);
+                return;
             }
             pdf.save('histogram.pdf');
         }
@@ -2535,16 +2855,57 @@
                 },
                 click: () => { clearPlotInteractions(gd); }
             };
+            const labelBtn = {
+                name: 'Add Label',
+                title: 'Add Label: place a movable text label on the plot. Double-click the label text to edit it.',
+                icon: {
+                    width: 512,
+                    height: 512,
+                    path: 'M88 108H424V404H88V108ZM142 184V228H204V336H252V228H314V184H142ZM340 184V336H388V184H340Z',
+                    transform: 'matrix(1 0 0 -1 0 512)'
+                },
+                click: () => { addHistogramDrawAnnotation(gd, { showarrow: false, text: 'Label' }); }
+            };
+            const arrowNoteBtn = {
+                name: 'Add Arrow Note',
+                title: 'Add Arrow Note: place a movable arrow note on the plot. Double-click the note text to edit it.',
+                icon: {
+                    width: 512,
+                    height: 512,
+                    path: 'M96 360H246V310H96V360ZM96 280H212V230H96V280ZM316 138L432 254L396 290L340 234L262 312L226 276L304 198L248 142L284 106L400 222L364 258L420 314L456 278L316 138Z',
+                    transform: 'matrix(1 0 0 -1 0 512)'
+                },
+                click: () => { addHistogramDrawAnnotation(gd, { showarrow: true, text: 'Arrow note' }); }
+            };
+            const clearDrawBtn = {
+                name: 'Clear Drawings',
+                title: 'Clear Drawings: remove all drawn shapes and text notes from the plot.',
+                icon: {
+                    width: 512,
+                    height: 512,
+                    path: 'M116 116H396V396H116V116ZM170 170V214H342V170H170ZM214 250L256 292L298 250L330 282L288 324L330 366L298 398L256 356L214 398L182 366L224 324L182 282L214 250Z',
+                    transform: 'matrix(1 0 0 -1 0 512)'
+                },
+                click: () => { clearHistogramDrawObjects(gd); }
+            };
             return {
                 responsive: !hasCustomPlotSize(),
+                scrollZoom: true,
                 displayModeBar: true,
                 displaylogo: false,
                 editable: false,
                 editSelection: true,
+                edits: {
+                    annotationPosition: true,
+                    annotationTail: true,
+                    annotationText: true,
+                    shapePosition: true,
+                },
                 modeBarButtons: [
                     ['zoomIn2d', 'zoomOut2d', autoFitBtn, swapAxesBtn, 'resetScale2d'],
                     ['zoom2d', 'pan2d'],
                     [projectionBtn, 'select2d', ellipseBtn, 'lasso2d', markerBtn, clearBtn],
+                    ['drawline', 'drawopenpath', 'drawrect', 'drawcircle', labelBtn, arrowNoteBtn, 'eraseshape', clearDrawBtn],
                     ['hoverClosestCartesian', 'hoverCompareCartesian', 'toggleSpikelines']
                 ]
             };
@@ -2554,7 +2915,7 @@
             if (!gd) return;
             const modebarTooltipMap = [
                 { match: 'zoom', title: 'Zoom: drag to zoom into a region of the plot.' },
-                { match: 'pan', title: 'Pan: drag the plot without changing the zoom level.' },
+                { match: 'pan', title: 'Pan: drag the plot without changing the zoom level. Shortcut: hold Space + left-click drag. Scroll wheel zooms in/out.' },
                 { match: 'zoom in', title: 'Zoom In: increase the current zoom level.' },
                 { match: 'zoom out', title: 'Zoom Out: decrease the current zoom level.' },
                 { match: 'auto fit', title: 'Auto Fit: fit axes to plotted data while ignoring helper traces and the 2D background.' },
@@ -2566,6 +2927,14 @@
                 { match: 'projection tool', title: 'Projection Tool: hover or drag on the 2D histogram to project a row or column.' },
                 { match: 'marker mode', title: 'Marker Mode: click a point to place a persistent marker label on the plot.' },
                 { match: 'clear interactions', title: 'Clear Interactions: delete any markers or selections from the plot, including selection outlines.' },
+                { match: 'draw line', title: 'Draw Line: draw a straight line shape on the plot.' },
+                { match: 'draw open path', title: 'Freehand Draw: draw a freeform path on the plot.' },
+                { match: 'draw rectangle', title: 'Draw Rectangle: draw a rectangular shape on the plot.' },
+                { match: 'draw circle', title: 'Draw Circle: draw a circular or elliptical shape on the plot.' },
+                { match: 'add label', title: 'Add Label: place a movable text label on the plot. Double-click it to edit the text.' },
+                { match: 'add arrow note', title: 'Add Arrow Note: place a movable arrow note on the plot. Double-click it to edit the text.' },
+                { match: 'erase active shape', title: 'Erase Shape: remove the currently selected drawn shape.' },
+                { match: 'clear drawings', title: 'Clear Drawings: remove all drawn shapes and text notes from the plot.' },
                 { match: 'show closest data on hover', title: 'Hover Closest: show hover data for the point nearest the cursor.' },
                 { match: 'compare data on hover', title: 'Hover Compare: compare hover values for all traces at the same position.' },
                 { match: 'toggle spike lines', title: 'Toggle Spikelines: show or hide guide lines that follow the cursor.' },
@@ -2604,6 +2973,7 @@
                 ['plot-symbol-toggle', 'Insert Symbol: insert common scientific and mathematical symbols into the selected plot title or axis label.'],
                 ['plot-text-color-picker', 'Text Color: choose a text color for the selected plot title or axis label. Without a selected label, applies to all plot text.'],
                 ['plot-highlight-color-picker', 'Highlight Color: choose a highlight background for the selected plot title or axis label. Without a selected label, applies to all plot text.'],
+                ['plot-1d-color-picker', 'Plot Color: choose the color used for merged 1D histogram bars.'],
             ];
             extraTooltips.forEach(([id, tooltip]) => {
                 const el = document.getElementById(id);
@@ -2627,7 +2997,7 @@
                 ],
             },
             {
-                label: 'Tools',
+                label: 'Select',
                 placement: 'after-text',
                 actions: [
                     { modebarLabel: 'projection tool', label: 'Projection' },
@@ -2636,6 +3006,20 @@
                     { modebarLabel: 'lasso select', label: 'Lasso' },
                     { modebarLabel: 'marker mode', label: 'Marker' },
                     { modebarLabel: 'clear interactions', label: 'Clear' },
+                ],
+            },
+            {
+                label: 'Draw',
+                placement: 'after-text',
+                actions: [
+                    { modebarLabel: 'draw line', label: 'Line' },
+                    { modebarLabel: 'draw open path', label: 'Freehand' },
+                    { modebarLabel: 'draw rectangle', label: 'Rect' },
+                    { modebarLabel: 'draw circle', label: 'Circle' },
+                    { modebarLabel: 'add label', label: 'Label' },
+                    { modebarLabel: 'add arrow note', label: 'Arrow' },
+                    { modebarLabel: 'erase active shape', label: 'Erase' },
+                    { modebarLabel: 'clear drawings', label: 'Clear' },
                 ],
             },
             {
@@ -2801,6 +3185,10 @@
         let MARKER_MODE = false; // when true clicks add markers
         let MARKERS = []; // {x,y,z?,id}
         let MARKER_ID_SEQ = 0;
+        let DRAW_SHAPES = [];
+        let DRAW_ANNOTATIONS = [];
+        const STATS_OVERLAY = { main: false, selection: false, checked: {} };
+        let _statsOverlaySyncTimer = 0;
         let ELLIPSE_SELECTION_MODE = false;
         let ACTIVE_ELLIPSE_SELECTION = null;
         let ACTIVE_ELLIPSE_HANDLES_VISIBLE = false;
@@ -4108,6 +4496,128 @@
             scheduleHistogramHistoryCommit();
         }
 
+        function isHistogramDrawAnnotationTextKey(textKey) {
+            return typeof textKey === 'string' && /^drawAnnotation:\d+$/.test(textKey);
+        }
+
+        function getHistogramDrawAnnotationIndex(textKey) {
+            if (!isHistogramDrawAnnotationTextKey(textKey)) return -1;
+            const index = parseInt(String(textKey).split(':')[1], 10);
+            return Number.isInteger(index) ? index : -1;
+        }
+
+        function getHistogramDrawAnnotationByKey(textKey) {
+            const index = getHistogramDrawAnnotationIndex(textKey);
+            if (index < 0) return null;
+            return DRAW_ANNOTATIONS[index] || null;
+        }
+
+        function normalizeHistogramDrawAnnotation(annotation = {}) {
+            const showarrow = !!annotation.showarrow;
+            return {
+                xref: annotation.xref || 'paper',
+                yref: annotation.yref || 'paper',
+                x: Number.isFinite(annotation.x) ? annotation.x : 0.5,
+                y: Number.isFinite(annotation.y) ? annotation.y : 0.5,
+                text: sanitizeHistogramTextMarkup(typeof annotation.text === 'string' && annotation.text ? annotation.text : 'Double-click to edit'),
+                showarrow,
+                arrowhead: showarrow ? (Number.isFinite(annotation.arrowhead) ? annotation.arrowhead : 2) : 0,
+                arrowsize: Number.isFinite(annotation.arrowsize) ? annotation.arrowsize : 1,
+                arrowwidth: Number.isFinite(annotation.arrowwidth) ? annotation.arrowwidth : 1.6,
+                arrowcolor: normalizeHistogramColor(annotation.arrowcolor, '#1B76B3') || '#1B76B3',
+                axref: annotation.axref || 'pixel',
+                ayref: annotation.ayref || 'pixel',
+                ax: Number.isFinite(annotation.ax) ? annotation.ax : (showarrow ? -56 : 0),
+                ay: Number.isFinite(annotation.ay) ? annotation.ay : (showarrow ? -52 : 0),
+                align: typeof annotation.align === 'string' && annotation.align ? annotation.align : 'center',
+                bordercolor: normalizeHistogramColor(annotation.bordercolor, '#cbd5e1') || '#cbd5e1',
+                borderwidth: Number.isFinite(annotation.borderwidth) ? annotation.borderwidth : 1,
+                borderpad: Number.isFinite(annotation.borderpad) ? annotation.borderpad : 6,
+                bgcolor: normalizeHistogramColor(annotation.bgcolor, 'rgba(255, 255, 255, 0.92)') || 'rgba(255, 255, 255, 0.92)',
+                opacity: Number.isFinite(annotation.opacity) ? annotation.opacity : 1,
+                captureevents: true,
+                font: {
+                    family: normalizeHistogramFontFamily(annotation.font?.family, DEFAULT_FONT_FAMILY),
+                    size: Math.max(10, parseInt(String(annotation.font?.size || DEFAULT_AXIS_FONT_SIZE), 10) || DEFAULT_AXIS_FONT_SIZE),
+                    color: normalizeHistogramColor(annotation.font?.color, DEFAULT_HISTOGRAM_TEXT_COLOR) || DEFAULT_HISTOGRAM_TEXT_COLOR,
+                },
+            };
+        }
+
+        function applyHistogramDrawStateToLayout(layout) {
+            const baseAnnotations = Array.isArray(layout.annotations) ? layout.annotations.slice() : [];
+            layout.annotations = baseAnnotations.concat((DRAW_ANNOTATIONS || []).map((annotation) => normalizeHistogramDrawAnnotation(annotation)));
+            layout.shapes = cloneHistogramHistoryValue(DRAW_SHAPES) || [];
+            layout.newshape = {
+                ...(layout.newshape || {}),
+                line: {
+                    ...(layout.newshape?.line || {}),
+                    color: '#0f766e',
+                    width: 2,
+                },
+                fillcolor: 'rgba(15, 118, 110, 0.08)',
+                opacity: 1,
+            };
+            return baseAnnotations.length;
+        }
+
+        function getHistogramPlotBaseAnnotations(gd) {
+            const count = Number.isInteger(gd?.__histBaseAnnotationCount) ? gd.__histBaseAnnotationCount : 0;
+            if (!Array.isArray(gd?.layout?.annotations)) return [];
+            return gd.layout.annotations.slice(0, count);
+        }
+
+        function syncHistogramDrawStateFromPlot(gd) {
+            if (!gd?.layout) return;
+            DRAW_SHAPES = cloneHistogramHistoryValue(gd.layout.shapes) || [];
+            const baseCount = Number.isInteger(gd.__histBaseAnnotationCount) ? gd.__histBaseAnnotationCount : 0;
+            const annotations = Array.isArray(gd.layout.annotations) ? gd.layout.annotations.slice(baseCount) : [];
+            DRAW_ANNOTATIONS = annotations.map((annotation) => normalizeHistogramDrawAnnotation(annotation));
+        }
+
+        async function applyHistogramDrawStateToCurrentPlot(gd) {
+            if (!gd || !window.Plotly) return;
+            const baseAnnotations = getHistogramPlotBaseAnnotations(gd);
+            await Plotly.relayout(gd, {
+                shapes: cloneHistogramHistoryValue(DRAW_SHAPES) || [],
+                annotations: baseAnnotations.concat((DRAW_ANNOTATIONS || []).map((annotation) => normalizeHistogramDrawAnnotation(annotation))),
+            });
+            syncHistogramDrawStateFromPlot(gd);
+        }
+
+        async function addHistogramDrawAnnotation(gd, options = {}) {
+            if (!gd || !window.Plotly) return;
+            deactivateActiveInteractionTool(gd, { silent: true });
+            DRAW_ANNOTATIONS = DRAW_ANNOTATIONS.concat([
+                normalizeHistogramDrawAnnotation({
+                    x: 0.5,
+                    y: 0.5,
+                    xref: 'paper',
+                    yref: 'paper',
+                    text: options.text,
+                    showarrow: !!options.showarrow,
+                    ax: options.showarrow ? -56 : 0,
+                    ay: options.showarrow ? -52 : 0,
+                })
+            ]);
+            await applyHistogramDrawStateToCurrentPlot(gd);
+            flashStatus(gd, options.showarrow ? 'Arrow note added' : 'Label added');
+            scheduleHistogramHistoryCommit();
+            const annotationKey = `drawAnnotation:${DRAW_ANNOTATIONS.length - 1}`;
+            requestAnimationFrame(() => {
+                const match = findEditablePlotTextByKey(gd, annotationKey);
+                if (match) openEditablePlotTextEditor(gd, match);
+            });
+        }
+
+        async function clearHistogramDrawObjects(gd) {
+            DRAW_SHAPES = [];
+            DRAW_ANNOTATIONS = [];
+            if (gd && window.Plotly) await applyHistogramDrawStateToCurrentPlot(gd);
+            flashStatus(gd, 'Deleted drawing objects');
+            scheduleHistogramHistoryCommit();
+        }
+
         async function applyEllipseSelection(gd, ellipse) {
             return applyEllipseSelectionWithOptions(gd, ellipse, {});
         }
@@ -4251,11 +4761,37 @@
                     return { ...mapping, container, textNode };
                 }
             }
+            const annotationContainer = target.closest('.annotation');
+            const gd = document.getElementById('histogram-plot');
+            const baseCount = Number.isInteger(gd?.__histBaseAnnotationCount) ? gd.__histBaseAnnotationCount : 0;
+            let annotationIndex = parseInt(annotationContainer?.getAttribute('data-index') || '', 10);
+            if (annotationContainer && !Number.isInteger(annotationIndex)) {
+                const annotations = Array.from(gd?.querySelectorAll('.annotation') || []);
+                annotationIndex = annotations.indexOf(annotationContainer);
+            }
+            if (annotationContainer && Number.isInteger(annotationIndex) && annotationIndex >= baseCount) {
+                return {
+                    key: `drawAnnotation:${annotationIndex - baseCount}`,
+                    container: annotationContainer,
+                    textNode: annotationContainer.querySelector('text') || annotationContainer,
+                };
+            }
             return null;
         }
 
         function findEditablePlotTextByKey(gd, key) {
             if (!gd || !key) return null;
+            if (isHistogramDrawAnnotationTextKey(key)) {
+                const annotationIndex = getHistogramDrawAnnotationIndex(key);
+                const baseCount = Number.isInteger(gd.__histBaseAnnotationCount) ? gd.__histBaseAnnotationCount : 0;
+                let container = gd.querySelector(`.annotation[data-index="${baseCount + annotationIndex}"]`);
+                if (!container) {
+                    const annotations = Array.from(gd.querySelectorAll('.annotation'));
+                    container = annotations[baseCount + annotationIndex] || null;
+                }
+                if (!container) return null;
+                return { key, container, textNode: container.querySelector('text') || container };
+            }
             const mapping = {
                 titleText: ['.g-gtitle', '.gtitle'],
                 xLabelText: ['.g-xtitle', '.xtitle'],
@@ -4297,6 +4833,18 @@
             const key = activeEditor.key;
             removeEditablePlotTextEditor(gd, options);
             if (!changed) return;
+            if (isHistogramDrawAnnotationTextKey(key)) {
+                const annotationIndex = getHistogramDrawAnnotationIndex(key);
+                if (annotationIndex >= 0 && DRAW_ANNOTATIONS[annotationIndex]) {
+                    DRAW_ANNOTATIONS[annotationIndex] = {
+                        ...DRAW_ANNOTATIONS[annotationIndex],
+                        text: nextValue,
+                    };
+                    await applyHistogramDrawStateToCurrentPlot(gd);
+                    scheduleHistogramHistoryCommit();
+                }
+                return;
+            }
             HISTOGRAM_PLOT_UI[key] = nextValue;
             saveHistogramPlotUiState();
             await relayoutHistogramAppearance();
@@ -4590,12 +5138,32 @@
             letter-spacing: 0.2px;
         }
 
+        body > .site-header .brand-copy {
+            display: inline-flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 1px;
+            min-width: 0;
+            line-height: 1;
+            text-align: center;
+        }
+
         body > .site-header .brand-text {
             font-family: "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
             font-size: 22px;
             font-weight: 700;
             letter-spacing: 0.4px;
             color: #fff;
+            white-space: nowrap;
+        }
+
+        body > .site-header .brand-byline {
+            font-family: "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+            font-size: 10px;
+            font-weight: 500;
+            letter-spacing: 0.08em;
+            color: rgba(255, 255, 255, 0.7);
             white-space: nowrap;
         }
 
@@ -4654,6 +5222,11 @@
                 font-size: 17px;
             }
 
+            body > .site-header .brand-byline {
+                font-size: 9px;
+                letter-spacing: 0.06em;
+            }
+
             body > .site-header .tabs {
                 gap: 4px;
             }
@@ -4681,6 +5254,8 @@
             grid-row: 1;
             padding: 12px 0 0;
             min-width: 0;
+            position: relative;
+            z-index: 10;
         }
 
         #left {
@@ -4688,15 +5263,34 @@
             grid-row: 2;
             width: var(--hist-side-panel-width);
             flex: 0 0 var(--hist-side-panel-width);
-            padding: 18px 16px 24px;
+            padding: 0;
             box-sizing: border-box;
-            overflow: auto;
+            overflow: hidden;
             position: relative;
             background:
                 linear-gradient(180deg, rgba(255,255,255,0.9) 0%, rgba(248,250,252,0.96) 100%),
                 var(--surface-0);
             backdrop-filter: blur(10px);
             transition: width 180ms ease, flex-basis 180ms ease, padding 180ms ease;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+
+        #left-scroll {
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow: auto;
+            padding: 10px 10px 0;
+            box-sizing: border-box;
+        }
+
+        #left-footer {
+            flex: 0 0 auto;
+            padding: 8px 10px 16px;
+            box-sizing: border-box;
+            background: linear-gradient(180deg, rgba(250,251,252,0) 0%, rgba(250,251,252,0.92) 18%, rgba(250,251,252,0.98) 100%);
+            backdrop-filter: blur(8px);
         }
 
         #left::after {
@@ -4971,7 +5565,6 @@
         #left {
             width: var(--hist-side-panel-width);
             flex-basis: var(--hist-side-panel-width);
-            padding: 10px 10px 16px;
             background: #fafbfc;
             box-shadow: none;
             backdrop-filter: none;
@@ -4998,6 +5591,22 @@
             margin: 0 0 8px;
             background: none;
             backdrop-filter: none;
+        }
+
+        #left-footer .section {
+            margin-top: 8px;
+        }
+
+        #left-footer .section:first-child {
+            margin-top: 0;
+        }
+
+        #left-footer #render-behavior-section {
+            padding-top: 12px;
+        }
+
+        #left-footer #hist-action-row {
+            padding-top: 0;
         }
 
         #left .header-row h3 {
@@ -5582,19 +6191,19 @@
         }
 
         /* Button rows */
-        .action-button-row {
-            display: grid;
+        #left .action-button-row {
+            display: flex;
             width: 100%;
-            grid-template-columns: repeat(2, minmax(0, 112px));
             justify-content: center;
-            column-gap: 32px;
-            gap: 0;
+            gap: 52px;
+            flex-wrap: nowrap;
             padding-top: 4px;
         }
 
-        .action-button-row button {
-            min-width: 0;
-            width: 100%;
+        #left .action-button-row button {
+            flex: 0 0 112px;
+            min-width: 112px;
+            width: 112px;
         }
 
         #render-behavior-section + .section .row:not(#hist-action-row) {
@@ -5646,6 +6255,13 @@
         @media (max-width: 980px) {
             #left {
                 width: 280px;
+            }
+
+            #left-scroll {
+                padding: 8px 8px 0;
+            }
+
+            #left-footer {
                 padding: 8px 8px 14px;
             }
 
@@ -5743,6 +6359,112 @@
             min-height: 460px;
             position: relative;
             flex: 0 0 auto;
+        }
+
+        .hist-plot-frame-divider {
+            position: absolute;
+            pointer-events: none;
+            z-index: 12;
+        }
+
+        .hist-plot-frame-divider--top {
+            height: var(--panel-divider-width);
+            background: linear-gradient(90deg, rgba(148, 163, 184, 0.08) 0%, rgba(148, 163, 184, 0.34) 50%, rgba(148, 163, 184, 0.08) 100%);
+        }
+
+        .hist-plot-frame-divider--right {
+            width: var(--panel-divider-width);
+            background: var(--panel-divider-bg);
+        }
+
+        .hist-stats-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 14;
+            min-width: 148px;
+            max-width: min(248px, calc(100% - 28px));
+            padding: 8px 10px 9px;
+            border: 1px solid rgba(203, 213, 225, 0.84);
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.78);
+            box-shadow: 0 4px 10px rgba(15, 23, 42, 0.08);
+            box-sizing: border-box;
+            pointer-events: none;
+            backdrop-filter: blur(4px);
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        }
+
+        .hist-stats-overlay.is-hidden {
+            display: none;
+        }
+
+        .hist-stats-overlay-section + .hist-stats-overlay-section {
+            margin-top: 7px;
+        }
+
+        .hist-stats-overlay-title {
+            color: #6b7280;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            line-height: 1.15;
+        }
+
+        .hist-stats-overlay-rule {
+            position: relative;
+            width: 84%;
+            height: 4px;
+            margin: 4px 0 6px;
+            color: #6b7280;
+        }
+
+        .hist-stats-overlay-rule::before {
+            content: '';
+            display: block;
+            width: 100%;
+            height: 100%;
+            background: currentColor;
+            opacity: 0.22;
+            clip-path: polygon(0 38%, 76% 38%, 88% 30%, 95% 22%, 100% 50%, 95% 78%, 88% 70%, 76% 62%, 0 62%);
+            -webkit-mask-image: linear-gradient(to right, #000 0%, #000 72%, rgba(0, 0, 0, 0.62) 86%, transparent 100%);
+            mask-image: linear-gradient(to right, #000 0%, #000 72%, rgba(0, 0, 0, 0.62) 86%, transparent 100%);
+        }
+
+        .hist-stats-overlay-rule--section {
+            margin: 7px 0 7px;
+        }
+
+        .hist-stats-overlay-rule--section::before {
+            opacity: 0.16;
+            clip-path: polygon(0 41%, 70% 41%, 84% 32%, 93% 24%, 100% 50%, 93% 76%, 84% 68%, 70% 59%, 0 59%);
+        }
+
+        .hist-stats-overlay-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 10px;
+            align-items: baseline;
+            margin-top: 2px;
+            width: 100%;
+        }
+
+        .hist-stats-overlay-label {
+            min-width: 0;
+            color: #475569;
+            font-size: 11px;
+            line-height: 1.25;
+            white-space: nowrap;
+        }
+
+        .hist-stats-overlay-value {
+            color: #1e293b;
+            font-size: 11px;
+            font-weight: 600;
+            line-height: 1.25;
+            text-align: right;
+            white-space: nowrap;
+            justify-self: end;
         }
 
         #histogram-plot .zoomlayer .select-outline {
@@ -6055,8 +6777,7 @@
             box-sizing: border-box;
             width: 100%;
             max-width: 100%;
-            overflow-x: auto;
-            overflow-y: hidden;
+            overflow: visible;
         }
 
         /*
@@ -6422,6 +7143,21 @@
             display: inline-flex;
             align-items: center;
             gap: 6px;
+        }
+
+        .histogram-panel-color-picker-wrap {
+            display: flex;
+            align-items: center;
+            min-width: 0;
+        }
+
+        .histogram-panel-color-picker-wrap .sciplotter-color-picker-group {
+            width: 100%;
+        }
+
+        .histogram-panel-color-picker-wrap .sciplotter-color-picker-btn {
+            min-width: 70px;
+            justify-content: flex-start;
         }
 
         .sciplotter-color-picker-btn {
@@ -7123,6 +7859,7 @@
             font-family: "Segoe UI", "Inter", "Helvetica Neue", Arial, sans-serif;
             font-size: 12px;
             font-weight: 500;
+            white-space: nowrap;
         }
 
         .meta-stat-value {
@@ -7137,6 +7874,72 @@
 
         .meta-stat-value.is-muted {
             color: #64748b;
+        }
+
+        /* --- Stats overlay toggle & checkboxes --- */
+        .meta-card-title {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .meta-overlay-toggle {
+            position: relative;
+            display: inline-block;
+            width: 28px;
+            height: 14px;
+            flex-shrink: 0;
+            cursor: pointer;
+        }
+
+        .meta-overlay-toggle input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+            position: absolute;
+        }
+
+        .meta-overlay-toggle-track {
+            position: absolute;
+            inset: 0;
+            border-radius: 7px;
+            background: #d1d5db;
+            transition: background 0.2s ease;
+        }
+
+        .meta-overlay-toggle-track::after {
+            content: '';
+            position: absolute;
+            left: 1px;
+            top: 1px;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #fff;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.18);
+            transition: transform 0.2s ease;
+        }
+
+        .meta-overlay-toggle input:checked + .meta-overlay-toggle-track {
+            background: #3b82f6;
+        }
+
+        .meta-overlay-toggle input:checked + .meta-overlay-toggle-track::after {
+            transform: translateX(14px);
+        }
+
+        .meta-stat-row.has-overlay-cb {
+            grid-template-columns: 16px minmax(0, 1fr) auto;
+            gap: 6px;
+        }
+
+        .meta-stat-overlay-cb {
+            width: 13px;
+            height: 13px;
+            margin: 0;
+            cursor: pointer;
+            accent-color: #3b82f6;
+            align-self: center;
         }
 
         .projection-card-body {
@@ -7364,7 +8167,10 @@
     <header class="site-header">
         <a class="brand" href="histogram.html" aria-label="SciPlotter home">
             <img class="brand-mark" src="assets/SciPlotter_logo.svg" alt="SciPlotter logo" />
-            <span class="brand-text">Sci Plotter</span>
+            <span class="brand-copy">
+                <span class="brand-text">Sci Plotter</span>
+                <span class="brand-byline">by Dachi Okropiridze</span>
+            </span>
         </a>
         <nav class="tabs">
             <a class="tab" data-tab="waveforms" href="index.html">Waveforms</a>
@@ -7496,6 +8302,7 @@
             </div>
         </div>
         <div id="left">
+            <div id="left-scroll">
             <div class="header-row">
                 <h3 class="panel-header-title">Histogram Controls</h3>
             </div>
@@ -7667,7 +8474,18 @@
 
             <!-- Colors (2D) -->
             <div class="section" id="colors-section">
-                <h4>Colors (2D)</h4>
+                <h4 id="colors-section-title">Colors (2D)</h4>
+                <div class="row control-canonical-row control-canonical-row--text-dropdown" id="plot-1d-color-row" style="display:none;">
+                    <label class="control-canonical-label control-canonical-label--text-dropdown" for="plot-1d-color-picker">Plot</label>
+                    <div class="histogram-panel-color-picker-wrap">
+                        <div class="sciplotter-color-picker-group" role="group" aria-label="1D histogram plot color">
+                            <button id="plot-1d-color-picker" class="hist-tool-btn sciplotter-color-picker-btn" type="button" title="1D histogram plot color">
+                                <span>Set</span>
+                                <span class="sciplotter-color-picker-swatch" aria-hidden="true"></span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
                 <div class="row control-canonical-row control-canonical-row--text-dropdown" id="colorscale-row" style="display:none;">
                     <label class="control-canonical-label control-canonical-label--text-dropdown" for="colorscale">Colorscale</label>
                     <select id="colorscale" class="control-canonical-box control-canonical-select control-canonical-select--text-dropdown">
@@ -7694,19 +8512,23 @@
                 </div>
             </div>
 
-            <!-- Global render behavior (moved to bottom since it affects all renders) -->
-            <div class="section" id="render-behavior-section">
-                <h4>Render behavior</h4>
-                <div class="row" id="autoscale-row">
-                    <span class="row-label">Scale</span>
-                    <label><input type="checkbox" id="autoscaleOnRender" checked> Autoscale on Render</label>
-                </div>
             </div>
 
-            <div class="section">
-                <div class="row action-button-row" id="hist-action-row">
-                    <button id="render-hist" class="btn-primary">Render</button>
-                    <button id="clear-hist" class="btn-secondary">Clear</button>
+            <div id="left-footer">
+                <!-- Global render behavior (pinned to the bottom of the left panel) -->
+                <div class="section" id="render-behavior-section">
+                    <h4>Render behavior</h4>
+                    <div class="row" id="autoscale-row">
+                        <span class="row-label">Scale</span>
+                        <label><input type="checkbox" id="autoscaleOnRender" checked> Autoscale on Render</label>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <div class="row action-button-row" id="hist-action-row">
+                        <button id="render-hist" class="btn-primary">Render</button>
+                        <button id="clear-hist" class="btn-secondary">Clear</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -7728,6 +8550,13 @@
     <script>
         let CACHED_SUMMARY = null; // { headers: string[], rows: object[] }
         let LOCAL_SUMMARY = null;   // { headers: string[], rows: object[], name?: string }
+        let LOCAL_SUMMARY_TOKEN = null;
+        let CACHED_EVENT_TO_EVENT_DT_RAW = null;
+        const HISTOGRAM_SESSION_SUMMARIES = new Map();
+        const SUMMARY_RUNTIME_KEY = '__summaryRuntime';
+        const SUMMARY_ROW_INDEX_KEY = '__summaryRowIndex';
+        const LARGE_HISTOGRAM_POINT_THRESHOLD = 120000;
+        const LARGE_HEATMAP_POINT_THRESHOLD = 180000;
         // Persisted zoom ranges for 2D plots
         let LAST_X_RANGE = null; // [min, max] or null
         let LAST_Y_RANGE = null; // [min, max] or null
@@ -7736,6 +8565,263 @@
         let LAST_META_MAIN = '';
         let LAST_META_SELECTION = null;
         let LAST_META_SELECTION_PLACEHOLDER = 'Use lasso/select on the 2D plot to inspect a subset.';
+
+        function parseHistogramNumericValue(value) {
+            if (value === null || value === undefined) return NaN;
+            const raw = typeof value === 'string' ? value.trim() : value;
+            if (raw === '') return NaN;
+            const parsed = Number(raw);
+            return Number.isFinite(parsed) ? parsed : NaN;
+        }
+
+        function setSummaryRowIndex(row, index) {
+            if (!row || typeof row !== 'object') return;
+            const current = row[SUMMARY_ROW_INDEX_KEY];
+            if (current === index) return;
+            Object.defineProperty(row, SUMMARY_ROW_INDEX_KEY, {
+                value: index,
+                writable: true,
+                configurable: true,
+                enumerable: false,
+            });
+        }
+
+        function createEmptySummaryRuntime(headers = []) {
+            const columns = Object.create(null);
+            const minMax = Object.create(null);
+            headers.forEach((header) => {
+                columns[header] = new Float64Array(0);
+                minMax[header] = null;
+            });
+            return {
+                columns,
+                minMax,
+                periodCache: Object.create(null),
+            };
+        }
+
+        function attachSummaryRuntime(dataset, builders = null, minMaxSeed = null) {
+            if (!dataset || !Array.isArray(dataset.headers) || !Array.isArray(dataset.rows)) {
+                return { headers: [], rows: [] };
+            }
+
+            const headers = dataset.headers;
+            const rows = dataset.rows;
+            if (!headers.length || !rows.length) {
+                Object.defineProperty(dataset, SUMMARY_RUNTIME_KEY, {
+                    value: createEmptySummaryRuntime(headers),
+                    writable: true,
+                    configurable: true,
+                    enumerable: false,
+                });
+                return dataset;
+            }
+
+            const runtime = {
+                columns: Object.create(null),
+                minMax: Object.create(null),
+                periodCache: Object.create(null),
+            };
+
+            const localBuilders = builders || Object.create(null);
+            if (!builders) {
+                headers.forEach((header) => {
+                    localBuilders[header] = new Array(rows.length);
+                    runtime.minMax[header] = { min: Infinity, max: -Infinity, count: 0 };
+                });
+                for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+                    const row = rows[rowIndex] || {};
+                    setSummaryRowIndex(row, rowIndex);
+                    for (const header of headers) {
+                        const value = parseHistogramNumericValue(row[header]);
+                        localBuilders[header][rowIndex] = Number.isFinite(value) ? value : NaN;
+                        if (!Number.isFinite(value)) continue;
+                        const stats = runtime.minMax[header];
+                        stats.count += 1;
+                        if (value < stats.min) stats.min = value;
+                        if (value > stats.max) stats.max = value;
+                    }
+                }
+            } else {
+                for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+                    setSummaryRowIndex(rows[rowIndex], rowIndex);
+                }
+                headers.forEach((header) => {
+                    const seeded = minMaxSeed && minMaxSeed[header] ? minMaxSeed[header] : null;
+                    runtime.minMax[header] = seeded && seeded.count
+                        ? { min: seeded.min, max: seeded.max, count: seeded.count }
+                        : { min: Infinity, max: -Infinity, count: 0 };
+                });
+            }
+
+            headers.forEach((header) => {
+                const source = Array.isArray(localBuilders[header]) ? localBuilders[header] : [];
+                runtime.columns[header] = Float64Array.from(source);
+                const stats = runtime.minMax[header];
+                runtime.minMax[header] = (stats && stats.count)
+                    ? { min: stats.min, max: stats.max, count: stats.count }
+                    : null;
+            });
+
+            Object.defineProperty(dataset, SUMMARY_RUNTIME_KEY, {
+                value: runtime,
+                writable: true,
+                configurable: true,
+                enumerable: false,
+            });
+            runtime._indicesSet = true;
+            return dataset;
+        }
+
+        function prepareSummaryDataset(dataset) {
+            if (!dataset || !Array.isArray(dataset.headers) || !Array.isArray(dataset.rows)) {
+                return { headers: [], rows: [] };
+            }
+            const runtime = dataset[SUMMARY_RUNTIME_KEY];
+            if (runtime && runtime.columns) {
+                // Only set row indices once (avoids O(n²) when called per-row)
+                if (!runtime._indicesSet) {
+                    for (let rowIndex = 0; rowIndex < dataset.rows.length; rowIndex++) {
+                        setSummaryRowIndex(dataset.rows[rowIndex], rowIndex);
+                    }
+                    runtime._indicesSet = true;
+                }
+                return dataset;
+            }
+            return attachSummaryRuntime(dataset);
+        }
+
+        function getSummaryRuntime(dataset) {
+            // Fast path: if runtime already attached, use it directly
+            const rt = dataset?.[SUMMARY_RUNTIME_KEY];
+            if (rt && rt.columns) return rt;
+            return prepareSummaryDataset(dataset)[SUMMARY_RUNTIME_KEY] || createEmptySummaryRuntime(dataset?.headers || []);
+        }
+
+        function getSummaryColumn(dataset, key) {
+            // Inline runtime access to avoid prepareSummaryDataset overhead in hot loops
+            const rt = dataset?.[SUMMARY_RUNTIME_KEY];
+            if (rt && rt.columns) return rt.columns[key] || null;
+            const runtime = getSummaryRuntime(dataset);
+            return runtime.columns?.[key] || null;
+        }
+
+        function getSummaryNumericValue(dataset, row, key) {
+            // Hot path: inline runtime+column access (avoids O(n²) indirection)
+            const rt = dataset?.[SUMMARY_RUNTIME_KEY];
+            const column = rt ? (rt.columns?.[key] || null) : getSummaryColumn(dataset, key);
+            if (!column) return NaN;
+            const rowIndex = row?.[SUMMARY_ROW_INDEX_KEY];
+            if (typeof rowIndex !== 'number' || rowIndex < 0 || rowIndex >= column.length) return NaN;
+            const value = column[rowIndex];
+            return Number.isFinite(value) ? value : NaN;
+        }
+
+        function getSummaryNumericValueByIndex(dataset, rowIndex, key) {
+            const rt = dataset?.[SUMMARY_RUNTIME_KEY];
+            const column = rt ? (rt.columns?.[key] || null) : getSummaryColumn(dataset, key);
+            if (!column || typeof rowIndex !== 'number' || rowIndex < 0 || rowIndex >= column.length) return NaN;
+            const value = column[rowIndex];
+            return Number.isFinite(value) ? value : NaN;
+        }
+
+        function getSummaryColumnBounds(dataset, key, rows = null) {
+            if (!dataset || !key) return null;
+            const runtime = getSummaryRuntime(dataset);
+            if (!rows || rows === dataset.rows) return runtime.minMax?.[key] || null;
+            let min = Infinity;
+            let max = -Infinity;
+            let count = 0;
+            for (const row of rows) {
+                const value = getSummaryNumericValue(dataset, row, key);
+                if (!Number.isFinite(value)) continue;
+                if (value < min) min = value;
+                if (value > max) max = value;
+                count += 1;
+            }
+            if (!count) return null;
+            return { min, max, count };
+        }
+
+        function shouldUsePreBinned1D(pointCount) {
+            return pointCount >= LARGE_HISTOGRAM_POINT_THRESHOLD;
+        }
+
+        function shouldUsePreBinned2D(pointCount) {
+            return pointCount >= LARGE_HEATMAP_POINT_THRESHOLD;
+        }
+
+        function normalizeHistogramBinCounts(counts, histnorm, binSize) {
+            const out = counts.slice();
+            const total = out.reduce((sum, value) => sum + value, 0);
+            if (!histnorm || !total) return out;
+            if (histnorm === 'probability') return out.map((value) => value / total);
+            if (histnorm === 'percent') return out.map((value) => (value / total) * 100);
+            if (histnorm === 'density') {
+                const safeSize = Number.isFinite(binSize) && binSize > 0 ? binSize : 1;
+                return out.map((value) => value / (total * safeSize));
+            }
+            return out;
+        }
+
+        function applyCumulativeHistogramCounts(counts) {
+            const out = counts.slice();
+            for (let index = 1; index < out.length; index++) out[index] += out[index - 1];
+            return out;
+        }
+
+        function buildPreBinned1DTrace(values, options = {}) {
+            const {
+                start,
+                end,
+                bins,
+                orientation = 'v',
+                color = '#1f77b4',
+                opacity = 1,
+                name = '',
+                histnorm = '',
+                cumulative = false,
+                showlegend = true,
+            } = options;
+            if (!Array.isArray(values) || !values.length || !Number.isFinite(start) || !Number.isFinite(end) || start === end) return null;
+            const safeBins = Math.max(1, bins | 0);
+            const size = (end - start) / safeBins;
+            const counts = new Array(safeBins).fill(0);
+            for (const value of values) {
+                if (!Number.isFinite(value) || value < start || value > end) continue;
+                let index = Math.floor((value - start) / size);
+                if (index === safeBins) index = safeBins - 1;
+                if (index < 0 || index >= safeBins) continue;
+                counts[index] += 1;
+            }
+            let measure = normalizeHistogramBinCounts(counts, histnorm, size);
+            if (cumulative) measure = applyCumulativeHistogramCounts(measure);
+            const centers = Array.from({ length: safeBins }, (_, index) => start + ((index + 0.5) * size));
+            const edges = Array.from({ length: safeBins }, (_, index) => [start + (index * size), start + ((index + 1) * size)]);
+            const trace = {
+                type: 'bar',
+                name,
+                opacity,
+                showlegend,
+                marker: { color },
+                customdata: edges,
+                hovertemplate: orientation === 'h'
+                    ? 'Bin %{customdata[0]:.6g} to %{customdata[1]:.6g}<br>Value %{x}<extra></extra>'
+                    : 'Bin %{customdata[0]:.6g} to %{customdata[1]:.6g}<br>Value %{y}<extra></extra>',
+            };
+            if (orientation === 'h') {
+                trace.orientation = 'h';
+                trace.x = measure;
+                trace.y = centers;
+                trace.width = size;
+            } else {
+                trace.orientation = 'v';
+                trace.x = centers;
+                trace.y = measure;
+                trace.width = size;
+            }
+            return trace;
+        }
 
         async function relayoutHistogramAppearance() {
             const gd = document.getElementById('histogram-plot');
@@ -7810,46 +8896,132 @@
             requestAnimationFrame(() => centerPlot(gd));
         }
 
-        // Robust CSV parser (handles quotes, commas in fields, CRLF/LF)
-        function parseCSV(text) {
-            if (typeof text !== 'string') return { headers: [], rows: [] };
-            let t = text.replace(/^\uFEFF/, ''); // strip BOM
-            const table = [];
-            let row = [];
-            let field = '';
-            let inQuotes = false;
-            for (let i = 0; i < t.length; i++) {
-                const c = t[i];
-                if (inQuotes) {
-                    if (c === '"') {
-                        const next = t[i + 1];
-                        if (next === '"') { field += '"'; i++; }
-                        else { inQuotes = false; }
-                    } else {
-                        field += c;
-                    }
-                } else {
-                    if (c === '"') inQuotes = true;
-                    else if (c === ',') { row.push(field); field = ''; }
-                    else if (c === '\r') { /* ignore, wait for \n */ }
-                    else if (c === '\n') { row.push(field); field = ''; table.push(row); row = []; }
-                    else { field += c; }
-                }
+        // ── Fast split-based CSV parser for clean scientific data (no quoted fields) ──
+        function parseCSVFast(source, name) {
+            // Use native split operations (~10-20× faster than char-by-char for 48MB+)
+            const lines = source.split('\n');
+            if (!lines.length) return prepareSummaryDataset({ headers: [], rows: [], name });
+
+            // Parse headers from first line
+            let headerLine = lines[0];
+            if (headerLine.charCodeAt(headerLine.length - 1) === 13) headerLine = headerLine.slice(0, -1);
+            const headers = headerLine.split(',');
+            const numCols = headers.length;
+            for (let h = 0; h < numCols; h++) headers[h] = headers[h].trim();
+
+            // Pre-allocate builder arrays with estimated capacity
+            const estRows = lines.length - 1;
+            const numericBuilders = Object.create(null);
+            const minMax = Object.create(null);
+            for (let h = 0; h < numCols; h++) {
+                const hdr = headers[h];
+                numericBuilders[hdr] = new Array(estRows);
+                minMax[hdr] = { min: Infinity, max: -Infinity, count: 0 };
             }
-            // flush last
-            row.push(field);
-            if (row.length > 1 || (row.length === 1 && row[0] !== '')) table.push(row);
-            if (!table.length) return { headers: [], rows: [] };
-            const headers = table[0].map(h => String(h).trim());
-            const rows = [];
-            for (let i = 1; i < table.length; i++) {
-                const r = table[i];
-                if (!r || !r.length) continue;
+
+            const rows = new Array(estRows);
+            let rowCount = 0;
+
+            for (let i = 1; i < lines.length; i++) {
+                let line = lines[i];
+                if (line.charCodeAt(line.length - 1) === 13) line = line.slice(0, -1);
+                if (line.length === 0) continue;
+
+                const fields = line.split(',');
                 const obj = {};
-                headers.forEach((h, j) => { obj[h] = (r[j] !== undefined) ? String(r[j]).trim() : ''; });
+                for (let j = 0; j < numCols; j++) {
+                    const hdr = headers[j];
+                    const raw = j < fields.length ? fields[j] : '';
+                    // Parse with unary +  (fastest numeric conversion)
+                    const numeric = +raw;
+                    const valid = raw.length > 0 && Number.isFinite(numeric);
+                    numericBuilders[hdr][rowCount] = valid ? numeric : NaN;
+                    obj[hdr] = raw;
+                    if (valid) {
+                        const stats = minMax[hdr];
+                        stats.count++;
+                        if (numeric < stats.min) stats.min = numeric;
+                        if (numeric > stats.max) stats.max = numeric;
+                    }
+                }
+                rows[rowCount++] = obj;
+            }
+
+            // Trim pre-allocated arrays to actual size
+            rows.length = rowCount;
+            for (let h = 0; h < numCols; h++) {
+                numericBuilders[headers[h]].length = rowCount;
+            }
+
+            return attachSummaryRuntime({ headers, rows, name }, numericBuilders, minMax);
+        }
+
+        // ── Fallback: char-by-char CSV parser for quoted/complex fields ──
+        function parseCSVQuoted(source, name) {
+            let headers = null;
+            const rows = [];
+            const numericBuilders = Object.create(null);
+            const minMax = Object.create(null);
+            let field = '';
+            let row = [];
+            let inQuotes = false;
+
+            function initHeaders(headerRow) {
+                headers = headerRow.map((header) => String(header).trim());
+                headers.forEach((header) => {
+                    numericBuilders[header] = [];
+                    minMax[header] = { min: Infinity, max: -Infinity, count: 0 };
+                });
+            }
+
+            function pushRow(values) {
+                if (!headers) { initHeaders(values); return; }
+                if (!values.length || (values.length === 1 && String(values[0]).trim() === '')) return;
+                const obj = {};
+                for (let index = 0; index < headers.length; index++) {
+                    const header = headers[index];
+                    const raw = values[index] !== undefined ? String(values[index]).trim() : '';
+                    obj[header] = raw;
+                    const numeric = parseHistogramNumericValue(raw);
+                    numericBuilders[header].push(Number.isFinite(numeric) ? numeric : NaN);
+                    if (!Number.isFinite(numeric)) continue;
+                    const stats = minMax[header];
+                    stats.count += 1;
+                    if (numeric < stats.min) stats.min = numeric;
+                    if (numeric > stats.max) stats.max = numeric;
+                }
                 rows.push(obj);
             }
-            return { headers, rows };
+
+            for (let index = 0; index < source.length; index++) {
+                const char = source[index];
+                if (inQuotes) {
+                    if (char === '"') {
+                        const next = source[index + 1];
+                        if (next === '"') { field += '"'; index += 1; }
+                        else inQuotes = false;
+                    } else { field += char; }
+                    continue;
+                }
+                if (char === '"') inQuotes = true;
+                else if (char === ',') { row.push(field); field = ''; }
+                else if (char === '\r') continue;
+                else if (char === '\n') { row.push(field); pushRow(row); row = []; field = ''; }
+                else field += char;
+            }
+            row.push(field);
+            if (row.length > 1 || (row.length === 1 && row[0] !== '')) pushRow(row);
+
+            return attachSummaryRuntime({ headers: headers || [], rows, name }, numericBuilders, minMax);
+        }
+
+        // Robust CSV parser: fast path for clean scientific data, fallback for quoted fields
+        function parseCSV(text, name = '') {
+            if (typeof text !== 'string') return prepareSummaryDataset({ headers: [], rows: [], name });
+            const source = text.charCodeAt(0) === 0xFEFF ? text.slice(1) : text;
+            // Fast path: no quotes means no escaped commas/newlines — use split-based parser
+            if (source.indexOf('"') === -1) return parseCSVFast(source, name);
+            return parseCSVQuoted(source, name);
         }
 
         // Advanced features available in the UI (rendered in dropdowns as bold)
@@ -7973,7 +9145,8 @@
         }
 
         // Build allowed C4 event_ids that have a C3 within ±windowNs in the same trace (absolute time)
-        function buildC3AllowedEventIds(headers, rows, windowNs) {
+        function buildC3AllowedEventIds(headers, rows, windowNs, dataset = null) {
+            const summaryDataset = dataset || prepareSummaryDataset({ headers, rows });
             const chanKey = getChannelKey(headers);
             const eidCandidates = ['event_id', 'EventID', 'Event_Id', 'id', 'Id'];
             const eidKey = eidCandidates.find(k => headers.includes(k)) || null;
@@ -7997,13 +9170,13 @@
                 const ch = String(r[chanKey] || '').trim().toUpperCase();
                 if (ch !== 'C3' && ch !== 'C4') continue;
                 const tr = String(r[traceKey] || '').trim();
-                const cyc = cycleKey ? parseFloat(r[cycleKey]) : 0;
-                let tns = startKey ? parseFloat(r[startKey]) : NaN;
+                const cyc = cycleKey ? getSummaryNumericValue(summaryDataset, r, cycleKey) : 0;
+                let tns = startKey ? getSummaryNumericValue(summaryDataset, r, startKey) : NaN;
                 // Fallback to delta_t_ns if event start is missing
                 if (!Number.isFinite(tns)) {
                     const dKey = headers.includes('delta_t_ns') ? 'delta_t_ns' : (headers.includes('deltaT_ns') ? 'deltaT_ns' : null);
                     if (dKey) {
-                        const dv = parseFloat(r[dKey]);
+                        const dv = getSummaryNumericValue(summaryDataset, r, dKey);
                         if (Number.isFinite(dv)) tns = dv + 0; // will add cycleNs below
                     }
                 }
@@ -8076,7 +9249,8 @@
             const mid = Math.floor(n / 2);
             const median = (n % 2 === 0) ? ((values[mid - 1] + values[mid]) / 2) : values[mid];
             const variance = Math.max(0, (sumSq / n) - (mean * mean));
-            return { n, min, max, mean, median, stdDev: Math.sqrt(variance) };
+            const rms = Math.sqrt(sumSq / n);
+            return { n, min, max, mean, median, stdDev: Math.sqrt(variance), rms };
         }
 
         function isStructuredMetaContent(content) {
@@ -8116,6 +9290,7 @@
                 mean: statBlock.mean,
                 median: statBlock.median,
                 stdDev: statBlock.stdDev,
+                rms: statBlock.rms,
             };
         }
 
@@ -8150,6 +9325,9 @@
                 return;
             }
 
+            const cardKey = container.dataset.metaBody || 'main';
+            const overlayOn = !!STATS_OVERLAY[cardKey];
+
             container.classList.add('has-grid');
             container.replaceChildren();
 
@@ -8176,9 +9354,30 @@
                         ['Mean', formatMetaNumber(entry.mean)],
                         ['Median', formatMetaNumber(entry.median)],
                         ['Std dev', formatMetaNumber(entry.stdDev)],
+                        ['RMS', formatMetaNumber(entry.rms)],
                     ].forEach(([label, value]) => {
                         const row = document.createElement('div');
                         row.className = 'meta-stat-row';
+
+                        if (overlayOn) {
+                            row.classList.add('has-overlay-cb');
+                            const cbKey = cardKey + ':' + (entry.label || '') + ':' + label;
+                            const cb = document.createElement('input');
+                            cb.type = 'checkbox';
+                            cb.className = 'meta-stat-overlay-cb';
+                            const wasChecked = !!STATS_OVERLAY.checked[cbKey];
+                            cb.checked = wasChecked;
+                            if (wasChecked) {
+                                STATS_OVERLAY.checked[cbKey] = { label, value, series: entry.label || '', card: cardKey };
+                            }
+                            cb.dataset.overlayKey = cbKey;
+                            cb.dataset.overlayLabel = label;
+                            cb.dataset.overlayValue = value;
+                            cb.dataset.overlayCard = cardKey;
+                            cb.dataset.overlaySeries = entry.label || '';
+                            cb.addEventListener('change', onStatsOverlayCbChange);
+                            row.appendChild(cb);
+                        }
 
                         const labelEl = document.createElement('span');
                         labelEl.className = 'meta-stat-label';
@@ -8213,6 +9412,190 @@
             }
             container.classList.remove('has-grid');
             container.textContent = normalizeMetaContent(content).trim() || fallbackText;
+        }
+
+        /* --- Stats overlay: toggle, checkbox handlers, annotation sync --- */
+
+        function onStatsOverlayToggle(e) {
+            const input = e.currentTarget.querySelector('input[data-overlay-toggle]');
+            if (!input) return;
+            const cardKey = input.dataset.overlayToggle;
+            STATS_OVERLAY[cardKey] = input.checked;
+            if (!input.checked) {
+                Object.keys(STATS_OVERLAY.checked).forEach((k) => {
+                    if (k.startsWith(cardKey + ':')) delete STATS_OVERLAY.checked[k];
+                });
+            }
+            renderHistogramMeta();
+            scheduleStatsOverlaySync();
+        }
+
+        function onStatsOverlayCbChange(e) {
+            const cb = e.currentTarget;
+            const key = cb.dataset.overlayKey;
+            if (cb.checked) {
+                STATS_OVERLAY.checked[key] = {
+                    label: cb.dataset.overlayLabel,
+                    value: cb.dataset.overlayValue,
+                    series: cb.dataset.overlaySeries,
+                    card: cb.dataset.overlayCard,
+                };
+            } else {
+                delete STATS_OVERLAY.checked[key];
+            }
+            scheduleStatsOverlaySync();
+        }
+
+        function scheduleStatsOverlaySync() {
+            cancelAnimationFrame(_statsOverlaySyncTimer);
+            _statsOverlaySyncTimer = requestAnimationFrame(() => syncStatsOverlayToPlot());
+        }
+
+        function formatStatsOverlayDisplayValue(value) {
+            const raw = String(value ?? '').trim();
+            if (!raw) return '';
+            const numeric = Number(raw.replace(/,/g, ''));
+            if (!Number.isFinite(numeric)) return raw;
+            return new Intl.NumberFormat('en-US', {
+                minimumFractionDigits: 1,
+                maximumFractionDigits: 1,
+            }).format(numeric);
+        }
+
+        function getStatsOverlayEntriesInPanelOrder() {
+            const orderedInputs = Array.from(document.querySelectorAll('.meta-stat-overlay-cb:checked'));
+            if (orderedInputs.length) {
+                return orderedInputs.map((input) => ({
+                    label: input.dataset.overlayLabel || '',
+                    value: input.dataset.overlayValue || '',
+                    series: input.dataset.overlaySeries || '',
+                    card: input.dataset.overlayCard || '',
+                }));
+            }
+            return Object.values(STATS_OVERLAY.checked);
+        }
+
+        function buildStatsOverlaySections() {
+            const entries = getStatsOverlayEntriesInPanelOrder();
+            if (!entries.length) return [];
+            const toRows = (cardName) => entries
+                .filter((entry) => entry.card === cardName)
+                .map((entry) => ({
+                    label: `${entry.series ? entry.series + ' ' : ''}${entry.label}`,
+                    value: formatStatsOverlayDisplayValue(entry.value),
+                }));
+            const mainRows = toRows('main');
+            const selRows = toRows('selection');
+            return [
+                mainRows.length ? { title: 'Plot Stats', rows: mainRows } : null,
+                selRows.length ? { title: 'Selection Stats', rows: selRows } : null,
+            ].filter(Boolean);
+        }
+
+        function getHistogramStatsOverlayElement(gd) {
+            if (!gd) return null;
+            let overlay = gd.querySelector('.hist-stats-overlay');
+            if (overlay) return overlay;
+            overlay = document.createElement('div');
+            overlay.className = 'hist-stats-overlay is-hidden';
+            overlay.setAttribute('aria-hidden', 'true');
+            gd.appendChild(overlay);
+            bindHistogramOverlayPositioning(gd);
+            return overlay;
+        }
+
+        function getHistogramPlotFrameDividers(gd) {
+            if (!gd) return null;
+            let top = gd.querySelector('.hist-plot-frame-divider--top');
+            let right = gd.querySelector('.hist-plot-frame-divider--right');
+            if (!top) {
+                top = document.createElement('div');
+                top.className = 'hist-plot-frame-divider hist-plot-frame-divider--top';
+                gd.appendChild(top);
+            }
+            if (!right) {
+                right = document.createElement('div');
+                right.className = 'hist-plot-frame-divider hist-plot-frame-divider--right';
+                gd.appendChild(right);
+            }
+            bindHistogramOverlayPositioning(gd);
+            return { top, right };
+        }
+
+        function bindHistogramOverlayPositioning(gd) {
+            if (!gd || gd.__histOverlayPositioningBound || typeof gd.on !== 'function') return;
+            const reposition = () => {
+                requestAnimationFrame(() => {
+                    const currentOverlay = gd.querySelector('.hist-stats-overlay');
+                    if (currentOverlay && !currentOverlay.classList.contains('is-hidden')) {
+                        positionHistogramStatsOverlay(gd, currentOverlay);
+                    }
+                    positionHistogramPlotFrameDividers(gd);
+                });
+            };
+            gd.on('plotly_relayout', reposition);
+            gd.on('plotly_afterplot', reposition);
+            gd.__histOverlayPositioningBound = true;
+        }
+
+        function positionHistogramStatsOverlay(gd, overlay) {
+            if (!gd || !overlay) return;
+            const size = gd?._fullLayout?._size;
+            if (!size || !Number.isFinite(size.l) || !Number.isFinite(size.t) || !Number.isFinite(size.w)) return;
+            const plotRight = size.l + size.w;
+            const desiredGap = 14;
+            const overlayWidth = overlay.offsetWidth || 0;
+            const left = Math.max(8, plotRight - overlayWidth - desiredGap);
+            const top = Math.max(8, size.t + desiredGap);
+            overlay.style.left = `${left}px`;
+            overlay.style.top = `${top}px`;
+        }
+
+        function positionHistogramPlotFrameDividers(gd) {
+            if (!gd) return;
+            const size = gd?._fullLayout?._size;
+            const dividers = getHistogramPlotFrameDividers(gd);
+            if (!size || !dividers || !Number.isFinite(size.l) || !Number.isFinite(size.t) || !Number.isFinite(size.w) || !Number.isFinite(size.h)) return;
+            dividers.top.style.left = `${size.l}px`;
+            dividers.top.style.top = `${size.t}px`;
+            dividers.top.style.width = `${size.w}px`;
+            dividers.right.style.left = `${size.l + size.w}px`;
+            dividers.right.style.top = `${size.t}px`;
+            dividers.right.style.height = `${size.h}px`;
+        }
+
+        function buildStatsOverlayHtml(sections) {
+            return sections.map((section, index) => {
+                const rowsHtml = section.rows.map((row) => (
+                    '<div class="hist-stats-overlay-row">'
+                    + '<div class="hist-stats-overlay-label">' + escapeHistogramTextHtml(row.label) + '</div>'
+                    + '<div class="hist-stats-overlay-value">' + escapeHistogramTextHtml(row.value) + '</div>'
+                    + '</div>'
+                )).join('');
+                const sectionDivider = index > 0 ? '<div class="hist-stats-overlay-rule hist-stats-overlay-rule--section" aria-hidden="true"></div>' : '';
+                return sectionDivider
+                    + '<div class="hist-stats-overlay-section">'
+                    + '<div class="hist-stats-overlay-title">' + escapeHistogramTextHtml(section.title) + '</div>'
+                    + '<div class="hist-stats-overlay-rule" aria-hidden="true"></div>'
+                    + rowsHtml
+                    + '</div>';
+            }).join('');
+        }
+
+        function syncStatsOverlayToPlot() {
+            const gd = document.getElementById('histogram-plot');
+            if (!gd) return;
+            const overlay = getHistogramStatsOverlayElement(gd);
+            if (!overlay) return;
+            const sections = buildStatsOverlaySections();
+            if (!sections.length) {
+                overlay.classList.add('is-hidden');
+                overlay.innerHTML = '';
+                return;
+            }
+            overlay.innerHTML = buildStatsOverlayHtml(sections);
+            overlay.classList.remove('is-hidden');
+            requestAnimationFrame(() => positionHistogramStatsOverlay(gd, overlay));
         }
 
         function clearHistogramProjection() {
@@ -8674,12 +10057,12 @@
                 mainCard = document.createElement('section');
                 mainCard.className = 'meta-card';
                 mainCard.dataset.metaCard = 'main';
-                mainCard.innerHTML = '<div class="meta-card-title">Plot Statistics</div><div class="meta-card-body" data-meta-body="main"></div>';
+                mainCard.innerHTML = '<div class="meta-card-title"><span>Plot Stats</span><label class="meta-overlay-toggle" title="Overlay stats on plot"><input type="checkbox" data-overlay-toggle="main"><span class="meta-overlay-toggle-track"></span></label></div><div class="meta-card-body" data-meta-body="main"></div>';
 
                 selCard = document.createElement('section');
                 selCard.className = 'meta-card is-empty';
                 selCard.dataset.metaCard = 'selection';
-                selCard.innerHTML = '<div class="meta-card-title">Selection Statistics</div><div class="meta-card-body" data-meta-body="selection"></div>';
+                selCard.innerHTML = '<div class="meta-card-title"><span>Selection Stats</span><label class="meta-overlay-toggle" title="Overlay stats on plot"><input type="checkbox" data-overlay-toggle="selection"><span class="meta-overlay-toggle-track"></span></label></div><div class="meta-card-body" data-meta-body="selection"></div>';
 
                 projectionCard = document.createElement('section');
                 projectionCard.className = 'meta-card is-empty';
@@ -8689,6 +10072,10 @@
                 panelStack.appendChild(mainCard);
                 panelStack.appendChild(selCard);
                 panelStack.appendChild(projectionCard);
+
+                // Wire overlay toggle listeners
+                mainCard.querySelector('.meta-overlay-toggle')?.addEventListener('change', onStatsOverlayToggle);
+                selCard.querySelector('.meta-overlay-toggle')?.addEventListener('change', onStatsOverlayToggle);
             }
 
             return {
@@ -8716,6 +10103,7 @@
             refs.mainCard.classList.toggle('is-empty', !hasMetaContent(mainContent));
             refs.selectionCard.classList.toggle('is-empty', !hasMetaContent(selectionContent));
             renderHistogramProjection();
+            if (Object.keys(STATS_OVERLAY.checked).length) scheduleStatsOverlaySync();
         }
 
         function setHistogramMeta(mainContent, selectionContent = null, selectionPlaceholder = LAST_META_SELECTION_PLACEHOLDER) {
@@ -8879,7 +10267,7 @@
             if (CACHED_SUMMARY) return CACHED_SUMMARY;
             const sel = document.getElementById('summarySource')?.value || 'auto';
             if (sel === 'custom' && LOCAL_SUMMARY) {
-                CACHED_SUMMARY = { headers: LOCAL_SUMMARY.headers, rows: LOCAL_SUMMARY.rows };
+                CACHED_SUMMARY = prepareSummaryDataset(LOCAL_SUMMARY);
                 return CACHED_SUMMARY;
             }
 
@@ -8909,10 +10297,13 @@
                 try {
                     const res = await fetch(url);
                     if (!res.ok) continue;
+                    showLoading();
                     const text = await res.text();
+                    // Yield to let browser paint spinner before heavy sync parse
+                    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
                     const parsed = parseCSV(text);
                     if (!parsed.headers.length || !parsed.rows.length) continue;
-                    CACHED_SUMMARY = parsed;
+                    CACHED_SUMMARY = prepareSummaryDataset(parsed);
                     return CACHED_SUMMARY;
                 } catch (_) { /* try next */ }
             }
@@ -8927,11 +10318,13 @@
 
         async function fetchEventToEventDtRaw() {
             // Loads the latest offline neighbor Δt CSV via server API
+            if (CACHED_EVENT_TO_EVENT_DT_RAW) return CACHED_EVENT_TO_EVENT_DT_RAW;
             try {
                 const res = await fetch('/api/event_to_event_dt_raw');
                 if (!res.ok) return { headers: [], rows: [] };
                 const text = await res.text();
-                return parseCSV(text);
+                CACHED_EVENT_TO_EVENT_DT_RAW = parseCSV(text, 'event_to_event_dt_raw');
+                return CACHED_EVENT_TO_EVENT_DT_RAW;
             } catch (e) {
                 return { headers: [], rows: [] };
             }
@@ -9117,15 +10510,18 @@
             const binsRow = document.getElementById('bins-row');
             const binsYLabel = document.getElementById('binsy-label');
             const binsYInput = document.getElementById('binsY');
+            const colorsSectionTitle = document.getElementById('colors-section-title');
             yRow.style.display = (mode === '2d') ? 'grid' : 'none';
             // Toggle 2D specific controls
             binsYLabel.style.display = (mode === '2d') ? 'block' : 'none';
             binsYInput.style.display = (mode === '2d') ? 'block' : 'none';
             binsRow.classList.toggle('control-canonical-row--double-split', mode === '2d');
             document.getElementById('range-y-row').style.display = (mode === '2d') ? 'grid' : 'none';
+            document.getElementById('plot-1d-color-row').style.display = (mode === '1d') ? 'grid' : 'none';
             document.getElementById('colorscale-row').style.display = (mode === '2d') ? 'grid' : 'none';
             document.getElementById('colorscale-toggles-row').style.display = (mode === '2d') ? 'grid' : 'none';
             document.getElementById('range-z-row').style.display = (mode === '2d') ? 'grid' : 'none';
+            if (colorsSectionTitle) colorsSectionTitle.textContent = mode === '1d' ? 'Color' : 'Colors (2D)';
             // 1D only controls
             document.getElementById('orient-cum-row').style.display = (mode === '1d') ? 'grid' : 'none';
             document.getElementById('norm-row').style.display = (mode === '1d') ? 'grid' : 'none';
@@ -9172,6 +10568,8 @@
             const binsYInput = document.getElementById('binsY');
             const xRangeRow = document.getElementById('range-x-row');
             const yRangeRow = document.getElementById('range-y-row');
+            const plotColorRow = document.getElementById('plot-1d-color-row');
+            const colorsSectionTitle = document.getElementById('colors-section-title');
             if (mode === '2d') {
                 binsXLabel.style.display = 'block';
                 binsXInput.style.display = 'block';
@@ -9180,10 +10578,14 @@
                 binsRow.classList.add('control-canonical-row--double-split');
                 xRangeRow.style.display = 'grid';
                 yRangeRow.style.display = 'grid';
+                if (plotColorRow) plotColorRow.style.display = 'none';
+                if (colorsSectionTitle) colorsSectionTitle.textContent = 'Colors (2D)';
                 document.getElementById('colorscale-row').style.display = 'grid';
                 document.getElementById('colorscale-toggles-row').style.display = 'grid';
                 document.getElementById('range-z-row').style.display = 'grid';
             } else {
+                if (plotColorRow) plotColorRow.style.display = 'grid';
+                if (colorsSectionTitle) colorsSectionTitle.textContent = 'Color';
                 if (orient === 'h') {
                     // Data along Y axis
                     binsXLabel.style.display = 'none';
@@ -9267,16 +10669,19 @@
             const mode = document.querySelector('input[name="hist-type"]:checked').value;
             const xLabel = document.getElementById('axis-x')?.value || 'X';
             const yLabel = document.getElementById('axis-y')?.value || ((mode === '1d') ? 'Count' : 'Y');
-            const title = (mode === '1d') ? `1D Histogram — ${xLabel}` : `2D Histogram — ${xLabel} vs ${yLabel}`;
+            const title = (mode === '1d') ? `${xLabel}` : `${xLabel} vs ${yLabel}`;
             const orientation = document.getElementById('orientation')?.value || 'v';
             const histnorm = document.getElementById('histnorm')?.value || '';
             const layout = { title, xaxis: { title: xLabel }, yaxis: { title: (mode === '1d') ? 'Count' : yLabel }, margin: { t: HISTOGRAM_LAYOUT_TOP_MARGIN } };
             applyPlotHostSizing();
+            applyHistogramLayoutSizing(layout);
             applyHistogramLayoutAppearance(layout, mode, xLabel, yLabel, orientation, histnorm);
             applyEmptyPlaceholderAppearance(layout, mode);
             if (window.Plotly && el) {
+                const baseAnnotationCount = applyHistogramDrawStateToLayout(layout);
                 // Draw an empty frame to reserve space
                 await Plotly.newPlot(el, [], layout, buildPlotConfig(el));
+                el.__histBaseAnnotationCount = baseAnnotationCount;
                 wireEditablePlotText(el);
                 wireHistogramSelection(el, mode, xLabel, yLabel);
                 bindMarkerInteractions(el);
@@ -9285,6 +10690,7 @@
                 bindMarkerInteractions(el); redrawMarkers(el);
                 requestAnimationFrame(() => syncRightPanelChrome());
                 requestAnimationFrame(()=>centerPlot(el));
+                requestAnimationFrame(() => positionHistogramPlotFrameDividers(el));
             }
         }
 
@@ -9318,18 +10724,24 @@
         }
 
         // Compute dataset period (ns) from summary headers/rows; prefer cycle_period_ns, fallback to 40ns
-        function computeDatasetPeriodNs(headers, rows) {
+        function computeDatasetPeriodNs(dataset) {
+            const summaryDataset = prepareSummaryDataset(dataset);
+            const headers = summaryDataset.headers || [];
+            const runtime = getSummaryRuntime(summaryDataset);
+            if (Number.isFinite(runtime.periodCache?.datasetPeriodNs)) return runtime.periodCache.datasetPeriodNs;
             const periodKeys = ['cycle_period_ns', 'CyclePeriodNs', 'period_ns', 'PeriodNs'];
             const pKey = periodKeys.find(k => headers.includes(k));
             if (pKey) {
                 const vals = [];
-                for (let i = 0; i < rows.length; i++) {
-                    const v = parseFloat(rows[i][pKey]);
+                const column = getSummaryColumn(summaryDataset, pKey);
+                for (let i = 0; column && i < column.length; i++) {
+                    const v = column[i];
                     if (Number.isFinite(v) && v > 0) vals.push(v);
                 }
                 if (vals.length) {
                     vals.sort((a, b) => a - b);
                     const med = vals[Math.floor(vals.length / 2)];
+                    runtime.periodCache.datasetPeriodNs = med;
                     return med;
                 }
             }
@@ -9338,15 +10750,18 @@
             const aKey = altKeys.find(k => headers.includes(k));
             if (aKey) {
                 const vals = [];
-                for (let i = 0; i < rows.length; i++) {
-                    const v = parseFloat(rows[i][aKey]);
+                const column = getSummaryColumn(summaryDataset, aKey);
+                for (let i = 0; column && i < column.length; i++) {
+                    const v = column[i];
                     if (Number.isFinite(v) && v > 0) vals.push(v);
                 }
                 if (vals.length) {
                     vals.sort((a, b) => a - b);
-                    return vals[Math.floor(vals.length / 2)];
+                    runtime.periodCache.datasetPeriodNs = vals[Math.floor(vals.length / 2)];
+                    return runtime.periodCache.datasetPeriodNs;
                 }
             }
+            runtime.periodCache.datasetPeriodNs = 40.0;
             return 40.0; // default 40 ns if not detectable
         }
 
@@ -9364,7 +10779,8 @@
         // Modes:
         // - NxN pairs within each (channel, trace) group; optional excludeSelfPairs
         // - neighborOnly: only t[i] - t[i-1] within each group (sorted by time)
-    function computeEventToEventDiffs(headers, rows, opts = {}) {
+        function computeEventToEventDiffs(headers, rows, opts = {}) {
+            const dataset = opts.dataset || prepareSummaryDataset({ headers, rows });
             // Prefer 'delta_t_ns' column; fall back to a close variant if present
             const dtKey = headers.includes('delta_t_ns') ? 'delta_t_ns'
                 : (headers.includes('deltaT_ns') ? 'deltaT_ns'
@@ -9389,7 +10805,7 @@
             // Build per-group arrays of timestamps (ns)
             const groups = new Map();
             for (const r of rows) {
-                const t = parseFloat(r[dtKey]);
+                const t = getSummaryNumericValue(dataset, r, dtKey);
                 if (!Number.isFinite(t)) continue;
                 const chv = chanKey ? String(r[chanKey]).trim() : '';
                 const trv = traceKey ? String(r[traceKey]).trim() : '';
@@ -9402,7 +10818,7 @@
                 // Determine F-range membership for this event
                 let inRange = true;
                 if (fKey) {
-                    const fv = parseFloat(r[fKey]);
+                    const fv = getSummaryNumericValue(dataset, r, fKey);
                     if (!Number.isFinite(fv)) inRange = false;
                     if (Number.isFinite(fMin) && fv < fMin) inRange = false;
                     if (Number.isFinite(fMax) && fv > fMax) inRange = false;
@@ -9653,17 +11069,19 @@
                 const reverseColorscale = !!document.getElementById('reverseColorscale')?.checked;
                 const zMin = getStoredNumericValue('zMin');
                 const zMax = getStoredNumericValue('zMax');
+                const plot1dColor = getHistogramOneDimensionalPlotColor();
 
                 if (!PRESERVE_ON_NEXT_RENDER) {
                     clearTransientPlotTextState();
                     syncPlotSettingsForm(mode, xKey, yKey, orientation, histnorm);
                 }
 
-                const { headers, rows } = await fetchSmoothedSummary();
+                const summaryDataset = await fetchSmoothedSummary();
+                const { headers, rows } = summaryDataset;
                 if (!headers.length || !rows.length) { setHistogramMeta('No summary data available.'); return; }
 
                 // Detect dataset period once per render
-                const datasetPeriodNs = computeDatasetPeriodNs(headers, rows);
+                const datasetPeriodNs = computeDatasetPeriodNs(summaryDataset);
                 const phaseShiftNs = parseFloat(document.getElementById('phaseShiftNs')?.value) || 0;
                 const wrapPhase = !!document.getElementById('wrapPhase')?.checked;
 
@@ -9683,7 +11101,7 @@
                 if (fSelVal === 'C3_Filter') {
                     // Compute allowed from the full dataset (not limited by channel selection),
                     // so C3 doesn't have to be selected for plotting to drive the filter.
-                    c3AllowedIds = buildC3AllowedEventIds(headers, rows, c3WindowNs);
+                    c3AllowedIds = buildC3AllowedEventIds(headers, rows, c3WindowNs, summaryDataset);
                     // Count C4 rows in current selection and how many are allowed
                     if (chanKey && sumEventIdKey) {
                         for (const r of frows) {
@@ -9735,13 +11153,13 @@
                                 const eid = String(r[sumEventIdKey] || '').trim();
                                 if (eid && c3AllowedIds.has(eid)) allowedRows.push(r); else rejectedRows.push(r);
                             }
-                            const diffsIn = computeEventToEventDiffs(headers, allowedRows, { excludeSelfPairs: excludeSelf, neighborOnly, limitWithinTrace, splitByFilter: false, maxAbsDt: DEFAULT_DT_LIMIT_NS }) || [];
-                            const diffsOut = grayOut1d ? (computeEventToEventDiffs(headers, rejectedRows, { excludeSelfPairs: excludeSelf, neighborOnly, limitWithinTrace, splitByFilter: false, maxAbsDt: DEFAULT_DT_LIMIT_NS }) || []) : [];
+                            const diffsIn = computeEventToEventDiffs(headers, allowedRows, { dataset: summaryDataset, excludeSelfPairs: excludeSelf, neighborOnly, limitWithinTrace, splitByFilter: false, maxAbsDt: DEFAULT_DT_LIMIT_NS }) || [];
+                            const diffsOut = grayOut1d ? (computeEventToEventDiffs(headers, rejectedRows, { dataset: summaryDataset, excludeSelfPairs: excludeSelf, neighborOnly, limitWithinTrace, splitByFilter: false, maxAbsDt: DEFAULT_DT_LIMIT_NS }) || []) : [];
                             for (const v of diffsIn) { if (Number.isFinite(xMinF) && v < xMinF) continue; if (Number.isFinite(xMaxF) && v > xMaxF) continue; inVals.push(v); }
                             for (const v of diffsOut) { if (Number.isFinite(xMinF) && v < xMinF) continue; if (Number.isFinite(xMaxF) && v > xMaxF) continue; outVals.push(v); }
                         } else {
                             const splitByFilter = grayOut1d && !!fKey && headers.includes(fKey);
-                            const diffs = computeEventToEventDiffs(headers, frows, { fKey, fMin: fMinF, fMax: fMaxF, excludeSelfPairs: excludeSelf, neighborOnly, limitWithinTrace, splitByFilter, maxAbsDt: DEFAULT_DT_LIMIT_NS });
+                            const diffs = computeEventToEventDiffs(headers, frows, { dataset: summaryDataset, fKey, fMin: fMinF, fMax: fMaxF, excludeSelfPairs: excludeSelf, neighborOnly, limitWithinTrace, splitByFilter, maxAbsDt: DEFAULT_DT_LIMIT_NS });
                             if (splitByFilter && diffs && typeof diffs === 'object' && diffs.in && diffs.out) {
                                 for (const v of diffs.in) { if (Number.isFinite(xMinF) && v < xMinF) continue; if (Number.isFinite(xMaxF) && v > xMaxF) continue; inVals.push(v); }
                                 for (const v of diffs.out) { if (Number.isFinite(xMinF) && v < xMinF) continue; if (Number.isFinite(xMaxF) && v > xMaxF) continue; outVals.push(v); }
@@ -9769,7 +11187,7 @@
                             for (const r of frows) {
                                 // If an F feature is selected and numeric, apply the F range
                                 if (fHas) {
-                                    const fv = parseFloat(r[fKey]);
+                                    const fv = getSummaryNumericValue(summaryDataset, r, fKey);
                                     if (!Number.isFinite(fv)) continue;
                                     if (Number.isFinite(fMinF) && fv < fMinF) continue;
                                     if (Number.isFinite(fMaxF) && fv > fMaxF) continue;
@@ -9798,7 +11216,7 @@
                             }
                             // Flatten neighbor dt columns
                             for (const c of neighCols) {
-                                const v = parseFloat(r[c]);
+                                const v = getSummaryNumericValue(dtRaw, r, c);
                                 if (!Number.isFinite(v)) continue;
                                 // Apply default cap, consistent with synthetic feature
                                 if (Number.isFinite(DEFAULT_DT_LIMIT_NS) && Math.abs(v) > DEFAULT_DT_LIMIT_NS) continue;
@@ -9823,7 +11241,7 @@
                                 const ch0 = String(r[chanKey] || '').trim().toUpperCase();
                                 if (ch0 !== 'C4') continue;
                             }
-                            let xv = parseFloat(r[xKey]);
+                            let xv = getSummaryNumericValue(summaryDataset, r, xKey);
                             if (!Number.isFinite(xv)) continue; // skip non-numeric
                             // Apply phase shift+wrap if time-based feature is selected
                             if (isPhaseShiftableKey(xKey)) {
@@ -9840,7 +11258,7 @@
                                 const eid = String(r[sumEventIdKey] || '').trim();
                                 eventIn = (ch === 'C4') && eid && c3AllowedIds.has(eid);
                             } else if (fKey) {
-                                const fv = parseFloat(r[fKey]);
+                                const fv = getSummaryNumericValue(summaryDataset, r, fKey);
                                 if (!Number.isFinite(fv)) {
                                     // Mark event as outside filter so it can appear in gray bucket.
                                     eventIn = false;
@@ -9873,7 +11291,7 @@
                         // Preserve plot and ranges; don't clear unless user explicitly resets via autoscale.
                         return;
                     }
-                    const traceMain = { type: 'histogram', marker: { color: getChannelColor('0') }, opacity: grayOut1d ? 0.85 : 1.0 };
+                    const traceMain = { type: 'histogram', marker: { color: plot1dColor }, opacity: grayOut1d ? 0.85 : 1.0 };
                     const traces = [];
                     let layout;
                     if (orientation === 'h') {
@@ -9883,11 +11301,11 @@
                             traceMain.y = inVals; traceMain.nbinsy = binsY;
                             if (histnorm) traceMain.histnorm = histnorm;
                             if (cumulative) traceMain.cumulative = { enabled: true };
-                            traceMain.marker = { color: getChannelColor('0') };
+                            traceMain.marker = { color: plot1dColor };
                             traceMain.hovertemplate = histogramHoverTemplate('h', histnorm);
                         }
                         layout = {
-                            title: `1D Histogram — ${xKey}`,
+                            title: `${xKey}`,
                             xaxis: { title: histnorm || 'Count' }, yaxis: { title: isDtFeature(xKey) ? 'Δt (ns)' : xKey },
                             bargap: 0.02, barmode: overlayUsed ? 'overlay' : (grayOut1d ? 'stack' : 'relative'), margin: { t: HISTOGRAM_LAYOUT_TOP_MARGIN }
                         };
@@ -9907,28 +11325,53 @@
                         if (!(Number.isFinite(yStart) && Number.isFinite(yEnd)) || yEnd === yStart) { yStart = (yStart || 0) - 0.5; yEnd = (yEnd || 0) + 0.5; }
                         const ySize = (yEnd - yStart) / Math.max(1, binsY);
                         if (!overlayUsed) {
-                            traceMain.ybins = { start: yStart, end: yEnd, size: ySize };
-                            traces.push(traceMain);
+                            if (shouldUsePreBinned1D(inVals.length)) {
+                                const trace = buildPreBinned1DTrace(inVals, {
+                                    start: yStart,
+                                    end: yEnd,
+                                    bins: binsY,
+                                    orientation: 'h',
+                                    color: plot1dColor,
+                                    opacity: grayOut1d ? 0.85 : 1.0,
+                                    name: traceMain.name || 'selected',
+                                    histnorm,
+                                    cumulative,
+                                    showlegend: !!traceMain.name,
+                                });
+                                if (trace) traces.push(trace);
+                            } else {
+                                traceMain.ybins = { start: yStart, end: yEnd, size: ySize };
+                                traces.push(traceMain);
+                            }
                         } else {
                             // Overlay: one trace per channel (stable colors and legend order)
                             const entries = Array.from(perChanIn.entries()).sort((a,b)=> a[0].localeCompare(b[0], undefined, { numeric: true }));
                             for (const [ch, arr] of entries) {
                                 if (!arr.length) continue;
-                                const t = { type: 'histogram', name: ch, y: arr, nbinsy: binsY, orientation: 'h', marker: { color: getChannelColor(ch) }, opacity: 0.65 };
-                                t.ybins = { start: yStart, end: yEnd, size: ySize };
-                                if (histnorm) t.histnorm = histnorm;
-                                if (cumulative) t.cumulative = { enabled: true };
-                                t.hovertemplate = histogramHoverTemplate('h', histnorm);
+                                const t = shouldUsePreBinned1D(arr.length)
+                                    ? buildPreBinned1DTrace(arr, { start: yStart, end: yEnd, bins: binsY, orientation: 'h', color: getChannelColor(ch), opacity: 0.65, name: ch, histnorm, cumulative })
+                                    : { type: 'histogram', name: ch, y: arr, nbinsy: binsY, orientation: 'h', marker: { color: getChannelColor(ch) }, opacity: 0.65 };
+                                if (!t) continue;
+                                if (t.type === 'histogram') {
+                                    t.ybins = { start: yStart, end: yEnd, size: ySize };
+                                    if (histnorm) t.histnorm = histnorm;
+                                    if (cumulative) t.cumulative = { enabled: true };
+                                    t.hovertemplate = histogramHoverTemplate('h', histnorm);
+                                }
                                 traces.push(t);
                             }
                         }
                         if (grayOut1d && outVals.length) {
-                            const grayTrace = { type: 'histogram', name: 'filtered', y: outVals, nbinsy: binsY, orientation: 'h', marker: { color: '#c4c4c4' }, opacity: 0.55 };
-                            if (histnorm) grayTrace.histnorm = histnorm;
-                            if (cumulative) grayTrace.cumulative = { enabled: true };
-                            grayTrace.ybins = { start: yStart, end: yEnd, size: ySize };
-                            grayTrace.hovertemplate = histogramHoverTemplate('h', histnorm);
-                            traces.push(grayTrace);
+                            const grayTrace = shouldUsePreBinned1D(outVals.length)
+                                ? buildPreBinned1DTrace(outVals, { start: yStart, end: yEnd, bins: binsY, orientation: 'h', color: '#c4c4c4', opacity: 0.55, name: 'filtered', histnorm, cumulative })
+                                : { type: 'histogram', name: 'filtered', y: outVals, nbinsy: binsY, orientation: 'h', marker: { color: '#c4c4c4' }, opacity: 0.55 };
+                            if (grayTrace?.type === 'histogram') {
+                                if (histnorm) grayTrace.histnorm = histnorm;
+                                if (cumulative) grayTrace.cumulative = { enabled: true };
+                                grayTrace.ybins = { start: yStart, end: yEnd, size: ySize };
+                                grayTrace.hovertemplate = histogramHoverTemplate('h', histnorm);
+                            }
+                            if (grayTrace) traces.push(grayTrace);
                         }
                     } else {
                         // Vertical: data along X, configure xbins to align traces
@@ -9937,11 +11380,11 @@
                             traceMain.x = inVals; traceMain.nbinsx = binsX;
                             if (histnorm) traceMain.histnorm = histnorm;
                             if (cumulative) traceMain.cumulative = { enabled: true };
-                            traceMain.marker = { color: getChannelColor('0') };
+                            traceMain.marker = { color: plot1dColor };
                             traceMain.hovertemplate = histogramHoverTemplate('v', histnorm);
                         }
                         layout = {
-                            title: `1D Histogram — ${xKey}`,
+                            title: `${xKey}`,
                             xaxis: { title: isDtFeature(xKey) ? 'Δt (ns)' : xKey }, yaxis: { title: histnorm || 'Count' },
                             bargap: 0.02, barmode: overlayUsed ? 'overlay' : (grayOut1d ? 'stack' : 'relative'), margin: { t: HISTOGRAM_LAYOUT_TOP_MARGIN }
                         };
@@ -9961,13 +11404,13 @@
                             for (const r of frows) {
                                 // Respect F-range on events
                                 if (fKey) {
-                                    const fv = parseFloat(r[fKey]);
+                                    const fv = getSummaryNumericValue(summaryDataset, r, fKey);
                                     if (!Number.isFinite(fv)) continue;
                                     if (Number.isFinite(fMinF) && fv < fMinF) continue;
                                     if (Number.isFinite(fMaxF) && fv > fMaxF) continue;
                                 }
                                 // Channel/trace grouping affects pairing, not min/max computation; min/max are global across selected events
-                                const v = parseFloat(r[dtKey]);
+                                const v = getSummaryNumericValue(summaryDataset, r, dtKey);
                                 if (!Number.isFinite(v)) continue;
                                 if (v < dtMin) dtMin = v;
                                 if (v > dtMax) dtMax = v;
@@ -9992,27 +11435,52 @@
                         if (!(Number.isFinite(xStart) && Number.isFinite(xEnd)) || xEnd === xStart) { xStart = (xStart || 0) - 0.5; xEnd = (xEnd || 0) + 0.5; }
                         const xSize = (xEnd - xStart) / Math.max(1, binsX);
                         if (!overlayUsed) {
-                            traceMain.xbins = { start: xStart, end: xEnd, size: xSize };
-                            traces.push(traceMain);
+                            if (shouldUsePreBinned1D(inVals.length)) {
+                                const trace = buildPreBinned1DTrace(inVals, {
+                                    start: xStart,
+                                    end: xEnd,
+                                    bins: binsX,
+                                    orientation: 'v',
+                                    color: plot1dColor,
+                                    opacity: grayOut1d ? 0.85 : 1.0,
+                                    name: traceMain.name || 'selected',
+                                    histnorm,
+                                    cumulative,
+                                    showlegend: !!traceMain.name,
+                                });
+                                if (trace) traces.push(trace);
+                            } else {
+                                traceMain.xbins = { start: xStart, end: xEnd, size: xSize };
+                                traces.push(traceMain);
+                            }
                         } else {
                             const entries = Array.from(perChanIn.entries()).sort((a,b)=> a[0].localeCompare(b[0], undefined, { numeric: true }));
                             for (const [ch, arr] of entries) {
                                 if (!arr.length) continue;
-                                const t = { type: 'histogram', name: ch, x: arr, nbinsx: binsX, orientation: 'v', marker: { color: getChannelColor(ch) }, opacity: 0.65 };
-                                t.xbins = { start: xStart, end: xEnd, size: xSize };
-                                if (histnorm) t.histnorm = histnorm;
-                                if (cumulative) t.cumulative = { enabled: true };
-                                t.hovertemplate = histogramHoverTemplate('v', histnorm);
+                                const t = shouldUsePreBinned1D(arr.length)
+                                    ? buildPreBinned1DTrace(arr, { start: xStart, end: xEnd, bins: binsX, orientation: 'v', color: getChannelColor(ch), opacity: 0.65, name: ch, histnorm, cumulative })
+                                    : { type: 'histogram', name: ch, x: arr, nbinsx: binsX, orientation: 'v', marker: { color: getChannelColor(ch) }, opacity: 0.65 };
+                                if (!t) continue;
+                                if (t.type === 'histogram') {
+                                    t.xbins = { start: xStart, end: xEnd, size: xSize };
+                                    if (histnorm) t.histnorm = histnorm;
+                                    if (cumulative) t.cumulative = { enabled: true };
+                                    t.hovertemplate = histogramHoverTemplate('v', histnorm);
+                                }
                                 traces.push(t);
                             }
                         }
                         if (grayOut1d && outVals.length) {
-                            const grayTrace = { type: 'histogram', name: 'filtered', x: outVals, nbinsx: binsX, orientation: 'v', marker: { color: '#c4c4c4' }, opacity: 0.55 };
-                            if (histnorm) grayTrace.histnorm = histnorm;
-                            if (cumulative) grayTrace.cumulative = { enabled: true };
-                            grayTrace.xbins = { start: xStart, end: xEnd, size: xSize };
-                            grayTrace.hovertemplate = histogramHoverTemplate('v', histnorm);
-                            traces.push(grayTrace);
+                            const grayTrace = shouldUsePreBinned1D(outVals.length)
+                                ? buildPreBinned1DTrace(outVals, { start: xStart, end: xEnd, bins: binsX, orientation: 'v', color: '#c4c4c4', opacity: 0.55, name: 'filtered', histnorm, cumulative })
+                                : { type: 'histogram', name: 'filtered', x: outVals, nbinsx: binsX, orientation: 'v', marker: { color: '#c4c4c4' }, opacity: 0.55 };
+                            if (grayTrace?.type === 'histogram') {
+                                if (histnorm) grayTrace.histnorm = histnorm;
+                                if (cumulative) grayTrace.cumulative = { enabled: true };
+                                grayTrace.xbins = { start: xStart, end: xEnd, size: xSize };
+                                grayTrace.hovertemplate = histogramHoverTemplate('v', histnorm);
+                            }
+                            if (grayTrace) traces.push(grayTrace);
                         }
                     }
                     // Guard log scale for pairwise differences (may include negatives)
@@ -10037,8 +11505,11 @@
                         layout.yaxis.autorange = false;
                     }
                     applyPlotHostSizing();
+                    applyHistogramLayoutSizing(layout);
                     applyHistogramLayoutAppearance(layout, mode, xKey, yKey, orientation, histnorm);
+                    const baseAnnotationCount = applyHistogramDrawStateToLayout(layout);
                     await Plotly.newPlot(el, traces, layout, buildPlotConfig(el));
+                    el.__histBaseAnnotationCount = baseAnnotationCount;
                     applyHistogramTooltips(el);
                     wireEditablePlotText(el);
                     wireHistogramSelection(el, mode, xKey, yKey);
@@ -10048,6 +11519,7 @@
                     bindMarkerInteractions(el); redrawMarkers(el);
                     requestAnimationFrame(() => syncRightPanelChrome());
                     requestAnimationFrame(()=>centerPlot(el));
+                    requestAnimationFrame(() => positionHistogramPlotFrameDividers(el));
                     // Skip the first autorange event emitted right after drawing
                     el.__skipAutorangeClear = 1;
                     // Listen for zoom/pan updates to keep ranges persistent
@@ -10070,6 +11542,7 @@
                         if (ev['yaxis.autorange'] === true) {
                             if (el.__skipAutorangeClear > 0) el.__skipAutorangeClear--; else LAST_Y_RANGE = null;
                         }
+                        syncHistogramDrawStateFromPlot(el);
                         scheduleHistogramHistoryCommit();
                     });
                     // Force autorange after render for axes without manual limits
@@ -10123,8 +11596,8 @@
                     // Filter rows by X and Y feature bounds, keeping aligned pairs
                     const xy = [];
                     for (let i = 0; i < frows.length; i++) {
-                        let xv = parseFloat(frows[i][xKey]);
-                        let yv = parseFloat(frows[i][yKey]);
+                        let xv = getSummaryNumericValue(summaryDataset, frows[i], xKey);
+                        let yv = getSummaryNumericValue(summaryDataset, frows[i], yKey);
                         if (!Number.isFinite(xv) || !Number.isFinite(yv)) continue;
                         // Apply phase shift+wrap to X if time-based feature selected
                         if (isPhaseShiftableKey(xKey)) {
@@ -10147,7 +11620,7 @@
                                 passF = eid && c3AllowedIds.has(eid);
                             }
                         } else if (fKey) {
-                            const fv = parseFloat(frows[i][fKey]);
+                            const fv = getSummaryNumericValue(summaryDataset, frows[i], fKey);
                             if (!Number.isFinite(fv)) passF = false;
                             if (Number.isFinite(fMinF) && fv < fMinF) passF = false;
                             if (Number.isFinite(fMaxF) && fv > fMaxF) passF = false;
@@ -10160,7 +11633,7 @@
                     const ys = xy.map(p => p[1]);
                     const traceType = showContours ? 'histogram2dcontour' : 'histogram2d';
                     // Use a shared coloraxis so both histogram and background use the exact same mapping
-                    const trace = { type: traceType, x: xs, y: ys, nbinsx: binsX, nbinsy: binsY, coloraxis: 'coloraxis', hovertemplate: histogram2dHoverTemplate() };
+                    let trace = { type: traceType, x: xs, y: ys, nbinsx: binsX, nbinsy: binsY, coloraxis: 'coloraxis', hovertemplate: histogram2dHoverTemplate() };
                     const st2X = stats(xs);
                     const st2Y = stats(ys);
                     let xStart = Number.isFinite(xMin) ? xMin : (st2X ? st2X.min : 0);
@@ -10184,8 +11657,68 @@
                         selected: { marker: { color: 'rgba(0,0,0,0)', size: 8, opacity: 0, line: { width: 0, color: 'rgba(0,0,0,0)' } } },
                         unselected: { marker: { opacity: 0, color: 'rgba(0,0,0,0)', line: { width: 0, color: 'rgba(0,0,0,0)' } } },
                     };
-                    if (traceType === 'histogram2dcontour') trace.contours = { coloring: 'heatmap' };
-                    const layout = { title: `2D Histogram — ${xKey} vs ${yKey}`, xaxis: { title: xKey }, yaxis: { title: yKey }, margin: { t: HISTOGRAM_LAYOUT_TOP_MARGIN }, uirevision: 'keep', coloraxis: { colorscale: colorscale, reversescale: reverseColorscale, colorbar: { title: 'Count' } } };
+                    const usePreBinned2D = shouldUsePreBinned2D(xy.length);
+                    let projectionGrid = null;
+                    if (usePreBinned2D) {
+                        projectionGrid = computeHistogram2DGrid(xs, ys, binsX, binsY, [trace.xbins.start, trace.xbins.end], [trace.ybins.start, trace.ybins.end]);
+                        if (projectionGrid) {
+                            trace = {
+                                type: 'heatmap',
+                                x: projectionGrid.xCenters,
+                                y: projectionGrid.yCenters,
+                                z: projectionGrid.matrix,
+                                coloraxis: 'coloraxis',
+                                hovertemplate: histogram2dHoverTemplate(),
+                            };
+                        }
+                    }
+                    if (!usePreBinned2D && traceType === 'histogram2dcontour') trace.contours = { coloring: 'heatmap' };
+                    const targetColorbarHeight = Math.max(160, getTargetHistogramHeight(document.getElementById('histogram-plot')) - HISTOGRAM_LAYOUT_TOP_MARGIN - HISTOGRAM_LAYOUT_BOTTOM_MARGIN);
+                    const colorbarLabelCompensation = 14;
+                    const colorbarVisualHeight = Math.max(120, targetColorbarHeight - colorbarLabelCompensation);
+                    const colorbarThickness = 27;
+                    const colorbarX = 1.02;
+                    const layout = {
+                        title: `${xKey} vs ${yKey}`,
+                        xaxis: { title: xKey },
+                        yaxis: { title: yKey },
+                        margin: { t: HISTOGRAM_LAYOUT_TOP_MARGIN },
+                        uirevision: 'keep',
+                        coloraxis: {
+                            colorscale: colorscale,
+                            reversescale: reverseColorscale,
+                            colorbar: {
+                                title: { text: '' },
+                                lenmode: 'pixels',
+                                len: colorbarVisualHeight,
+                                ticks: 'outside',
+                                ticklen: 4,
+                                tickfont: { family: CONTROL_NUMBER_FONT_FAMILY, size: 12, color: '#475569' },
+                                thickness: colorbarThickness,
+                                x: colorbarX,
+                                xanchor: 'left',
+                                y: 0.5,
+                                yanchor: 'middle',
+                                ypad: 0,
+                            },
+                        },
+                    };
+                    layout.annotations = (Array.isArray(layout.annotations) ? layout.annotations.slice() : []).concat([
+                        {
+                            xref: 'paper',
+                            yref: 'paper',
+                            x: colorbarX,
+                            y: 0.5,
+                            xanchor: 'left',
+                            yanchor: 'middle',
+                            xshift: colorbarThickness / 2,
+                            text: 'Count',
+                            textangle: -90,
+                            showarrow: false,
+                            align: 'center',
+                            font: { color: '#ffffff', size: 12, family: CONTROL_TEXT_FONT_FAMILY },
+                        },
+                    ]);
                     // Guard log scale for pairwise differences (may include negatives)
                     const useLogX2 = (xKey === 'Event_to_event_dt') ? false : logX;
                     const useLogY2 = (xKey === 'Event_to_event_dt') ? false : logY;
@@ -10233,9 +11766,26 @@
                         layout.yaxis.autorange = false;
                     }
                     applyPlotHostSizing();
+                    applyHistogramLayoutSizing(layout);
                     applyHistogramLayoutAppearance(layout, mode, xKey, yKey, orientation, histnorm);
-                    await Plotly.newPlot(el, [bg, trace, selectionTrace], layout, buildPlotConfig(el));
-                    el.__projectionGrid = computeHistogram2DGrid(xs, ys, binsX, binsY, [trace.xbins.start, trace.xbins.end], [trace.ybins.start, trace.ybins.end]);
+                    const baseAnnotationCount = applyHistogramDrawStateToLayout(layout);
+                    const traceList = [bg, trace];
+                    if (usePreBinned2D && showContours && projectionGrid) {
+                        traceList.push({
+                            type: 'contour',
+                            x: projectionGrid.xCenters,
+                            y: projectionGrid.yCenters,
+                            z: projectionGrid.matrix,
+                            showscale: false,
+                            hoverinfo: 'skip',
+                            line: { color: 'rgba(255,255,255,0.45)', width: 1 },
+                            contours: { coloring: 'none' },
+                        });
+                    }
+                    traceList.push(selectionTrace);
+                    await Plotly.newPlot(el, traceList, layout, buildPlotConfig(el));
+                    el.__histBaseAnnotationCount = baseAnnotationCount;
+                    el.__projectionGrid = projectionGrid || computeHistogram2DGrid(xs, ys, binsX, binsY, [xStart, xEnd], [yStart, yEnd]);
                     wireEditablePlotText(el);
                     wireHistogramSelection(el, mode, xKey, yKey);
                     bindMarkerInteractions(el);
@@ -10244,6 +11794,7 @@
                     bindMarkerInteractions(el); redrawMarkers(el);
                     requestAnimationFrame(() => syncRightPanelChrome());
                     requestAnimationFrame(()=>centerPlot(el));
+                    requestAnimationFrame(() => positionHistogramPlotFrameDividers(el));
                     // Skip the first autorange event emitted right after drawing
                     el.__skipAutorangeClear = 1;
                     // Listen for zoom/pan updates to keep ranges persistent
@@ -10267,6 +11818,8 @@
                         if (ev['yaxis.autorange'] === true) {
                             if (el.__skipAutorangeClear > 0) el.__skipAutorangeClear--; else LAST_Y_RANGE = null;
                         }
+                        syncHistogramDrawStateFromPlot(el);
+                        scheduleHistogramHistoryCommit();
                     });
                     // Force autorange after render for axes without manual limits
                     // Skip when we are preserving ranges (e.g., color-related changes)
@@ -10355,7 +11908,8 @@
 
         // Compute and fill min/max for a given feature key based on current channel selection
         async function getFeatureMinMax(which) {
-            const { headers, rows } = await fetchSmoothedSummary();
+            const summaryDataset = await fetchSmoothedSummary();
+            const { headers, rows } = summaryDataset;
             if (!headers.length || !rows.length) return null;
             const checked = Array.from(document.querySelectorAll('#channels-row input.chan:checked')).map(e => String(e.value).trim().toUpperCase());
             const chanKey = getChannelKey(headers);
@@ -10371,15 +11925,14 @@
                     : (headers.includes('deltaT_ns') ? 'deltaT_ns' : (headers.includes('deltaT') ? 'deltaT' : null));
                 if (!dtKey) return null;
                 if (!neighborOnly) {
-                    const dts = [];
-                    for (const r of frows) { const v = parseFloat(r[dtKey]); if (Number.isFinite(v)) dts.push(v); }
-                    if (!dts.length) return null;
-                    let dtMin = Infinity, dtMax = -Infinity;
-                    for (const v of dts) { if (v < dtMin) dtMin = v; if (v > dtMax) dtMax = v; }
-                    min = dtMin - dtMax; max = dtMax - dtMin; count = dts.length * dts.length;
+                    const bounds = getSummaryColumnBounds(summaryDataset, dtKey, frows);
+                    if (!bounds) return null;
+                    min = bounds.min - bounds.max;
+                    max = bounds.max - bounds.min;
+                    count = bounds.count * bounds.count;
                 } else {
                     // Neighbor-only bounds: actually compute neighbor diffs within groups
-                    const diffs = computeEventToEventDiffs(headers, frows, { neighborOnly: true, limitWithinTrace, maxAbsDt: DEFAULT_DT_LIMIT_NS });
+                    const diffs = computeEventToEventDiffs(headers, frows, { dataset: summaryDataset, neighborOnly: true, limitWithinTrace, maxAbsDt: DEFAULT_DT_LIMIT_NS });
                     if (!diffs.length) return null;
                     let dmin = Infinity, dmax = -Infinity;
                     for (const v of diffs) { if (!Number.isFinite(v)) continue; if (v < dmin) dmin = v; if (v > dmax) dmax = v; }
@@ -10396,7 +11949,7 @@
                     const neighCols = hdrs.filter(h => /^\d+neighbor_dt$/.test(String(h).trim()));
                     for (const r of rrows) {
                         for (const c of neighCols) {
-                            const v = parseFloat(r[c]);
+                            const v = getSummaryNumericValue(dtRaw, r, c);
                             if (!Number.isFinite(v)) continue;
                             if (Number.isFinite(DEFAULT_DT_LIMIT_NS) && Math.abs(v) > DEFAULT_DT_LIMIT_NS) continue;
                             if (v < min) min = v;
@@ -10406,12 +11959,11 @@
                     }
                 } catch (_) { return null; }
             } else {
-                for (const r of frows) {
-                    const v = parseFloat(r[key]);
-                    if (!Number.isFinite(v)) continue;
-                    if (v < min) min = v;
-                    if (v > max) max = v;
-                    count++;
+                const bounds = getSummaryColumnBounds(summaryDataset, key, frows);
+                if (bounds) {
+                    min = bounds.min;
+                    max = bounds.max;
+                    count = bounds.count;
                 }
             }
             if (!count || !Number.isFinite(min) || !Number.isFinite(max)) return null;
@@ -10442,8 +11994,13 @@
             const sel = document.getElementById('summarySource');
             const initialMode = document.querySelector('input[name="hist-type"]:checked')?.value || '2d';
             const startupTasks = [waitForPlotlyReady(), fetchSummaryHeaders()];
-            EXPORT_WIDTH = Number(HISTOGRAM_PLOT_UI.width) || DEFAULT_EXPORT_WIDTH;
-            EXPORT_HEIGHT = Number(HISTOGRAM_PLOT_UI.height) || DEFAULT_EXPORT_HEIGHT;
+            if (HISTOGRAM_PLOT_UI.customSizeEnabled === true) {
+                EXPORT_WIDTH = Number(HISTOGRAM_PLOT_UI.width) || DEFAULT_EXPORT_WIDTH;
+                EXPORT_HEIGHT = Number(HISTOGRAM_PLOT_UI.height) || DEFAULT_EXPORT_HEIGHT;
+            } else {
+                EXPORT_WIDTH = null;
+                EXPORT_HEIGHT = null;
+            }
             setMode(initialMode);
             RANGE_DISPLAY_INPUT_IDS.forEach((id) => {
                 const el = document.getElementById(id);
@@ -10506,19 +12063,27 @@
             }
 
             function wire(id) { const e = document.getElementById(id); if (e) e.addEventListener('change', summarizeSelection); }
-            document.getElementById('hist-1d').addEventListener('change', () => {
+            document.getElementById('hist-1d').addEventListener('change', async () => {
                 setMode('1d');
                 syncFeatureRowVisibility('1d');
                 summarizeSelection();
-                renderPlaceholder();
+                if (document.getElementById('histogram-plot').data) {
+                    await rerenderHistogramFromUpdate();
+                } else {
+                    renderPlaceholder();
+                }
             });
-            document.getElementById('hist-2d').addEventListener('change', () => {
+            document.getElementById('hist-2d').addEventListener('change', async () => {
                 setMode('2d');
                 syncFeatureRowVisibility('2d');
                 summarizeSelection();
-                renderPlaceholder();
+                if (document.getElementById('histogram-plot').data) {
+                    await rerenderHistogramFromUpdate();
+                } else {
+                    renderPlaceholder();
+                }
             });
-            ['axis-x', 'axis-y', 'binsX', 'binsY', 'histnorm', 'cumulative', 'orientation', 'xMin', 'xMax', 'yMin', 'yMax', 'zMin', 'zMax', 'logX', 'logY'].forEach(wire);
+            ['binsX', 'binsY', 'histnorm', 'cumulative', 'orientation', 'xMin', 'xMax', 'yMin', 'yMax', 'zMin', 'zMax', 'logX', 'logY'].forEach(wire);
             // 1D gray-out toggle should immediately re-render and preserve ranges
             const grayToggle = document.getElementById('grayOut1d');
             if (grayToggle) {
@@ -10554,7 +12119,7 @@
                 e.addEventListener('change', () => { LAST_X_RANGE = null; LAST_Y_RANGE = null; });
             });
             // Auto-fill min/max when feature selection changes
-            document.getElementById('axis-x').addEventListener('change', () => {
+            document.getElementById('axis-x').addEventListener('change', async () => {
                 rememberFeatureSelectionPreference('x', document.getElementById('axis-x').value);
                 // Toggle visibility of dt options row when feature changes
                 const mode = document.querySelector('input[name="hist-type"]:checked')?.value || '2d';
@@ -10573,6 +12138,9 @@
                 // Toggle no-start filter row only when X feature is one of the recognized start time keys
                 // (removed) no-start filter row toggle
                 autoFillFeatureMinMax('x');
+                if (document.getElementById('histogram-plot').data) {
+                    await rerenderHistogramFromUpdate();
+                }
             });
             // Re-render on phase shift change
             const psInput = document.getElementById('phaseShiftNs');
@@ -10588,7 +12156,7 @@
                     await rerenderHistogramFromUpdate({ summarize: false });
                 });
             }
-            document.getElementById('axis-y').addEventListener('change', () => {
+            document.getElementById('axis-y').addEventListener('change', async () => {
                 rememberFeatureSelectionPreference('y', document.getElementById('axis-y').value);
                 // Toggle phase shift row for time-based features in Y-axis
                 const mode = document.querySelector('input[name="hist-type"]:checked')?.value || '2d';
@@ -10600,6 +12168,9 @@
                     psRow.style.display = showPhaseShift ? 'grid' : 'none';
                 }
                 autoFillFeatureMinMax('y');
+                if (document.getElementById('histogram-plot').data) {
+                    await rerenderHistogramFromUpdate();
+                }
             });
             document.getElementById('axis-f').addEventListener('change', () => { autoFillFeatureMinMax('f'); });
             // Channel filters: auto-render on change, with range capture to keep scale
@@ -10626,11 +12197,73 @@
             });
             document.getElementById('render-hist').addEventListener('click', async () => { await rerenderHistogramFromUpdate(); });
             document.getElementById('clear-hist').addEventListener('click', clearPlot);
+
+            /* ── Spacebar hold → temporary pan mode ── */
+            (function initQuickPan() {
+                let savedDragMode = null;
+                let spaceHeld = false;
+                let mouseHeld = false;
+                const gd = () => document.getElementById('histogram-plot');
+                const isInput = (el) => el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
+
+                function activatePan() {
+                    const plot = gd();
+                    if (!plot || !plot._fullLayout) return false;
+                    if (savedDragMode !== null) return true;
+                    savedDragMode = plot._fullLayout.dragmode || 'zoom';
+                    setNativeDragMode(plot, 'pan');
+                    return true;
+                }
+
+                function deactivatePan() {
+                    if (savedDragMode === null) return;
+                    if (spaceHeld || mouseHeld) return;
+                    const mode = savedDragMode;
+                    savedDragMode = null;
+                    requestAnimationFrame(() => {
+                        const plot = gd();
+                        if (plot && plot._fullLayout) setNativeDragMode(plot, mode);
+                    });
+                }
+
+                document.addEventListener('keydown', (e) => {
+                    if (e.code !== 'Space' || e.repeat) return;
+                    if (isInput(document.activeElement)) return;
+                    e.preventDefault();
+                    spaceHeld = true;
+                    activatePan();
+                });
+                document.addEventListener('keyup', (e) => {
+                    if (e.code !== 'Space') return;
+                    if (spaceHeld) e.preventDefault();
+                    spaceHeld = false;
+                    deactivatePan();
+                });
+
+                // Keep pan active until left-button drag finishes
+                document.addEventListener('mousedown', (e) => {
+                    if (e.button === 0 && savedDragMode !== null) mouseHeld = true;
+                });
+                document.addEventListener('mouseup', (e) => {
+                    if (e.button === 0 && mouseHeld) {
+                        mouseHeld = false;
+                        deactivatePan();
+                    }
+                });
+
+                window.addEventListener('blur', () => {
+                    spaceHeld = false;
+                    mouseHeld = false;
+                    deactivatePan();
+                });
+            })();
+
         // Switch summary source: reset cache and repopulate headers
             const srcSel = document.getElementById('summarySource');
             if (srcSel) {
                 srcSel.addEventListener('change', async () => {
                     CACHED_SUMMARY = null;
+                    CACHED_EVENT_TO_EVENT_DT_RAW = null;
                     const headers = await fetchSummaryHeaders();
                     restoreOrDefaultFeatureSelections(headers, [], { useCustomDefaults: false });
             // Ensure X/Y selects are usable even if /api/summaries fail
@@ -10650,19 +12283,18 @@
                 fileIn.addEventListener('change', async (e) => {
                     const f = e.target.files && e.target.files[0];
                     if (!f) return;
+                    showLoading();
+                    // Yield to let browser paint the spinner before heavy sync work
+                    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
                     try {
                         const text = await f.text();
-                        const lines = text.trim().split(/\r?\n/).filter(Boolean);
-                        if (!lines.length) return;
-                        const headers = lines[0].split(',').map(h => h.trim());
-                        const rows = [];
-                        for (let i = 1; i < lines.length; i++) {
-                            const parts = lines[i].split(',');
-                            const obj = {};
-                            headers.forEach((h, idx) => { obj[h] = (parts[idx] !== undefined) ? parts[idx].trim() : ''; });
-                            rows.push(obj);
-                        }
-                        LOCAL_SUMMARY = { headers, rows, name: f.name };
+                        const parsed = parseCSV(text, f.name);
+                        const headers = parsed.headers || [];
+                        const rows = parsed.rows || [];
+                        if (!headers.length || !rows.length) return;
+                        LOCAL_SUMMARY = prepareSummaryDataset(parsed);
+                        LOCAL_SUMMARY_TOKEN = createHistogramSessionSummaryToken(f.name);
+                        HISTOGRAM_SESSION_SUMMARIES.set(LOCAL_SUMMARY_TOKEN, LOCAL_SUMMARY);
                         // Enable and select the custom option
                         const opt = document.querySelector('#summarySource option[value="custom"]');
                         if (opt) { opt.disabled = false; }
@@ -10670,6 +12302,7 @@
                         if (sel) sel.value = 'custom';
                         if (nameSpan) nameSpan.textContent = f.name;
                         CACHED_SUMMARY = null;
+                        CACHED_EVENT_TO_EVENT_DT_RAW = null;
                         const hdrs = await fetchSummaryHeaders();
                         restoreOrDefaultFeatureSelections(hdrs, rows, { useCustomDefaults: true });
                         await populateChannelsDynamic();

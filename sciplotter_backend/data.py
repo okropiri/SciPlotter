@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from flask import Blueprint, Response, jsonify, request
+from flask import Blueprint, Response, jsonify, request, stream_with_context
 
 from . import common
 
@@ -209,8 +209,15 @@ def api_summary():
     if not os.path.exists(path):
         return Response('Not found', status=404, mimetype='text/plain')
     try:
-        with open(path, 'r', encoding='utf-8', errors='ignore') as fh:
-            return Response(fh.read(), mimetype='text/csv')
+        def generate():
+            with open(path, 'rb') as fh:
+                while True:
+                    chunk = fh.read(1024 * 64)
+                    if not chunk:
+                        break
+                    yield chunk
+
+        return Response(stream_with_context(generate()), mimetype='text/csv')
     except Exception as e:
         return Response(str(e), status=500, mimetype='text/plain')
 

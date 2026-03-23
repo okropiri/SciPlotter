@@ -10,7 +10,12 @@ from . import create_app
 def _port_in_use(host: str, port: int) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.settimeout(0.5)
-        return sock.connect_ex((host, port)) == 0
+        try:
+            return sock.connect_ex((host, port)) == 0
+        except socket.gaierror as exc:
+            raise ValueError(
+                f"Host '{host}' could not be resolved. Use an IP like 127.0.0.1 or set SCIPLOTTER_HOST."
+            ) from exc
 
 
 def run_server(host: str, port: int, *, force: bool = False) -> None:

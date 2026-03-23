@@ -31,8 +31,8 @@ def main() -> None:
     from .server import run_server
 
     parser = argparse.ArgumentParser(description='SciPlotter Flask backend (Waveforms + Histogram)')
-    parser.add_argument('--host', default=os.environ.get('HOST', '127.0.0.1'))
-    parser.add_argument('--port', default=int(os.environ.get('PORT', '5000')), type=int)
+    parser.add_argument('--host', default=os.environ.get('SCIPLOTTER_HOST', '127.0.0.1'))
+    parser.add_argument('--port', default=int(os.environ.get('SCIPLOTTER_PORT', '5000')), type=int)
     parser.add_argument('--force', action='store_true', help='If port is busy, attempt to kill the process holding it (Linux only)')
     args = parser.parse_args()
     run_server(args.host, args.port, force=args.force)
