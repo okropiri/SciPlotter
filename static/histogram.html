@@ -66,6 +66,45 @@
             'rgba(244, 114, 182, 0.28)',
             'rgba(34, 197, 94, 0.28)'
         ];
+        const HISTOGRAM_CUSTOM_COLOR_SCALES = {
+            SciPlotterNeon: [
+                [0.0, '#1B76B3'],
+                [0.52, '#021535'],
+                [1.0, '#AD47B7'],
+            ],
+            SciPlotterNeonWhite: [
+                [0.0, '#ffffff'],
+                [0.015, '#ffffff'],
+                [0.12, '#1B76B3'],
+                [0.52, '#021535'],
+                [1.0, '#AD47B7'],
+            ],
+            NeonCircuit: [
+                [0.0, '#04121f'],
+                [0.18, '#0a2a47'],
+                [0.36, '#0f766e'],
+                [0.56, '#1B76B3'],
+                [0.78, '#5eead4'],
+                [1.0, '#ecfeff'],
+            ],
+            RetroArcade: [
+                [0.0, '#1f1235'],
+                [0.2, '#4b1d6d'],
+                [0.42, '#AD47B7'],
+                [0.62, '#f97316'],
+                [0.82, '#facc15'],
+                [1.0, '#fff7ed'],
+            ],
+            SpectrumWave: [
+                [0.0, '#6e00ff'],
+                [0.17, '#0057ff'],
+                [0.34, '#00c2ff'],
+                [0.5, '#00d084'],
+                [0.68, '#ffe100'],
+                [0.84, '#ff7a00'],
+                [1.0, '#ff006e'],
+            ],
+        };
         const HISTOGRAM_SYMBOL_INSERTION_OPTIONS = [
             'alpha', 'beta', 'gamma', 'delta', 'epsilon', 'zeta', 'eta', 'theta', 'vartheta', 'iota', 'kappa', 'lambda',
             'mu', 'nu', 'xi', 'pi', 'rho', 'sigma', 'tau', 'upsilon', 'phi', 'varphi', 'chi', 'psi', 'omega',
@@ -2311,6 +2350,31 @@
                 layout.autosize = true;
             }
             return layout;
+        }
+
+        function buildSciPlotterNeonWhiteColorscale(reverseRequested) {
+            if (!reverseRequested) return HISTOGRAM_CUSTOM_COLOR_SCALES.SciPlotterNeonWhite;
+            return [
+                [0.0, '#ffffff'],
+                [0.015, '#ffffff'],
+                [0.12, '#AD47B7'],
+                [0.52, '#021535'],
+                [1.0, '#1B76B3'],
+            ];
+        }
+
+        function resolveHistogramColorscale(value, reverseRequested = false) {
+            const key = String(value || '').trim();
+            if (key === 'SciPlotterNeonWhite') {
+                return buildSciPlotterNeonWhiteColorscale(reverseRequested);
+            }
+            return HISTOGRAM_CUSTOM_COLOR_SCALES[key] || key || 'Viridis';
+        }
+
+        function shouldReverseHistogramColorscale(value, reverseRequested) {
+            const key = String(value || '').trim();
+            if (key === 'SciPlotterNeonWhite') return false;
+            return !!reverseRequested;
         }
 
         function createHistogramSvgDataUrl(markup) {
@@ -8491,7 +8555,12 @@
                     <select id="colorscale" class="control-canonical-box control-canonical-select control-canonical-select--text-dropdown">
                         <option value="Viridis">Viridis (sequential)</option>
                         <option value="Cividis">Cividis (CB-friendly)</option>
+                        <option value="SciPlotterNeonWhite">SciPlotter Neon white</option>
+                        <option value="SciPlotterNeon">SciPlotter Neon</option>
                         <option value="Turbo">Turbo (rainbow)</option>
+                        <option value="NeonCircuit">Neon Circuit (futuristic)</option>
+                        <option value="RetroArcade">Retro Arcade (retro)</option>
+                        <option value="SpectrumWave">Spectrum Wave (rainbow)</option>
                         <option value="RdBu">RdBu (diverging)</option>
                         <option value="Hot">Hot (sequential warm)</option>
                         <option value="Earth">Earth (natural)</option>
@@ -11685,8 +11754,8 @@
                         margin: { t: HISTOGRAM_LAYOUT_TOP_MARGIN },
                         uirevision: 'keep',
                         coloraxis: {
-                            colorscale: colorscale,
-                            reversescale: reverseColorscale,
+                            colorscale: resolveHistogramColorscale(colorscale, reverseColorscale),
+                            reversescale: shouldReverseHistogramColorscale(colorscale, reverseColorscale),
                             colorbar: {
                                 title: { text: '' },
                                 lenmode: 'pixels',
