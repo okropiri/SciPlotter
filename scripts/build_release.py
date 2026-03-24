@@ -55,6 +55,28 @@ def run_command(args: list[str]) -> None:
     subprocess.run(args, check=True, cwd=str(PROJECT_ROOT))
 
 
+def codesign_macos_app(app_bundle: Path) -> None:
+    if sys.platform != 'darwin':
+        return
+    run_command(['/usr/bin/codesign', '--force', '--deep', '--sign', '-', str(app_bundle)])
+    run_command(['/usr/bin/codesign', '--verify', '--deep', '--strict', '--verbose=2', str(app_bundle)])
+
+
+def zip_macos_app(app_bundle: Path, archive_path: Path) -> Path:
+    if archive_path.exists():
+        archive_path.unlink()
+    run_command([
+        '/usr/bin/ditto',
+        '-c',
+        '-k',
+        '--sequesterRsrc',
+        '--keepParent',
+        str(app_bundle),
+        str(archive_path),
+    ])
+    return archive_path
+
+
 def clean_target(target: str) -> None:
     for path in [DIST_ROOT / target, WORK_ROOT / target]:
         if path.exists():
@@ -111,8 +133,8 @@ def package_release_artifact(target: str, dist_dir: Path, *, skip_appimage: bool
 
     if target == 'macos':
         built_app = dist_dir / f'{APP_NAME}.app'
-        archive_base = RELEASE_ROOT / 'SciPlotter-macos'
-        archive_path = Path(shutil.make_archive(str(archive_base), 'zip', root_dir=built_app.parent, base_dir=built_app.name))
+        codesign_macos_app(built_app)
+        archive_path = zip_macos_app(built_app, RELEASE_ROOT / 'SciPlotter-macos.zip')
         return [archive_path]
 
     built_dir = dist_dir / APP_NAME

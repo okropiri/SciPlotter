@@ -111,6 +111,13 @@ Build result:
 
 The zip contains `SciPlotter.app`.
 
+The macOS release build now ad-hoc signs the generated app bundle and archives it with Apple's `ditto` tool so the bundle metadata and symlinks survive download and extraction correctly.
+
+Important limitation:
+
+- The app is still not notarized with an Apple Developer ID certificate, so Gatekeeper may still warn that Apple cannot verify the developer.
+- A notarization warning is different from the app being reported as damaged. The packaging flow is intended to avoid the damaged-app case.
+
 ### Linux
 
 Build result:

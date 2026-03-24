@@ -65,6 +65,8 @@ If you are not sure which one to choose on Linux, use the `.deb` package first.
 
 If macOS blocks the app the first time, open it from Finder with `Open` so Gatekeeper can confirm the launch.
 
+If macOS says the app is damaged, that usually means the downloaded release asset itself needs to be refreshed rather than approved through Finder. In that case, download the newest macOS release asset again.
+
 ### Linux
 
 For Debian or Ubuntu based systems, the easiest install is the `.deb` package.
