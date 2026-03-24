@@ -118,6 +118,13 @@ Important limitation:
 - The app is still not notarized with an Apple Developer ID certificate, so Gatekeeper may still warn that Apple cannot verify the developer.
 - A notarization warning is different from the app being reported as damaged. The packaging flow is intended to avoid the damaged-app case.
 
+If a user allows the app to open but no browser window appears, collect these files first:
+
+- `~/Library/Caches/SciPlotter/launcher.log`
+- `~/Library/Caches/SciPlotter/server.log`
+
+Those logs capture launcher failures and backend startup errors for packaged macOS runs.
+
 ### Linux
 
 Build result:

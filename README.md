@@ -67,6 +67,11 @@ If macOS blocks the app the first time, open it from Finder with `Open` so Gatek
 
 If macOS says the app is damaged, that usually means the downloaded release asset itself needs to be refreshed rather than approved through Finder. In that case, download the newest macOS release asset again.
 
+If the app is allowed to open but no browser window appears, check these log files in the user's home folder:
+
+- `~/Library/Caches/SciPlotter/launcher.log`
+- `~/Library/Caches/SciPlotter/server.log`
+
 ### Linux
 
 For Debian or Ubuntu based systems, the easiest install is the `.deb` package.
