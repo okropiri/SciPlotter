@@ -112,6 +112,14 @@
                 [0.82, '#6b4226'],
                 [1.0, '#3f2515'],
             ],
+            EarthPastel: [
+                [0.0, '#efe2d3'],
+                [0.18, '#d7dfbf'],
+                [0.38, '#b9c99c'],
+                [0.58, '#cfad89'],
+                [0.78, '#b9896d'],
+                [1.0, '#8f6554'],
+            ],
         };
         const HISTOGRAM_SYMBOL_INSERTION_OPTIONS = [
             'alpha', 'beta', 'gamma', 'delta', 'epsilon', 'zeta', 'eta', 'theta', 'vartheta', 'iota', 'kappa', 'lambda',
@@ -8573,6 +8581,7 @@
                         <option value="RdBu">RdBu (diverging)</option>
                         <option value="Hot">Hot (sequential warm)</option>
                         <option value="Earth">Earth (natural)</option>
+                        <option value="EarthPastel">Earth Pastel</option>
                         <option value="Electric">Electric (bright)</option>
                         <option value="Greys">Greys (monochrome)</option>
                     </select>
@@ -11146,6 +11155,7 @@
                 const showContours = !!document.getElementById('showContours')?.checked;
                 const reverseColorscale = !!document.getElementById('reverseColorscale')?.checked;
                 const zMin = getStoredNumericValue('zMin');
+                const effectiveZMin = Number.isFinite(zMin) ? zMin : 0;
                 const zMax = getStoredNumericValue('zMax');
                 const plot1dColor = getHistogramOneDimensionalPlotColor();
 
@@ -11802,8 +11812,8 @@
                     const useLogY2 = (xKey === 'Event_to_event_dt') ? false : logY;
                     if (useLogX2) layout.xaxis.type = 'log';
                     if (useLogY2) layout.yaxis.type = 'log';
-                    // z range via shared coloraxis (honors user zMin/zMax if provided)
-                    if (Number.isFinite(zMin)) layout.coloraxis.cmin = zMin;
+                    // Default the 2D color floor to zero so an empty Z min behaves like entering 0.
+                    layout.coloraxis.cmin = effectiveZMin;
                     if (Number.isFinite(zMax)) layout.coloraxis.cmax = zMax;
                     // Apply manual ranges if provided, else persist last zoomed ranges
                     if (Number.isFinite(xMin) && Number.isFinite(xMax)) {
@@ -11817,7 +11827,7 @@
                         layout.yaxis.range = LAST_Y_RANGE.slice();
                     }
                     // Background heatmap to fill canvas with the no-entry color (z at lower bound)
-                    const bgZ = 0; // zero-count background
+                    const bgZ = effectiveZMin; // match the lower color bound used by the visible histogram
                     // Initial bg extent guess based on chosen ranges or data extents
                     const stBgX = stats(xs);
                     const stBgY = stats(ys);
