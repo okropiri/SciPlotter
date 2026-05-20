@@ -42,6 +42,7 @@
         const HISTOGRAM_RECENT_COLOR_LIMIT = 10;
         const HISTOGRAM_HISTORY_LIMIT = 80;
         let HISTOGRAM_FONT_SIZE_APPLY_TIMER = null;
+
         const HISTOGRAM_COLOR_SWATCHES = [
             '#1B76B3',
             '#AD47B7',
@@ -926,8 +927,17 @@
         function syncPlotSizeControls() {
             const wInput = document.getElementById('plot-width-input');
             const hInput = document.getElementById('plot-height-input');
-            if (wInput) wInput.value = String(hasCustomPlotSize() ? EXPORT_WIDTH : (HISTOGRAM_PLOT_UI.width || DEFAULT_EXPORT_WIDTH));
-            if (hInput) hInput.value = String(hasCustomPlotSize() ? EXPORT_HEIGHT : (HISTOGRAM_PLOT_UI.height || DEFAULT_EXPORT_HEIGHT));
+            if (!wInput && !hInput) return;
+            if (hasCustomPlotSize()) {
+                if (wInput) wInput.value = String(EXPORT_WIDTH);
+                if (hInput) hInput.value = String(EXPORT_HEIGHT);
+                return;
+            }
+            const gd = document.getElementById('histogram-plot');
+            const liveWidth = Math.round(Number(gd?.clientWidth) || parseFloat(gd ? getComputedStyle(gd).width : '0') || 0);
+            const liveHeight = Math.round(Number(gd?.clientHeight) || parseFloat(gd ? getComputedStyle(gd).height : '0') || 0);
+            if (wInput) wInput.value = String(liveWidth > 0 ? liveWidth : (HISTOGRAM_PLOT_UI.width || DEFAULT_EXPORT_WIDTH));
+            if (hInput) hInput.value = String(liveHeight > 0 ? liveHeight : (HISTOGRAM_PLOT_UI.height || DEFAULT_EXPORT_HEIGHT));
         }
 
         function readPlotSizeControls() {
@@ -936,6 +946,102 @@
             if (!Number.isFinite(width) || !Number.isFinite(height)) return null;
             if (width < 200 || height < 200) return null;
             return { width, height };
+        }
+
+        function resolveHistogramCssLength(value) {
+            if (!value || !document.body) return 0;
+            const probe = document.createElement('div');
+            probe.style.position = 'absolute';
+            probe.style.visibility = 'hidden';
+            probe.style.pointerEvents = 'none';
+            probe.style.width = value;
+            probe.style.height = '0';
+            probe.style.padding = '0';
+            probe.style.border = '0';
+            probe.style.overflow = 'hidden';
+            document.body.appendChild(probe);
+            const width = probe.getBoundingClientRect().width;
+            probe.remove();
+            return Number.isFinite(width) ? width : 0;
+        }
+
+        function getHistogramSidePanelBaseWidth() {
+            const width = resolveHistogramCssLength('var(--hist-side-panel-base-width)');
+            return width > 0 ? Math.round(width) : 320;
+        }
+
+        function getHistogramSharedSidePanelWidth() {
+            const width = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--hist-side-panel-width'));
+            return Number.isFinite(width) && width > 0 ? width : getHistogramSidePanelBaseWidth();
+        }
+
+        function histogramElementNeedsScroll(element) {
+            if (!element) return false;
+            return (element.scrollWidth - element.clientWidth) > 1;
+        }
+
+        function setHistogramSharedSidePanelWidth(width, baseWidth = getHistogramSidePanelBaseWidth()) {
+            const rootStyle = document.documentElement.style;
+            const roundedWidth = Math.round(width);
+            const roundedBase = Math.round(baseWidth);
+            if (!(roundedWidth > 0) || Math.abs(roundedWidth - roundedBase) <= 1) {
+                rootStyle.removeProperty('--hist-side-panel-width');
+                return;
+            }
+            rootStyle.setProperty('--hist-side-panel-width', `${roundedWidth}px`);
+        }
+
+        function syncHistogramSidePanelWidth() {
+            const app = document.getElementById('app');
+            const leftScroll = document.getElementById('left-scroll');
+            const meta = document.getElementById('hist-meta');
+            const host = document.getElementById('plot-host');
+            const gd = document.getElementById('histogram-plot');
+            if (!app || !leftScroll || !meta || !host || !gd) return false;
+
+            const baseWidth = getHistogramSidePanelBaseWidth();
+            const previousWidth = getHistogramSharedSidePanelWidth();
+
+            if (window.matchMedia('(max-width: 980px)').matches) {
+                setHistogramSharedSidePanelWidth(baseWidth, baseWidth);
+                return Math.abs(getHistogramSharedSidePanelWidth() - previousWidth) > 1;
+            }
+
+            setHistogramSharedSidePanelWidth(baseWidth, baseWidth);
+
+            const rootStyles = getComputedStyle(document.documentElement);
+            const gap = parseFloat(rootStyles.getPropertyValue('--hist-panel-gap')) || 0;
+            const appWidth = Math.round(app.getBoundingClientRect().width) || 0;
+            const targetPlotWidth = hasCustomPlotSize()
+                ? EXPORT_WIDTH
+                : getResponsiveHistogramPlotSize(host, gd).width;
+            const maxWidth = Math.max(baseWidth, Math.floor((appWidth - targetPlotWidth - (gap * 2)) / 2));
+
+            const panelsNeedScroll = () => histogramElementNeedsScroll(leftScroll) || histogramElementNeedsScroll(meta);
+            let nextWidth = baseWidth;
+
+            if (maxWidth > baseWidth + 1 && panelsNeedScroll()) {
+                setHistogramSharedSidePanelWidth(maxWidth, baseWidth);
+                if (panelsNeedScroll()) {
+                    nextWidth = maxWidth;
+                } else {
+                    let low = baseWidth;
+                    let high = maxWidth;
+                    while ((high - low) > 1) {
+                        const mid = Math.floor((low + high) / 2);
+                        setHistogramSharedSidePanelWidth(mid, baseWidth);
+                        if (panelsNeedScroll()) {
+                            low = mid;
+                        } else {
+                            high = mid;
+                        }
+                    }
+                    nextWidth = high;
+                }
+            }
+
+            setHistogramSharedSidePanelWidth(nextWidth, baseWidth);
+            return Math.abs(nextWidth - previousWidth) > 1;
         }
 
         function getDefaultLivePlotSize() {
@@ -955,18 +1061,45 @@
             return getDefaultLivePlotSize().height;
         }
 
+        function getResponsiveHistogramPlotSize(host = document.getElementById('plot-host'), gd = document.getElementById('histogram-plot')) {
+            const fallback = getDefaultLivePlotSize();
+            if (!host || !gd) return fallback;
+            const rootStyles = getComputedStyle(document.documentElement);
+            const viewportHeight = window.innerHeight || document.documentElement.clientHeight || fallback.height;
+            const headerHeight = parseFloat(rootStyles.getPropertyValue('--header-height')) || 76;
+            const viewportOffset = parseFloat(rootStyles.getPropertyValue('--hist-plot-viewport-offset')) || 196;
+            const ratio = 5 / 4;
+            const hostWidth = Math.max(0, host.clientWidth || Math.round(host.getBoundingClientRect().width) || 0);
+            const availableHeight = Math.max(0, viewportHeight - headerHeight - viewportOffset);
+            const computedMinHeight = parseFloat(getComputedStyle(gd).minHeight) || 420;
+            const fitWidth = hostWidth > 0 ? hostWidth : fallback.width;
+            const fitHeight = availableHeight > 0 ? availableHeight : fallback.height;
+            let width = Math.min(fitWidth, fitHeight * ratio);
+            let height = width / ratio;
+            if (height < computedMinHeight && fitWidth >= computedMinHeight * ratio) {
+                height = computedMinHeight;
+                width = Math.min(fitWidth, height * ratio);
+            }
+            if (!(width > 0) || !(height > 0)) return fallback;
+            return {
+                width: Math.round(width),
+                height: Math.round(height),
+            };
+        }
+
         function applyPlotHostSizing() {
             const gd = document.getElementById('histogram-plot');
             const host = document.getElementById('plot-host');
             if (!gd || !host) return;
+            syncHistogramSidePanelWidth();
             if (hasCustomPlotSize()) {
                 gd.style.width = EXPORT_WIDTH + 'px';
                 gd.style.height = EXPORT_HEIGHT + 'px';
                 host.classList.add('has-custom-size');
             } else {
-                const defaultSize = getDefaultLivePlotSize();
-                gd.style.width = `min(100%, ${defaultSize.width}px)`;
-                gd.style.height = `${defaultSize.height}px`;
+                const responsiveSize = getResponsiveHistogramPlotSize(host, gd);
+                gd.style.width = responsiveSize.width + 'px';
+                gd.style.height = responsiveSize.height + 'px';
                 host.classList.remove('has-custom-size');
             }
         }
@@ -5168,13 +5301,15 @@
             --header-height: 76px;
             --files-height: 140px;
             --hist-panel-gap: 12px;
-            --hist-side-panel-width: 372px;
+            --hist-side-panel-base-width: clamp(300px, 22vw, 372px);
+            --hist-side-panel-width: var(--hist-side-panel-base-width);
+            --hist-plot-viewport-offset: 196px;
             --control-button-height: 38px;
             --control-button-radius: 4px;
             --control-label-width: 66px;
             --control-dropdown-label-width: var(--control-label-width);
-            --control-box-width: 92px;
-            --control-box-wide-width: 185px;
+            --control-box-width: 88px;
+            --control-box-wide-width: 172px;
             --brand-bg: #021535;
             --brand-cyan: #1B76B3;
             --brand-cyan-strong: #145A88;
@@ -5742,6 +5877,23 @@
             padding-right: 0;
         }
 
+        #norm-row {
+            display: grid;
+            grid-template-columns: 66px minmax(0, 1fr);
+            gap: 5px;
+            align-items: center;
+        }
+
+        #norm-row > :not(:first-child) {
+            justify-self: stretch;
+        }
+
+        #histnorm {
+            width: 100% !important;
+            min-width: 0 !important;
+            max-width: none !important;
+        }
+
         #left .section {
             margin-top: 0;
             padding: 10px 0 10px;
@@ -5942,6 +6094,7 @@
             display: grid;
             grid-template-columns: 66px minmax(0, 1fr) minmax(0, 1fr);
             align-items: center;
+            gap: 8px;
         }
 
         #left .row[role="radiogroup"] label,
@@ -6056,6 +6209,14 @@
         #f-filter-row input {
             width: auto !important;
             min-width: 0;
+        }
+
+        #x-filter-row > label:first-child,
+        #y-filter-row > label:first-child,
+        #f-filter-row > label:first-child,
+        #norm-row > label:first-child {
+            min-width: 66px !important;
+            max-width: 66px;
         }
 
         .control-canonical-row {
@@ -6416,10 +6577,16 @@
         #plot-toolbar-row {
             display: flex;
             width: 100%;
+            min-width: 0;
+            overflow-x: auto;
+            overflow-y: hidden;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-gutter: stable both-edges;
         }
 
         #plot-toolbar-inner {
-            width: 100%;
+            width: max-content;
+            min-width: 100%;
             min-width: 0;
         }
         #plot-host {
@@ -6443,7 +6610,7 @@
             --hist-selection-stroke-width: 2.5px;
             --hist-selection-dash: 10 6;
             width: 100%;
-            height: calc(100vh - var(--header-height) - 196px);
+            height: calc(100vh - var(--header-height) - var(--hist-plot-viewport-offset));
             min-height: 460px;
             position: relative;
             flex: 0 0 auto;
@@ -6863,8 +7030,9 @@
             font-family: "Segoe UI", "Inter", "Helvetica Neue", Arial, sans-serif;
             font-size: 12px;
             box-sizing: border-box;
-            width: 100%;
-            max-width: 100%;
+            width: max-content;
+            min-width: 100%;
+            max-width: none;
             overflow: visible;
         }
 
@@ -7007,6 +7175,7 @@
             min-width: auto;
             height: 26px;
             min-height: 26px;
+            flex: 0 0 auto;
             padding: 0 12px;
             border-radius: var(--control-button-radius);
             font-weight: 700;
@@ -7014,6 +7183,11 @@
             background: #fff;
             border-color: rgba(194, 207, 221, 0.9);
             box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+            white-space: nowrap;
+        }
+
+        #btn-export {
+            min-width: 68px;
         }
 
         .hist-tool-btn--general:hover,
@@ -7152,8 +7326,7 @@
         }
 
         #btn-png,
-        #btn-pdf,
-        #btn-export {
+        #btn-pdf {
             min-width: 0;
         }
 
@@ -7810,13 +7983,13 @@
             }
 
             #export-anchor {
-                flex-wrap: wrap;
+                flex-wrap: nowrap;
                 gap: 8px;
                 padding: 8px 10px;
             }
 
             #export-anchor .export-group {
-                max-width: calc(100vw - 24px);
+                max-width: none;
             }
 
             .toolbar-divider {
@@ -8180,7 +8353,7 @@
 
         @media (max-width: 1180px) {
             :root {
-                --hist-side-panel-width: 332px;
+                --hist-side-panel-base-width: 332px;
             }
 
             #app {
@@ -8196,9 +8369,29 @@
             }
         }
 
+        @media (min-width: 1400px) {
+            :root {
+                --hist-panel-gap: 18px;
+                --hist-side-panel-base-width: clamp(336px, 23vw, 392px);
+            }
+        }
+
+        @media (max-width: 1520px) {
+            :root {
+                --hist-panel-gap: 10px;
+                --hist-side-panel-base-width: 312px;
+                --hist-plot-viewport-offset: 176px;
+            }
+
+            #histogram-plot {
+                height: calc(100vh - var(--header-height) - var(--hist-plot-viewport-offset));
+                min-height: 420px;
+            }
+        }
+
         @media (max-width: 980px) {
             :root {
-                --hist-side-panel-width: 280px;
+                --hist-side-panel-base-width: 280px;
             }
 
             #app {
@@ -8238,6 +8431,8 @@
             #hist-meta {
                 grid-column: 1;
                 grid-row: 2;
+                width: auto;
+                min-width: 0;
                 max-width: none;
                 position: static;
                 height: auto;
@@ -9652,12 +9847,26 @@
             const size = gd?._fullLayout?._size;
             const dividers = getHistogramPlotFrameDividers(gd);
             if (!size || !dividers || !Number.isFinite(size.l) || !Number.isFinite(size.t) || !Number.isFinite(size.w) || !Number.isFinite(size.h)) return;
-            dividers.top.style.left = `${size.l}px`;
-            dividers.top.style.top = `${size.t}px`;
-            dividers.top.style.width = `${size.w}px`;
-            dividers.right.style.left = `${size.l + size.w}px`;
-            dividers.right.style.top = `${size.t}px`;
-            dividers.right.style.height = `${size.h}px`;
+            const gdRect = gd.getBoundingClientRect();
+            const cartesianFrameRect = gd.querySelector('.cartesianlayer .subplot.xy .gridlayer, .cartesianlayer .gridlayer')?.getBoundingClientRect();
+            const frameLeft = cartesianFrameRect && Number.isFinite(cartesianFrameRect.left)
+                ? cartesianFrameRect.left - gdRect.left
+                : size.l;
+            const frameTop = cartesianFrameRect && Number.isFinite(cartesianFrameRect.top)
+                ? cartesianFrameRect.top - gdRect.top
+                : size.t;
+            const frameRight = cartesianFrameRect && Number.isFinite(cartesianFrameRect.right)
+                ? cartesianFrameRect.right - gdRect.left
+                : size.l + size.w;
+            const frameHeight = cartesianFrameRect && Number.isFinite(cartesianFrameRect.height)
+                ? cartesianFrameRect.height
+                : size.h;
+            dividers.top.style.left = `${frameLeft}px`;
+            dividers.top.style.top = `${frameTop}px`;
+            dividers.top.style.width = `${Math.max(0, frameRight - frameLeft)}px`;
+            dividers.right.style.left = `${frameRight}px`;
+            dividers.right.style.top = `${frameTop}px`;
+            dividers.right.style.height = `${frameHeight}px`;
         }
 
         function buildStatsOverlayHtml(sections) {
@@ -12108,6 +12317,7 @@
             syncPlotSizeControls();
             applyPlotHostSizing();
             syncRightPanelChrome();
+            requestAnimationFrame(syncPlotSizeControls);
             requestAnimationFrame(syncFeatureSelectWidths);
             syncPlotSettingsForm(
                 document.querySelector('input[name="hist-type"]:checked')?.value || '1d',
@@ -12120,6 +12330,20 @@
             window.addEventListener('resize', () => {
                 syncRightPanelChrome();
                 syncFeatureSelectWidths();
+                syncPlotSizeControls();
+                const gd = document.getElementById('histogram-plot');
+                if (window.Plotly && gd && gd.data && !hasCustomPlotSize()) {
+                    applyPlotHostSizing();
+                    requestAnimationFrame(() => {
+                        Plotly.Plots.resize(gd).then(() => {
+                            centerPlot(gd);
+                            positionHistogramPlotFrameDividers(gd);
+                            syncPlotSizeControls();
+                        }).catch(() => {
+                            syncPlotSizeControls();
+                        });
+                    });
+                }
             });
 
             if (sel) {
