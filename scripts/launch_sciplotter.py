@@ -14,6 +14,10 @@ import urllib.request
 import webbrowser
 from pathlib import Path
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 from sciplotter_backend import linux_integration
 from sciplotter_backend import runtime
 from sciplotter_backend.server import run_server
@@ -21,7 +25,6 @@ from sciplotter_backend.server import run_server
 
 DEFAULT_HOST = os.environ.get("SCIPLOTTER_HOST", "127.0.0.1")
 DEFAULT_PORT = int(os.environ.get("SCIPLOTTER_PORT", "5000"))
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
 APP_ENTRY = PROJECT_ROOT / "app.py"
 
 
@@ -45,7 +48,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--timeout", type=float, default=20.0)
     parser.add_argument("--no-browser", action="store_true")
     parser.add_argument("--server", action="store_true", help=argparse.SUPPRESS)
-    return parser.parse_args()
+    argv = [arg for arg in sys.argv[1:] if not arg.startswith("-psn_")]
+    return parser.parse_args(argv)
 
 
 def build_url(host: str, port: int, path: str = "/") -> str:

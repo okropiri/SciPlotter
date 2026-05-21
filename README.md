@@ -65,6 +65,8 @@ If you are not sure which one to choose on Linux, use the `.deb` package first.
 
 If macOS blocks the app the first time, open it from Finder with `Open` so Gatekeeper can confirm the launch.
 
+Official macOS releases can be notarized when the release workflow is configured with Apple signing credentials. If a build was produced without those credentials, macOS may still block normal app opening even though the bundled executable itself is valid.
+
 If macOS says the app is damaged, that usually means the downloaded release asset itself needs to be refreshed rather than approved through Finder. In that case, download the newest macOS release asset again.
 
 If the app is allowed to open but no browser window appears, check these log files in the user's home folder:

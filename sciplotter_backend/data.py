@@ -4,8 +4,26 @@ import os
 from flask import Blueprint, Response, jsonify, request, stream_with_context
 
 from . import common
+from . import importer
 
 bp = Blueprint('data', __name__)
+
+
+def _resolve_builtin_summary_source(source: str | None) -> tuple[str, str]:
+    normalized = (source or 'auto').strip().lower()
+    if normalized in ('raw',):
+        normalized = 'unsmoothed'
+    if normalized in ('original', 'smoothed', 'unsmoothed'):
+        return normalized, common.get_summary_csv(normalized)
+
+    summaries = common.list_summaries()
+    existing = [item for item in summaries.get('sources', []) if item.get('exists')]
+    if existing:
+        existing.sort(key=lambda item: item.get('mtime') or 0, reverse=True)
+        selected = existing[0]
+        return str(selected.get('label') or 'original'), str(selected.get('path') or common.get_summary_csv('original'))
+
+    return 'original', common.get_summary_csv('original')
 
 
 @bp.get('/api/config')
@@ -125,6 +143,82 @@ def api_browse_files():
         return jsonify({'current_path': path, 'items': items})
     except PermissionError:
         return jsonify({'error': 'Permission denied to access directory'}), 403
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@bp.get('/api/data-importer/browse')
+def api_data_importer_browse():
+    try:
+        path = (request.args.get('path') or '').strip() or None
+        kind = (request.args.get('kind') or 'all').strip().lower()
+        return jsonify(importer.browse_importable_files(path, kind=kind))
+    except FileNotFoundError as exc:
+        return jsonify({'error': str(exc)}), 404
+    except PermissionError:
+        return jsonify({'error': 'Permission denied to access directory'}), 403
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@bp.post('/api/data-importer/pick-file')
+def api_data_importer_pick_file():
+    try:
+        data = request.get_json(silent=True) or {}
+        kind = (data.get('kind') or 'all').strip().lower()
+        if kind not in ('all', 'csv', 'root'):
+            return jsonify({'error': f'Unsupported picker kind: {kind}'}), 400
+        start_path = (data.get('start_path') or '').strip() or None
+        return jsonify(importer.pick_importable_file(kind=kind, start_path=start_path))
+    except (FileNotFoundError, ValueError, RuntimeError) as exc:
+        return jsonify({'error': str(exc)}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@bp.post('/api/data-importer/preview')
+def api_data_importer_preview():
+    try:
+        data = request.get_json(silent=True) or {}
+        kind = (data.get('kind') or 'builtin').strip().lower()
+
+        if kind == 'builtin':
+            source_label, path = _resolve_builtin_summary_source(data.get('source'))
+            payload = importer.preview_csv_file(path, source_label=f'Built-in summary ({source_label})')
+            payload['kind'] = 'builtin'
+            payload['builtin_source'] = source_label
+            return jsonify(payload)
+
+        if kind == 'csv':
+            return jsonify(importer.preview_csv_file(str(data.get('path') or '')))
+
+        if kind == 'root':
+            tree_path = data.get('tree_path')
+            return jsonify(importer.preview_root_file(str(data.get('path') or ''), tree_path=(str(tree_path) if tree_path else None)))
+
+        return jsonify({'error': f'Unsupported importer kind: {kind}'}), 400
+    except (FileNotFoundError, ValueError, RuntimeError) as exc:
+        return jsonify({'error': str(exc)}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@bp.post('/api/data-importer/load')
+def api_data_importer_load():
+    try:
+        data = request.get_json(silent=True) or {}
+        kind = (data.get('kind') or '').strip().lower()
+
+        if kind == 'csv':
+            return jsonify(importer.load_csv_file(str(data.get('path') or ''), source_kind='csv'))
+
+        if kind == 'root':
+            tree_path = (data.get('tree_path') or '').strip()
+            return jsonify(importer.load_root_tree(str(data.get('path') or ''), tree_path=tree_path))
+
+        return jsonify({'error': f'Unsupported importer load kind: {kind}'}), 400
+    except (FileNotFoundError, ValueError, RuntimeError) as exc:
+        return jsonify({'error': str(exc)}), 400
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

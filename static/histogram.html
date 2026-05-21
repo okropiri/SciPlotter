@@ -776,11 +776,10 @@
                 saveHistogramPlotUiState();
 
                 const summarySourceSelect = document.getElementById('summarySource');
-                const customOption = document.querySelector('#summarySource option[value="custom"]');
-                const customSummaryName = document.getElementById('customSummaryName');
-                if (customOption) customOption.disabled = !LOCAL_SUMMARY;
-                if (summarySourceSelect) summarySourceSelect.value = snapshot.summarySource || 'auto';
-                if (customSummaryName) customSummaryName.textContent = LOCAL_SUMMARY?.name || '';
+                let restoredSummarySource = normalizeSummarySourceValue(snapshot.summarySource || 'auto');
+                if (restoredSummarySource === 'imported' && !LOCAL_SUMMARY) restoredSummarySource = 'auto';
+                if (summarySourceSelect) summarySourceSelect.value = restoredSummarySource;
+                syncHistogramDataSourceLabel();
 
                 const headers = await fetchSummaryHeaders();
                 if (headers && headers.length) {
@@ -5740,7 +5739,6 @@
         }
 
         #left .row[role="radiogroup"] label,
-        #channels-row label,
         #colorscale-row label,
         #autoscale-row label,
         #gray-out-1d-row label,
@@ -5753,8 +5751,254 @@
             font-weight: 600;
         }
 
+        #channels-section {
+            position: relative;
+        }
+
+        #channelsDetectedField {
+            display: block;
+            margin-top: 6px;
+            font-size: 11px;
+            line-height: 1.45;
+            color: #64748b;
+        }
+
+        #channel-field-row {
+            margin-top: 8px;
+        }
+
+        #channel-selector-row {
+            position: relative;
+            margin-top: 10px;
+        }
+
+        #channelSelectorToggle {
+            width: 100%;
+            min-height: 58px;
+            padding: 12px 14px;
+            border-radius: 16px;
+            border: 1px solid rgba(194, 207, 221, 0.95);
+            background: linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(244,248,252,0.98) 100%);
+            color: var(--text-strong);
+            box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            text-align: left;
+            transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+        }
+
+        #channelSelectorToggle:hover:not(:disabled) {
+            border-color: rgba(27, 118, 179, 0.36);
+            box-shadow: 0 18px 30px rgba(15, 23, 42, 0.1);
+            transform: translateY(-1px);
+        }
+
+        #channelSelectorToggle:disabled {
+            color: #94a3b8;
+            background: linear-gradient(180deg, rgba(248,250,252,0.96) 0%, rgba(241,245,249,0.96) 100%);
+            box-shadow: none;
+        }
+
+        .channel-selector-toggle-copy {
+            min-width: 0;
+            display: grid;
+            gap: 3px;
+        }
+
+        #channelSelectorToggle .channel-selector-toggle-title {
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: #64748b;
+        }
+
+        #channelSelectorToggle .channel-selector-toggle-value {
+            min-width: 0;
+            font-size: 15px;
+            font-weight: 800;
+            line-height: 1.25;
+            color: #0f172a;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .channel-selector-chevron {
+            flex: 0 0 auto;
+            font-size: 14px;
+            color: #64748b;
+            transition: transform 120ms ease, color 120ms ease;
+        }
+
+        #channelSelectorToggle[aria-expanded="true"] .channel-selector-chevron {
+            transform: rotate(180deg);
+            color: #1b76b3;
+        }
+
+        #channelSelectorMenu {
+            position: absolute;
+            top: calc(100% + 10px);
+            left: 0;
+            right: 0;
+            z-index: 40;
+            padding: 14px;
+            border-radius: 18px;
+            background: rgba(255, 255, 255, 0.98);
+            border: 1px solid rgba(226, 232, 240, 0.95);
+            box-shadow: 0 22px 42px rgba(15, 23, 42, 0.14);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            max-height: min(430px, 60vh);
+            min-height: 0;
+        }
+
+        .channel-selector-menu-head {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .channel-selector-actions {
+            flex: 0 0 auto;
+        }
+
+        .channel-selector-actions button {
+            min-height: 34px;
+            white-space: nowrap;
+        }
+
+        #channelSelectorSummary {
+            margin: 0;
+            font-size: 12px;
+            font-weight: 700;
+            line-height: 1.45;
+            color: #64748b;
+        }
+
+        .channel-selector-search {
+            display: block;
+        }
+
+        #channelSelectorSearch {
+            width: 100%;
+            min-height: 38px;
+            padding: 8px 12px;
+            border-radius: 12px;
+            border: 1px solid rgba(194, 207, 221, 0.92);
+            background: rgba(248, 250, 252, 0.98);
+            color: #0f172a;
+            font: inherit;
+            box-sizing: border-box;
+        }
+
+        #channelSelectorSearch:focus {
+            outline: none;
+            border-color: rgba(27, 118, 179, 0.44);
+            box-shadow: 0 0 0 3px rgba(27, 118, 179, 0.12);
+            background: #fff;
+        }
+
         #channels-row {
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
             gap: 8px;
+            min-height: 0;
+            overflow: auto;
+            padding-right: 4px;
+        }
+
+        #channels-row label.channel-selector-option {
+            position: relative;
+            display: grid;
+            grid-template-columns: 18px minmax(0, 1fr);
+            align-items: center;
+            gap: 12px;
+            min-width: 0;
+            width: 100%;
+            justify-self: stretch;
+            box-sizing: border-box;
+            padding: 11px 12px;
+            border-radius: 12px;
+            background: rgba(248, 250, 252, 0.92);
+            border: 1px solid rgba(226, 232, 240, 0.9);
+            font-weight: 700;
+            cursor: pointer;
+            transition: border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+        }
+
+        #channels-row label.channel-selector-option:hover {
+            border-color: rgba(27, 118, 179, 0.32);
+            background: rgba(240, 247, 255, 0.98);
+            box-shadow: 0 10px 20px rgba(15, 23, 42, 0.05);
+            transform: translateY(-1px);
+        }
+
+        #channels-row label.channel-selector-option[data-selected="true"] {
+            border-color: rgba(181, 72, 183, 0.3);
+            background: linear-gradient(180deg, rgba(252, 245, 253, 0.98) 0%, rgba(247, 241, 252, 0.94) 100%);
+            box-shadow: 0 12px 22px rgba(173, 71, 183, 0.1);
+        }
+
+        #channels-row label.channel-selector-option[hidden] {
+            display: none !important;
+        }
+
+        #channels-row input.chan {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .channel-selector-check {
+            width: 18px;
+            height: 18px;
+            border-radius: 6px;
+            border: 1.5px solid rgba(148, 163, 184, 0.9);
+            background: #fff;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            box-sizing: border-box;
+            transition: background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+        }
+
+        #channels-row input.chan:checked + .channel-selector-check {
+            border-color: rgba(173, 71, 183, 0.85);
+            background: linear-gradient(180deg, rgba(199, 96, 208, 0.98) 0%, rgba(165, 67, 180, 0.98) 100%);
+            box-shadow: 0 8px 16px rgba(173, 71, 183, 0.22);
+        }
+
+        #channels-row input.chan:checked + .channel-selector-check::before {
+            content: '✓';
+            font-size: 12px;
+            font-weight: 900;
+            line-height: 1;
+        }
+
+        #channels-row .channel-selector-option-text {
+            min-width: 0;
+            color: #334155;
+            font-size: 13px;
+            line-height: 1.35;
+            white-space: normal;
+            overflow-wrap: anywhere;
+        }
+
+        #channelSelectorMenu #channelSelectorEmpty {
+            padding: 12px;
+            border-radius: 12px;
+            border: 1px dashed rgba(194, 207, 221, 0.92);
+            background: rgba(248, 250, 252, 0.9);
+            color: #64748b;
+            font-size: 12px;
+            line-height: 1.45;
         }
 
         #feature-filter-apply-row,
@@ -5842,10 +6086,10 @@
 
         #summary-source-row {
             display: grid;
-            grid-template-columns: 66px auto auto;
-            align-items: center;
-            gap: 4px;
-            padding: 0 0 8px;
+            grid-template-columns: 66px minmax(0, 1fr);
+            align-items: start;
+            gap: 8px 12px;
+            padding: 0 0 12px;
             margin: 0 !important;
             border: 0;
             border-bottom: 1px solid #e5e7eb;
@@ -5855,26 +6099,693 @@
         }
 
         #summary-source-row > *:not(:first-child) {
-            justify-self: end;
+            justify-self: stretch;
+            min-width: 0;
+        }
+
+        #summary-source-row > label:first-child {
+            align-self: start;
+            padding-top: 11px;
+        }
+
+        .summary-source-launcher-stack {
+            min-width: 0;
+            display: grid;
+            gap: 8px;
         }
 
         #customSummaryName {
-            grid-column: 2 / 4;
-            margin-top: 1px;
-            font-size: 10px !important;
-            color: #9ca3af !important;
+            grid-column: auto;
+            margin-top: 0;
+            font-size: 11px !important;
+            color: #64748b !important;
+            max-width: 100%;
+            white-space: normal;
+            line-height: 1.4;
+            padding-left: 2px;
         }
 
         #summarySource {
-            width: 116px;
-            max-width: 116px;
+            display: none;
         }
 
         #browseSummary {
-            width: 32px;
-            min-width: 32px;
-            padding-left: 0;
-            padding-right: 0;
+            width: 100%;
+            min-width: 0;
+            min-height: 50px;
+            display: grid;
+            grid-template-columns: auto minmax(0, 1fr) auto;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 12px;
+            border-radius: 14px;
+            border: 1px solid rgba(194, 207, 221, 0.94);
+            background: linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(246,249,252,0.98) 100%);
+            color: var(--text-strong);
+            box-shadow: 0 10px 22px rgba(15, 23, 42, 0.06);
+            text-align: left;
+        }
+
+        #browseSummary:hover,
+        #browseSummary:focus-visible {
+            border-color: rgba(27, 118, 179, 0.3);
+            background: linear-gradient(180deg, rgba(255,255,255,1) 0%, rgba(240,247,255,0.98) 100%);
+            box-shadow: 0 14px 26px rgba(15, 23, 42, 0.08);
+        }
+
+        .summary-source-launcher-copy {
+            min-width: 0;
+            display: grid;
+            gap: 2px;
+        }
+
+        .summary-source-launcher-title {
+            font-size: 13px;
+            font-weight: 800;
+            line-height: 1.2;
+            color: #0f172a;
+        }
+
+        .summary-source-launcher-hint {
+            font-size: 11px;
+            line-height: 1.35;
+            color: #64748b;
+            overflow-wrap: anywhere;
+        }
+
+        .summary-source-launcher-chevron {
+            font-size: 12px;
+            color: #94a3b8;
+        }
+
+        .data-importer-launch-icon {
+            width: 28px;
+            height: 28px;
+            border-radius: 10px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(27, 118, 179, 0.1);
+            color: #0f6ba8;
+            font-size: 15px;
+            line-height: 1;
+        }
+
+        #summaryFileInput {
+            display: none;
+        }
+
+        .data-importer-modal[hidden] {
+            display: none !important;
+        }
+
+        .data-importer-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 1400;
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            padding: 24px;
+            background: rgba(15, 23, 42, 0.24);
+            backdrop-filter: blur(10px);
+            overflow-y: auto;
+        }
+
+        .data-importer-shell {
+            width: min(1320px, calc(100vw - 40px));
+            height: min(96vh, 1040px);
+            max-height: min(96vh, 1040px);
+            display: flex;
+            flex-direction: column;
+            border-radius: 22px;
+            border: 1px solid rgba(194, 207, 221, 0.92);
+            background: linear-gradient(180deg, rgba(255,255,255,0.97) 0%, rgba(248,250,252,0.98) 100%);
+            box-shadow: 0 28px 70px rgba(15, 23, 42, 0.24);
+            overflow: hidden;
+            margin: auto;
+        }
+
+        .data-importer-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 20px 22px 16px;
+            border-bottom: 1px solid rgba(226, 232, 240, 0.95);
+            background: linear-gradient(180deg, rgba(255,255,255,0.94) 0%, rgba(244,247,251,0.9) 100%);
+        }
+
+        .data-importer-header-copy h3 {
+            margin: 0;
+            font-size: 22px;
+            letter-spacing: -0.03em;
+            color: var(--text-strong);
+        }
+
+        .data-importer-header-copy p {
+            margin: 6px 0 0;
+            font-size: 13px;
+            color: var(--text-muted);
+            line-height: 1.45;
+        }
+
+        .data-importer-close {
+            min-width: 36px;
+            min-height: 36px;
+            width: 36px;
+            height: 36px;
+            padding: 0;
+            border-radius: 999px;
+            border: 1px solid rgba(194, 207, 221, 0.9);
+            background: #fff;
+            color: var(--text-muted);
+            font-size: 20px;
+            line-height: 1;
+            box-shadow: 0 6px 14px rgba(15, 23, 42, 0.08);
+            cursor: pointer;
+        }
+
+        .data-importer-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 14px 22px 0;
+        }
+
+        .data-importer-kind-group {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .data-importer-kind-btn {
+            min-height: 32px;
+            padding: 0 14px;
+            border-radius: 999px;
+            border: 1px solid rgba(194, 207, 221, 0.92);
+            background: rgba(255,255,255,0.9);
+            color: var(--text-muted);
+            font: inherit;
+            font-weight: 700;
+            letter-spacing: 0.01em;
+            cursor: pointer;
+            transition: border-color 120ms ease, color 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
+        }
+
+        .data-importer-kind-btn.is-active {
+            color: var(--brand-pink);
+            border-color: rgba(173, 71, 183, 0.34);
+            background: rgba(173, 71, 183, 0.08);
+            box-shadow: 0 10px 24px rgba(173, 71, 183, 0.12);
+        }
+
+        .data-importer-current-selection {
+            min-width: 0;
+            font-size: 12px;
+            color: var(--text-muted);
+            text-align: right;
+            overflow-wrap: anywhere;
+        }
+
+        .data-importer-body {
+            flex: 1 1 auto;
+            min-height: 0;
+            display: grid;
+            grid-template-columns: minmax(260px, 308px) minmax(0, 1fr);
+            gap: 16px;
+            padding: 18px 22px 22px;
+            overflow: hidden;
+        }
+
+        .data-importer-side,
+        .data-importer-preview {
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .data-importer-panel,
+        .data-importer-preview-shell {
+            border: 1px solid rgba(194, 207, 221, 0.84);
+            border-radius: 18px;
+            background: linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(248,250,252,0.98) 100%);
+            box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+        }
+
+        .data-importer-panel {
+            padding: 16px;
+        }
+
+        .data-importer-panel[hidden],
+        .data-importer-root-tree-row[hidden] {
+            display: none !important;
+        }
+
+        #dataImporterFilePanel {
+            flex: 1 1 auto;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .data-importer-picker-hero {
+            display: grid;
+            gap: 14px;
+            padding: 16px;
+            border-radius: 16px;
+            border: 1px solid rgba(194, 207, 221, 0.78);
+            background: linear-gradient(180deg, rgba(243,248,254,0.96) 0%, rgba(255,255,255,0.92) 100%);
+        }
+
+        .data-importer-picker-copy {
+            display: grid;
+            gap: 6px;
+        }
+
+        .data-importer-picker-eyebrow {
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #0f6ba8;
+        }
+
+        .data-importer-picker-copy p,
+        .data-importer-picker-hint {
+            margin: 0;
+            font-size: 12px;
+            line-height: 1.5;
+            color: #475569;
+        }
+
+        .data-importer-picker-button {
+            min-height: 40px;
+            justify-content: center;
+        }
+
+        .data-importer-panel h4,
+        .data-importer-preview-head h4 {
+            margin: 0 0 10px;
+            font-size: 12px;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            color: #64748b;
+            text-transform: uppercase;
+        }
+
+        .data-importer-field {
+            display: grid;
+            gap: 6px;
+        }
+
+        .data-importer-field label,
+        .data-importer-root-tree-row label {
+            font-size: 12px;
+            font-weight: 700;
+            color: #64748b;
+        }
+
+        .data-importer-field select,
+        .data-importer-root-tree-row select {
+            min-height: 38px;
+            padding: 8px 12px;
+            border-radius: 10px;
+            border: 1px solid rgba(194, 207, 221, 0.9);
+            background: #fff;
+            color: var(--text-strong);
+            font: inherit;
+            box-sizing: border-box;
+        }
+
+        .data-importer-browser-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .data-importer-current-path,
+        .data-importer-selected-path {
+            min-height: 38px;
+            padding: 9px 12px;
+            border-radius: 10px;
+            border: 1px solid rgba(194, 207, 221, 0.9);
+            background: rgba(255,255,255,0.82);
+            color: #334155;
+            font-size: 12px;
+            line-height: 1.35;
+            box-sizing: border-box;
+            word-break: break-word;
+        }
+
+        .data-importer-browser-list {
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow: auto;
+            border-radius: 12px;
+            border: 1px solid rgba(226, 232, 240, 0.95);
+            background: rgba(255,255,255,0.76);
+        }
+
+        .data-importer-browser-item {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 10px 12px;
+            border: 0;
+            border-bottom: 1px solid rgba(226, 232, 240, 0.8);
+            background: transparent;
+            color: var(--text-strong);
+            text-align: left;
+            cursor: pointer;
+        }
+
+        .data-importer-browser-item:last-child {
+            border-bottom: 0;
+        }
+
+        .data-importer-browser-item:hover,
+        .data-importer-browser-item.is-selected {
+            background: rgba(173, 71, 183, 0.08);
+        }
+
+        .data-importer-browser-name {
+            min-width: 0;
+            font-size: 13px;
+            font-weight: 600;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .data-importer-browser-kind {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: #64748b;
+            flex: 0 0 auto;
+        }
+
+        .data-importer-preview-shell {
+            flex: 1 1 auto;
+            min-height: 0;
+            padding: 16px;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr);
+            grid-template-areas:
+                'head'
+                'root'
+                'channel'
+                'message'
+                'sample'
+                'structure';
+            grid-template-rows: auto auto auto auto minmax(280px, 1fr) auto;
+            gap: 14px;
+            overflow: auto;
+            scrollbar-gutter: stable;
+        }
+
+        .data-importer-preview-head {
+            grid-area: head;
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            justify-content: flex-start;
+            gap: 12px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(226, 232, 240, 0.95);
+        }
+
+        #dataImporterPreviewTitle {
+            margin: 0;
+            font-size: 20px;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            line-height: 1.2;
+            color: #334155;
+            text-transform: none;
+            overflow-wrap: anywhere;
+        }
+
+        .data-importer-preview-meta {
+            min-width: 0;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: flex-start;
+        }
+
+        .data-importer-meta-chip {
+            display: inline-flex;
+            align-items: center;
+            min-height: 28px;
+            padding: 0 10px;
+            border-radius: 999px;
+            background: rgba(241, 245, 249, 0.96);
+            color: #475569;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .data-importer-root-tree-row {
+            grid-area: root;
+            display: grid;
+            grid-template-columns: 92px minmax(0, 1fr);
+            gap: 12px;
+            align-items: center;
+            padding: 12px 14px;
+            border-radius: 14px;
+            border: 1px solid rgba(226, 232, 240, 0.95);
+            background: rgba(255,255,255,0.82);
+        }
+
+        .data-importer-channel-field-row {
+            grid-area: channel;
+            display: grid;
+            grid-template-columns: 122px minmax(0, 1fr);
+            gap: 12px;
+            align-items: start;
+            padding: 12px 14px;
+            border-radius: 14px;
+            border: 1px solid rgba(226, 232, 240, 0.95);
+            background: rgba(255,255,255,0.82);
+        }
+
+        .data-importer-field-stack {
+            display: grid;
+            gap: 6px;
+            min-width: 0;
+        }
+
+        .data-importer-field-hint {
+            margin: 0;
+            font-size: 11px;
+            line-height: 1.45;
+            color: #64748b;
+        }
+
+        .data-importer-preview-message {
+            grid-area: message;
+            padding: 14px 16px;
+            border-radius: 14px;
+            background: rgba(248,250,252,0.96);
+            border: 1px solid rgba(226, 232, 240, 0.95);
+            color: #475569;
+            font-size: 13px;
+            line-height: 1.45;
+        }
+
+        .data-importer-structure {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 10px;
+            min-height: 0;
+            max-height: 190px;
+            overflow: auto;
+            padding-right: 4px;
+        }
+
+        .data-importer-preview-section[hidden],
+        .data-importer-channel-field-row[hidden] {
+            display: none !important;
+        }
+
+        .data-importer-preview-section {
+            min-height: 0;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        #dataImporterStructureSection {
+            grid-area: structure;
+        }
+
+        #dataImporterSampleSection {
+            grid-area: sample;
+        }
+
+        .data-importer-preview-section-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .data-importer-preview-section-head h5 {
+            margin: 0;
+            font-size: 12px;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            color: #64748b;
+            text-transform: uppercase;
+        }
+
+        .data-importer-sample-section {
+            min-height: 0;
+            padding-top: 2px;
+        }
+
+        .data-importer-structure-card {
+            padding: 14px 16px;
+            border-radius: 14px;
+            border: 1px solid rgba(226, 232, 240, 0.95);
+            background: rgba(255,255,255,0.82);
+            min-height: 0;
+        }
+
+        .data-importer-structure-card h5 {
+            margin: 0 0 8px;
+            font-size: 13px;
+            font-weight: 800;
+            color: #334155;
+        }
+
+        .data-importer-structure-list {
+            margin: 0;
+            padding: 0;
+            list-style: none;
+            display: grid;
+            gap: 6px;
+            max-height: 132px;
+            overflow: auto;
+            padding-right: 4px;
+        }
+
+        .data-importer-structure-list li {
+            font-size: 12px;
+            color: #475569;
+            line-height: 1.4;
+        }
+
+        .data-importer-table-wrap {
+            flex: 1 1 auto;
+            min-height: 300px;
+            width: 100%;
+            overflow: auto;
+            border-radius: 14px;
+            border: 1px solid rgba(226, 232, 240, 0.95);
+            background: rgba(255,255,255,0.88);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.7);
+        }
+
+        .data-importer-table {
+            width: max-content;
+            min-width: 100%;
+            border-collapse: collapse;
+            table-layout: auto;
+        }
+
+        .data-importer-table th,
+        .data-importer-table td {
+            padding: 9px 10px;
+            border-bottom: 1px solid rgba(226, 232, 240, 0.88);
+            text-align: left;
+            font-size: 12px;
+            color: #334155;
+            vertical-align: top;
+            white-space: nowrap;
+        }
+
+        .data-importer-table th {
+            font-size: 11px;
+            letter-spacing: 0.01em;
+        }
+
+        .data-importer-table th {
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            background: rgba(248,250,252,0.98);
+            font-weight: 800;
+            color: #475569;
+        }
+
+        .data-importer-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            padding: 16px 22px 20px;
+            border-top: 1px solid rgba(226, 232, 240, 0.95);
+            background: linear-gradient(180deg, rgba(250,251,252,0.84) 0%, rgba(250,251,252,0.98) 100%);
+        }
+
+        .data-importer-footer button {
+            min-height: 38px;
+            padding: 0 16px;
+        }
+
+        @media (max-width: 960px) {
+            .data-importer-modal {
+                padding: 12px;
+            }
+
+            .data-importer-shell {
+                width: min(100vw - 24px, 1320px);
+                height: calc(100vh - 24px);
+                max-height: calc(100vh - 24px);
+                min-height: 0;
+            }
+
+            .data-importer-body {
+                grid-template-columns: 1fr;
+                overflow: auto;
+            }
+
+            .data-importer-preview-shell {
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+                overflow: auto;
+            }
+
+            .data-importer-structure {
+                grid-template-columns: 1fr;
+                max-height: 248px;
+            }
+
+            .data-importer-sample-section {
+                min-height: 260px;
+            }
+
+            .data-importer-preview-head {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .data-importer-preview-meta {
+                justify-content: flex-start;
+            }
         }
 
         #norm-row {
@@ -5946,6 +6857,14 @@
             color: #6b7280;
             letter-spacing: 0;
             text-transform: none;
+        }
+
+        #left #channels-row > label.channel-selector-option {
+            min-width: 0 !important;
+            max-width: none !important;
+            flex-shrink: 1;
+            color: #334155;
+            white-space: normal;
         }
 
         #left select,
@@ -6071,6 +6990,53 @@
             box-shadow: 0 8px 18px rgba(27, 118, 179, 0.2);
         }
 
+        #left button#browseSummary,
+        #left button#browseSummary:hover,
+        #left button#browseSummary:focus-visible {
+            min-height: 50px;
+            height: auto;
+            padding: 10px 12px;
+            border-radius: 14px;
+            background: linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(246,249,252,0.98) 100%);
+            border: 1px solid rgba(194, 207, 221, 0.94);
+            color: var(--text-strong);
+            box-shadow: 0 10px 22px rgba(15, 23, 42, 0.06);
+        }
+
+        #left button#browseSummary:hover,
+        #left button#browseSummary:focus-visible {
+            border-color: rgba(27, 118, 179, 0.3);
+            background: linear-gradient(180deg, rgba(255,255,255,1) 0%, rgba(240,247,255,0.98) 100%);
+            box-shadow: 0 14px 26px rgba(15, 23, 42, 0.08);
+        }
+
+        #left button#channelSelectorToggle,
+        #left button#channelSelectorToggle:hover,
+        #left button#channelSelectorToggle:focus-visible {
+            background: linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(244,248,252,0.98) 100%);
+            border: 1px solid rgba(194, 207, 221, 0.95);
+            color: var(--text-strong);
+            box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
+        }
+
+        #left button#channelSelectorToggle:hover,
+        #left button#channelSelectorToggle:focus-visible {
+            border-color: rgba(27, 118, 179, 0.36);
+            box-shadow: 0 18px 30px rgba(15, 23, 42, 0.1);
+        }
+
+        #left button#channelToggleAll,
+        #left button#channelToggleAll:hover,
+        #left button#channelToggleAll:focus-visible {
+            min-height: 34px;
+            padding: 7px 12px;
+            border-radius: 10px;
+            background: rgba(240, 247, 255, 0.96);
+            border: 1px solid rgba(27, 118, 179, 0.24);
+            color: #0f6ba8;
+            box-shadow: none;
+        }
+
         #left input[type="checkbox"],
         #left input[type="radio"] {
             accent-color: var(--brand-pink);
@@ -6082,7 +7048,6 @@
 
         /* Checkbox / radio groups – inline, no decoration */
         #left .row[role="radiogroup"],
-        #channels-row,
         #log-row,
         #autoscale-row,
         #gray-out-1d-row,
@@ -6098,7 +7063,6 @@
         }
 
         #left .row[role="radiogroup"] label,
-        #channels-row label,
         .control-canonical-row--textticktick label,
         #autoscale-row label,
         #gray-out-1d-row label,
@@ -6122,21 +7086,6 @@
         #autoscale-row label,
         #merge-row label {
             justify-self: stretch;
-        }
-
-        #channels-row {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
-            align-items: center;
-            gap: 4px 8px;
-            width: 100%;
-        }
-
-        #channels-row label {
-            width: 100%;
-            justify-self: stretch;
-            justify-content: center;
-            box-sizing: border-box;
         }
 
         /* Dropdowns fill remaining space */
@@ -6545,6 +7494,10 @@
             #left .section .row > label[for] {
                 min-width: 0 !important;
                 max-width: none;
+            }
+
+            #summary-source-row > label:first-child {
+                padding-top: 0;
             }
 
             #customSummaryName {
@@ -8591,18 +9544,120 @@
             </div>
 
             <!-- File Selection -->
-            <div class="row" id="summary-source-row" style="margin-top:6px; align-items:center; gap:6px;">
-                <label for="summarySource" style="min-width:90px;">Source file</label>
-                <select id="summarySource" style="min-width: 160px;">
+            <div class="row" id="summary-source-row">
+                <label for="browseSummary">Data source</label>
+                <div class="summary-source-launcher-stack">
+                    <button id="browseSummary" title="Open Data Importer" type="button">
+                        <span class="data-importer-launch-icon" aria-hidden="true">📂</span>
+                        <span class="summary-source-launcher-copy">
+                            <span class="summary-source-launcher-title">Data Importer</span>
+                            <span class="summary-source-launcher-hint">Browse built-in summaries, CSV tables, or ROOT TTrees.</span>
+                        </span>
+                        <span class="summary-source-launcher-chevron" aria-hidden="true">▾</span>
+                    </button>
+                    <span id="customSummaryName"></span>
+                </div>
+                <select id="summarySource">
                     <option value="auto">Auto</option>
                     <option value="original">Original</option>
                     <option value="smoothed">Smoothed</option>
                     <option value="unsmoothed">Unsmoothed (raw)</option>
-                    <option value="custom" disabled>Custom (uploaded)</option>
+                    <option value="imported" disabled>Imported</option>
                 </select>
-                <button id="browseSummary" class="btn-secondary" title="Select CSV file">   📂</button>
                 <input id="summaryFileInput" type="file" accept=".csv,text/csv" style="display:none;" />
-                <span id="customSummaryName" style="font-size:12px;color:#555;"></span>
+            </div>
+
+            <div id="data-importer-modal" class="data-importer-modal" hidden aria-hidden="true">
+                <div class="data-importer-shell" role="dialog" aria-modal="true" aria-labelledby="data-importer-title">
+                    <div class="data-importer-header">
+                        <div class="data-importer-header-copy">
+                            <h3 id="data-importer-title">Data Importer</h3>
+                            <p>Select a source type, preview the structure safely, and load only when the data looks correct.</p>
+                        </div>
+                        <button id="dataImporterClose" class="data-importer-close" type="button" aria-label="Close importer">×</button>
+                    </div>
+                    <div class="data-importer-toolbar">
+                        <div class="data-importer-kind-group" role="tablist" aria-label="Data type selection">
+                            <button class="data-importer-kind-btn is-active" type="button" data-import-kind="builtin">Built-in</button>
+                            <button class="data-importer-kind-btn" type="button" data-import-kind="csv">CSV</button>
+                            <button class="data-importer-kind-btn" type="button" data-import-kind="root">ROOT</button>
+                        </div>
+                        <div id="dataImporterSelectionSummary" class="data-importer-current-selection">Built-in summary preview</div>
+                    </div>
+                    <div class="data-importer-body">
+                        <div class="data-importer-side">
+                            <section id="dataImporterBuiltinPanel" class="data-importer-panel">
+                                <h4>Built-in Summary</h4>
+                                <div class="data-importer-field">
+                                    <label for="dataImporterBuiltInSource">Summary source</label>
+                                    <select id="dataImporterBuiltInSource">
+                                        <option value="auto">Auto</option>
+                                        <option value="original">Original</option>
+                                        <option value="smoothed">Smoothed</option>
+                                        <option value="unsmoothed">Unsmoothed (raw)</option>
+                                    </select>
+                                </div>
+                            </section>
+                            <section id="dataImporterFilePanel" class="data-importer-panel" hidden>
+                                <h4>File Selection</h4>
+                                <div class="data-importer-picker-hero">
+                                    <div class="data-importer-picker-copy">
+                                        <div class="data-importer-picker-eyebrow">Native File Browser</div>
+                                        <p>Use the system file picker instead of the in-page browser. It reopens in the last imported folder when available, otherwise it starts from the SciPlotter workspace.</p>
+                                    </div>
+                                    <button id="dataImporterPickFile" class="btn-primary data-importer-picker-button" type="button">Choose File…</button>
+                                </div>
+                                <div class="data-importer-field">
+                                    <label>Selected file</label>
+                                    <div id="dataImporterSelectedPath" class="data-importer-selected-path">No file selected yet.</div>
+                                </div>
+                                <div class="data-importer-field">
+                                    <label>Start folder</label>
+                                    <div id="dataImporterCurrentPath" class="data-importer-current-path">SciPlotter workspace root</div>
+                                </div>
+                                <p id="dataImporterFileHint" class="data-importer-picker-hint">The picker will reopen in the last successful import folder for this data type when available.</p>
+                            </section>
+                        </div>
+                        <div class="data-importer-preview">
+                            <section class="data-importer-preview-shell">
+                                <div class="data-importer-preview-head">
+                                    <div>
+                                        <h4 id="dataImporterPreviewTitle">Preview</h4>
+                                    </div>
+                                    <div id="dataImporterPreviewMeta" class="data-importer-preview-meta"></div>
+                                </div>
+                                <div id="dataImporterRootTreeRow" class="data-importer-root-tree-row" hidden>
+                                    <label for="dataImporterRootTree">TTree</label>
+                                    <select id="dataImporterRootTree"></select>
+                                </div>
+                                <div id="dataImporterChannelFieldRow" class="data-importer-channel-field-row" hidden>
+                                    <label id="dataImporterChannelFieldLabel" for="dataImporterChannelField">Channel field</label>
+                                    <div class="data-importer-field-stack">
+                                        <select id="dataImporterChannelField"></select>
+                                        <p id="dataImporterChannelFieldHint" class="data-importer-field-hint"></p>
+                                    </div>
+                                </div>
+                                <div id="dataImporterPreviewMessage" class="data-importer-preview-message">Choose a data type to start previewing a source.</div>
+                                <section id="dataImporterStructureSection" class="data-importer-preview-section" hidden>
+                                    <div class="data-importer-preview-section-head">
+                                        <h5>Structure</h5>
+                                    </div>
+                                    <div id="dataImporterStructure" class="data-importer-structure"></div>
+                                </section>
+                                <section id="dataImporterSampleSection" class="data-importer-preview-section data-importer-sample-section" hidden>
+                                    <div class="data-importer-preview-section-head">
+                                        <h5 id="dataImporterSampleTitle">Sample rows</h5>
+                                    </div>
+                                    <div id="dataImporterTableWrap" class="data-importer-table-wrap"></div>
+                                </section>
+                            </section>
+                        </div>
+                    </div>
+                    <div class="data-importer-footer">
+                        <button id="dataImporterCancel" class="btn-secondary" type="button">Cancel</button>
+                        <button id="dataImporterLoad" class="btn-primary" type="button">Load This Data</button>
+                    </div>
+                </div>
             </div>
 
             <!-- Type & Display -->
@@ -8708,17 +9763,38 @@
             <!-- Channels -->
             <div class="section" id="channels-section">
                 <h4>Channels</h4>
+                <div class="row control-canonical-row control-canonical-row--text-dropdown" id="channel-field-row">
+                    <label class="control-canonical-label control-canonical-label--text-dropdown" for="channelFieldSelect">Channel field</label>
+                    <select id="channelFieldSelect" class="control-canonical-box control-canonical-select control-canonical-select--text-dropdown"></select>
+                </div>
+                <div id="channelsDetectedField">Waiting for summary data to detect a channel field.</div>
                 <div class="row" id="merge-row" style="display:none; align-items:center; gap:6px;">
                     <label style="display:flex; align-items:center; gap:6px;">
                         <input type="checkbox" id="mergeChannels1d" checked>
                         <span style="font-size:12px;color:#555;">Merge selected channels (1D)</span>
                     </label>
                 </div>
-                <div class="row" id="channels-row">
-                    <label><input type="checkbox" class="chan" id="chan-C1" value="C1" checked> C1</label>
-                    <label><input type="checkbox" class="chan" id="chan-C2" value="C2" checked> C2</label>
-                    <label><input type="checkbox" class="chan" id="chan-C3" value="C3" checked> C3</label>
-                    <label><input type="checkbox" class="chan" id="chan-C4" value="C4" checked> C4</label>
+                <div class="row" id="channel-selector-row">
+                    <button id="channelSelectorToggle" class="btn-secondary" type="button" aria-expanded="false" aria-controls="channelSelectorMenu">
+                        <span class="channel-selector-toggle-copy">
+                            <span class="channel-selector-toggle-title">Channel values</span>
+                            <span id="channelSelectorToggleValue" class="channel-selector-toggle-value">Channel filtering unavailable</span>
+                        </span>
+                        <span class="channel-selector-chevron" aria-hidden="true">▾</span>
+                    </button>
+                </div>
+                <div id="channelSelectorMenu" hidden>
+                    <div class="channel-selector-menu-head">
+                        <div id="channelSelectorSummary">Channel filtering becomes available after a dataset is loaded.</div>
+                        <div class="channel-selector-actions">
+                            <button id="channelToggleAll" class="btn-secondary" type="button" disabled>Select all</button>
+                        </div>
+                    </div>
+                    <div class="channel-selector-search">
+                        <input id="channelSelectorSearch" type="search" placeholder="Filter channel values" autocomplete="off" spellcheck="false">
+                    </div>
+                    <div class="row" id="channels-row" role="group" aria-label="Channel values"></div>
+                    <div id="channelSelectorEmpty" hidden>No channel values match the current filter.</div>
                 </div>
             </div>
 
@@ -8856,6 +9932,23 @@
         let LAST_META_MAIN = '';
         let LAST_META_SELECTION = null;
         let LAST_META_SELECTION_PLACEHOLDER = 'Use lasso/select on the 2D plot to inspect a subset.';
+        const BUILTIN_SUMMARY_SOURCE_LABELS = Object.freeze({
+            auto: 'Auto',
+            original: 'Original',
+            smoothed: 'Smoothed',
+            unsmoothed: 'Unsmoothed (raw)',
+        });
+        const DATA_IMPORTER_STATE = {
+            kind: 'builtin',
+            builtinSource: 'auto',
+            browsePath: '',
+            selectedPath: '',
+            rootTreePath: '',
+            channelField: '',
+            preview: null,
+            browser: null,
+            busy: false,
+        };
 
         function parseHistogramNumericValue(value) {
             if (value === null || value === undefined) return NaN;
@@ -9321,18 +10414,176 @@
             { key: 'Event_to_event_dt_raw', label: 'Event_to_event_dt_raw' }, // offline neighbor Δt CSV
         ];
 
+        const CHANNEL_FIELD_NAME_TOKENS = Object.freeze([
+            'channel',
+            'channelid',
+            'channelindex',
+            'channelnumber',
+            'channelnum',
+            'chan',
+            'chanid',
+            'chanindex',
+        ]);
+        const CHANNEL_UI_STATE = {
+            detectedField: '',
+            autoDetectedField: '',
+            matchedBy: 'none',
+            hasHeaders: false,
+        };
+
+        function getChannelFieldOptions(headers) {
+            return (Array.isArray(headers) ? headers : [])
+                .map((header) => String(header ?? ''))
+                .filter((header) => header.trim() !== '');
+        }
+
+        function getDatasetChannelField(dataset = null) {
+            return String(dataset?.meta?.channel_field || dataset?.channel_field || '').trim();
+        }
+
+        function setDatasetChannelField(dataset, field) {
+            if (!dataset || typeof dataset !== 'object') return;
+            const nextValue = String(field || '').trim();
+            if (!dataset.meta || typeof dataset.meta !== 'object') dataset.meta = {};
+            if (nextValue) dataset.meta.channel_field = nextValue;
+            else delete dataset.meta.channel_field;
+        }
+
+        function getActiveChannelFieldSelection() {
+            return String(document.getElementById('channelFieldSelect')?.value || '').trim();
+        }
+
+        function normalizeChannelFieldToken(value) {
+            return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+        }
+
         // Helper to find the channel column key in headers (case-insensitive for known variants)
-        function getChannelKey(headers) {
-            if (!Array.isArray(headers)) return null;
-            // Prefer exact common cases, then broader scan
-            if (headers.includes('channel')) return 'channel';
-            if (headers.includes('Channel')) return 'Channel';
-            if (headers.includes('CHANNEL')) return 'CHANNEL';
-            // Fallback: case-insensitive match of a header that equals 'channel'
-            for (const h of headers) {
-                if (String(h).trim().toLowerCase() === 'channel') return h;
+        function detectAutoChannelField(headers) {
+            const headerOptions = getChannelFieldOptions(headers);
+            if (!headerOptions.length) {
+                return { key: null, matchedBy: 'missing-data' };
             }
-            return null;
+            for (const preferred of ['channel', 'Channel', 'CHANNEL']) {
+                if (headerOptions.includes(preferred)) {
+                    return { key: preferred, matchedBy: 'exact' };
+                }
+            }
+            const normalizedHeaders = headerOptions
+                .map((header) => ({
+                    key: String(header || ''),
+                    token: normalizeChannelFieldToken(header),
+                }))
+                .filter((entry) => entry.key && entry.token);
+            for (const token of CHANNEL_FIELD_NAME_TOKENS) {
+                const match = normalizedHeaders.find((entry) => entry.token === token);
+                if (match) {
+                    return { key: match.key, matchedBy: 'known-variant' };
+                }
+            }
+            return { key: null, matchedBy: 'none' };
+        }
+
+        function detectChannelField(headers, preferredField = '') {
+            const headerOptions = getChannelFieldOptions(headers);
+            const autoDetection = detectAutoChannelField(headerOptions);
+            const preferred = String(preferredField || '').trim();
+            if (preferred && headerOptions.includes(preferred)) {
+                return {
+                    key: preferred,
+                    matchedBy: autoDetection.key === preferred ? autoDetection.matchedBy : 'manual',
+                    autoKey: autoDetection.key || '',
+                };
+            }
+            return {
+                key: autoDetection.key || null,
+                matchedBy: autoDetection.matchedBy || 'none',
+                autoKey: autoDetection.key || '',
+            };
+        }
+
+        function getChannelKey(headers, dataset = null, preferredField = '') {
+            return detectChannelField(headers, preferredField || getDatasetChannelField(dataset) || getActiveChannelFieldSelection()).key;
+        }
+
+        function setChannelDetectionState(headers, preferredField = '') {
+            const detection = detectChannelField(headers, preferredField);
+            CHANNEL_UI_STATE.detectedField = detection.key || '';
+            CHANNEL_UI_STATE.autoDetectedField = detection.autoKey || '';
+            CHANNEL_UI_STATE.matchedBy = detection.matchedBy || 'none';
+            CHANNEL_UI_STATE.hasHeaders = Array.isArray(headers) && headers.length > 0;
+            return detection;
+        }
+
+        function getChannelDetectionStatusText() {
+            if (CHANNEL_UI_STATE.detectedField) {
+                if (CHANNEL_UI_STATE.matchedBy === 'manual' && CHANNEL_UI_STATE.autoDetectedField && CHANNEL_UI_STATE.autoDetectedField !== CHANNEL_UI_STATE.detectedField) {
+                    return `Channel field: ${CHANNEL_UI_STATE.detectedField} (auto-detected suggestion: ${CHANNEL_UI_STATE.autoDetectedField})`;
+                }
+                if (CHANNEL_UI_STATE.matchedBy === 'manual') {
+                    return `Channel field: ${CHANNEL_UI_STATE.detectedField} (selected manually)`;
+                }
+                return `Channel field: ${CHANNEL_UI_STATE.detectedField} (auto-detected)`;
+            }
+            if (CHANNEL_UI_STATE.hasHeaders) {
+                return 'No channel field selected. Choose the column or branch that identifies channel values.';
+            }
+            return 'Waiting for summary data to detect a channel field.';
+        }
+
+        function getChannelFieldPreviewChip(headers, preferredField = '') {
+            const detection = detectChannelField(headers, preferredField);
+            return detection.key ? `Channel field: ${detection.key}` : 'Channel field: not selected';
+        }
+
+        function getChannelFieldDetailLine(headers, subject = 'field', preferredField = '') {
+            const detection = detectChannelField(headers, preferredField);
+            if (!detection.key) return `Channel ${subject}: not selected`;
+            if (detection.matchedBy === 'manual' && detection.autoKey && detection.autoKey !== detection.key) {
+                return `Selected channel ${subject}: ${detection.key} (auto-detected suggestion: ${detection.autoKey})`;
+            }
+            if (detection.matchedBy === 'manual') {
+                return `Selected channel ${subject}: ${detection.key}`;
+            }
+            return `Auto-detected channel ${subject}: ${detection.key}`;
+        }
+
+        function syncChannelFieldSelect(headers, dataset = null) {
+            const row = document.getElementById('channel-field-row');
+            const select = document.getElementById('channelFieldSelect');
+            const options = getChannelFieldOptions(headers);
+            const preferredField = getDatasetChannelField(dataset) || getActiveChannelFieldSelection();
+
+            if (row) row.hidden = options.length === 0;
+            if (!select) return setChannelDetectionState(headers, preferredField);
+
+            select.replaceChildren();
+            if (!options.length) {
+                const option = document.createElement('option');
+                option.value = '';
+                option.textContent = 'No columns or branches available';
+                select.appendChild(option);
+                select.disabled = true;
+                select.value = '';
+                return setChannelDetectionState([], '');
+            }
+
+            const placeholder = document.createElement('option');
+            placeholder.value = '';
+            placeholder.textContent = 'Choose column or branch…';
+            select.appendChild(placeholder);
+            options.forEach((field) => {
+                const option = document.createElement('option');
+                option.value = field;
+                option.textContent = field;
+                select.appendChild(option);
+            });
+
+            const detection = setChannelDetectionState(headers, preferredField);
+            const nextValue = detection.key || '';
+            select.disabled = false;
+            select.value = nextValue;
+            if (dataset) setDatasetChannelField(dataset, nextValue);
+            return detection;
         }
 
         // Stable color mapping for channels so toggling doesn't reshuffle colors
@@ -9358,43 +10609,157 @@
             return CHANNEL_COLOR_PALETTE[idx];
         }
 
-        function buildDefaultChannelMarkup() {
-            return [
-                { value: 'C1', checked: true },
-                { value: 'C2', checked: true },
-                { value: 'C3', checked: true },
-                { value: 'C4', checked: true },
-            ];
+        function getChannelInputs() {
+            return Array.from(document.querySelectorAll('#channels-row input.chan'));
+        }
+
+        function filterChannelSelectorOptions(query = '') {
+            const options = Array.from(document.querySelectorAll('#channels-row label.channel-selector-option'));
+            const normalizedQuery = String(query || '').trim().toLowerCase();
+            let visibleCount = 0;
+            options.forEach((option) => {
+                const text = String(option.dataset.channelLabel || '').toLowerCase();
+                const match = !normalizedQuery || text.includes(normalizedQuery);
+                option.hidden = !match;
+                if (match) visibleCount += 1;
+            });
+            const emptyState = document.getElementById('channelSelectorEmpty');
+            if (emptyState) {
+                emptyState.textContent = options.length
+                    ? 'No channel values match the current filter.'
+                    : 'No channel values are available for the current channel field.';
+                emptyState.hidden = visibleCount > 0;
+            }
+            const search = document.getElementById('channelSelectorSearch');
+            if (search) search.disabled = options.length === 0;
+            return visibleCount;
+        }
+
+        function setChannelSelectorExpanded(expanded) {
+            const menu = document.getElementById('channelSelectorMenu');
+            const toggle = document.getElementById('channelSelectorToggle');
+            const search = document.getElementById('channelSelectorSearch');
+            if (menu) menu.hidden = !expanded;
+            if (toggle) toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+            if (!expanded) {
+                if (search) search.value = '';
+                filterChannelSelectorOptions('');
+                return;
+            }
+            filterChannelSelectorOptions(search?.value || '');
+            requestAnimationFrame(() => {
+                if (search && !search.disabled) search.focus({ preventScroll: true });
+            });
+        }
+
+        function syncChannelSelectorControls() {
+            const toggle = document.getElementById('channelSelectorToggle');
+            const toggleValue = document.getElementById('channelSelectorToggleValue');
+            const toggleAll = document.getElementById('channelToggleAll');
+            const summary = document.getElementById('channelSelectorSummary');
+            const detectedField = document.getElementById('channelsDetectedField');
+            const inputs = getChannelInputs();
+            const total = inputs.length;
+            const checkedCount = inputs.filter((input) => input.checked).length;
+            const detectionText = getChannelDetectionStatusText();
+
+            inputs.forEach((input) => {
+                const option = input.closest('label.channel-selector-option');
+                if (option) option.dataset.selected = input.checked ? 'true' : 'false';
+            });
+
+            if (detectedField) detectedField.textContent = detectionText;
+            if (summary) {
+                if (!total) {
+                    summary.textContent = CHANNEL_UI_STATE.detectedField
+                        ? `The current channel field "${CHANNEL_UI_STATE.detectedField}" does not expose any non-empty values in the current dataset.`
+                        : detectionText;
+                } else {
+                    summary.textContent = `${checkedCount} selected / ${total} available`;
+                }
+            }
+            if (toggle) {
+                if (!total) {
+                    if (toggleValue) toggleValue.textContent = CHANNEL_UI_STATE.detectedField ? 'No channel values found' : 'Channel filtering unavailable';
+                    toggle.disabled = true;
+                    toggle.setAttribute('aria-expanded', 'false');
+                } else {
+                    if (toggleValue) {
+                        toggleValue.textContent = checkedCount === total
+                            ? `All ${total} selected`
+                            : `${checkedCount} of ${total} selected`;
+                    }
+                    toggle.disabled = false;
+                }
+            }
+            if (toggleAll) {
+                const allSelected = total > 0 && checkedCount === total;
+                toggleAll.textContent = allSelected ? 'Clear all' : 'Select all';
+                toggleAll.disabled = total === 0;
+            }
+            filterChannelSelectorOptions(document.getElementById('channelSelectorSearch')?.value || '');
+        }
+
+        async function handleChannelSelectionChanged() {
+            captureCurrentRanges();
+            syncChannelSelectorControls();
+            summarizeSelection();
+            await renderHistogram();
+        }
+
+        async function setAllChannelSelections(checked) {
+            const inputs = getChannelInputs();
+            let changed = false;
+            inputs.forEach((input) => {
+                if (input.checked !== checked) {
+                    input.checked = checked;
+                    changed = true;
+                }
+            });
+            syncChannelSelectorControls();
+            if (!changed) return;
+            captureCurrentRanges();
+            summarizeSelection();
+            await renderHistogram();
         }
 
         function renderChannelsRowOptions(options) {
             const row = document.getElementById('channels-row');
             if (!row) return;
             const frag = document.createDocumentFragment();
-            for (const option of options) {
-                const normalizedValue = String(option?.value || '').trim().toUpperCase();
-                if (!normalizedValue) continue;
-                const id = 'chan-' + normalizedValue.replace(/[^A-Za-z0-9_\-]/g, '_');
+            for (const [index, option] of (Array.isArray(options) ? options : []).entries()) {
+                const rawValue = String(option?.value ?? '');
+                if (!rawValue.trim()) continue;
+                const id = `chan-${index}-${rawValue.replace(/[^A-Za-z0-9_\-]/g, '_').slice(0, 40)}`;
                 const label = document.createElement('label');
+                label.className = 'channel-selector-option';
                 const input = document.createElement('input');
                 input.type = 'checkbox';
                 input.className = 'chan';
                 input.id = id;
-                input.value = normalizedValue;
+                input.value = rawValue;
                 input.checked = option?.checked !== false;
-                input.addEventListener('change', async () => {
-                    captureCurrentRanges();
-                    summarizeSelection();
-                    await renderHistogram();
-                });
+                const mark = document.createElement('span');
+                mark.className = 'channel-selector-check';
+                mark.setAttribute('aria-hidden', 'true');
                 const span = document.createElement('span');
-                span.textContent = option?.label || normalizedValue;
+                span.className = 'channel-selector-option-text';
+                span.textContent = option?.label || rawValue;
+                span.title = span.textContent;
+                label.dataset.channelLabel = span.textContent;
+                label.dataset.selected = input.checked ? 'true' : 'false';
+                input.addEventListener('change', async () => {
+                    label.dataset.selected = input.checked ? 'true' : 'false';
+                    await handleChannelSelectionChanged();
+                });
                 label.appendChild(input);
+                label.appendChild(mark);
                 label.appendChild(span);
                 frag.appendChild(label);
             }
-            row.innerHTML = '';
-            row.appendChild(frag);
+            row.replaceChildren(frag);
+            setChannelSelectorExpanded(false);
+            syncChannelSelectorControls();
         }
 
         // Populate the Channels checkbox row with unique channel values from the dataset
@@ -9402,32 +10767,40 @@
             const row = document.getElementById('channels-row');
             if (!row) return;
             try {
-                const { headers, rows } = await fetchSmoothedSummary();
+                const summaryDataset = await fetchSmoothedSummary();
+                const { headers, rows } = summaryDataset;
+                const previousInputs = getChannelInputs();
+                const previousSelection = new Set(previousInputs.filter((input) => input.checked).map((input) => String(input.value ?? '')));
+                const previousField = getActiveChannelFieldSelection();
+                const detection = syncChannelFieldSelect(headers, summaryDataset);
                 if (!headers || !headers.length || !rows || !rows.length) {
-                    renderChannelsRowOptions(buildDefaultChannelMarkup());
+                    renderChannelsRowOptions([]);
                     return;
                 }
-                const chanKey = getChannelKey(headers);
-                if (!chanKey) {
-                    renderChannelsRowOptions(buildDefaultChannelMarkup());
+                if (!detection.key) {
+                    renderChannelsRowOptions([]);
                     return;
                 }
-                const uniq = new Map(); // normalized -> display
+                const uniq = new Map();
                 for (const r of rows) {
-                    const raw = (r[chanKey] ?? '').toString().trim();
-                    if (!raw) continue;
-                    const norm = raw.toUpperCase();
-                    if (!uniq.has(norm)) uniq.set(norm, raw);
+                    const raw = r[detection.key] == null ? '' : String(r[detection.key]);
+                    if (!raw.trim()) continue;
+                    if (!uniq.has(raw)) uniq.set(raw, raw);
                 }
                 if (!uniq.size) {
-                    renderChannelsRowOptions(buildDefaultChannelMarkup());
+                    renderChannelsRowOptions([]);
                     return;
                 }
-                // Sort keys naturally
-                const keys = Array.from(uniq.keys()).sort((a,b)=> a.localeCompare(b, undefined, { numeric: true }));
-                renderChannelsRowOptions(keys.map((key) => ({ value: key, label: uniq.get(key), checked: true })));
+                const values = Array.from(uniq.values()).sort((left, right) => left.localeCompare(right, undefined, { numeric: true, sensitivity: 'base' }));
+                const preserveSelection = previousField && previousField === detection.key && previousInputs.length > 0;
+                renderChannelsRowOptions(values.map((value) => ({
+                    value,
+                    label: value,
+                    checked: preserveSelection ? previousSelection.has(value) : true,
+                })));
             } catch (_) {
-                renderChannelsRowOptions(buildDefaultChannelMarkup());
+                syncChannelFieldSelect([], null);
+                renderChannelsRowOptions([]);
             }
         }
 
@@ -9438,7 +10811,7 @@
         // Build allowed C4 event_ids that have a C3 within ±windowNs in the same trace (absolute time)
         function buildC3AllowedEventIds(headers, rows, windowNs, dataset = null) {
             const summaryDataset = dataset || prepareSummaryDataset({ headers, rows });
-            const chanKey = getChannelKey(headers);
+            const chanKey = getChannelKey(headers, summaryDataset);
             const eidCandidates = ['event_id', 'EventID', 'Event_Id', 'id', 'Id'];
             const eidKey = eidCandidates.find(k => headers.includes(k)) || null;
             const eventStartCandidates = ['event_start_time_ns', 'EventStartTime', 'event_time_ns', 'EventTime', 'peak_time_ns'];
@@ -10566,12 +11939,826 @@
             await renderHistogram();
         }
 
+        function normalizeSummarySourceValue(value) {
+            const normalized = String(value || 'auto').trim().toLowerCase();
+            if (normalized === 'raw') return 'unsmoothed';
+            if (normalized === 'custom') return 'imported';
+            if (['auto', 'original', 'smoothed', 'unsmoothed', 'imported'].includes(normalized)) return normalized;
+            return 'auto';
+        }
+
+        function isImportedSummarySource(value) {
+            return normalizeSummarySourceValue(value) === 'imported';
+        }
+
+        function clearSummaryDataCaches() {
+            CACHED_SUMMARY = null;
+            CACHED_EVENT_TO_EVENT_DT_RAW = null;
+        }
+
+        function getBuiltinSummarySourceLabel(value) {
+            return BUILTIN_SUMMARY_SOURCE_LABELS[normalizeSummarySourceValue(value)] || BUILTIN_SUMMARY_SOURCE_LABELS.auto;
+        }
+
+        function syncHistogramImportedOption() {
+            const importedOption = document.querySelector('#summarySource option[value="imported"]');
+            if (importedOption) importedOption.disabled = !LOCAL_SUMMARY;
+        }
+
+        function getImportedSummaryLabel(dataset = LOCAL_SUMMARY) {
+            if (!dataset) return 'Imported summary unavailable';
+            const sourceKind = String(dataset.kind || dataset.source_kind || 'imported').trim().toLowerCase();
+            const prefix = sourceKind === 'root' ? 'ROOT TTree' : (sourceKind === 'csv' ? 'CSV' : 'Imported');
+            const sourceLabel = String(dataset.source_label || dataset.name || 'Imported data').trim() || 'Imported data';
+            return `${prefix}: ${sourceLabel}`;
+        }
+
+        function syncHistogramDataSourceLabel() {
+            syncHistogramImportedOption();
+            const summaryLabel = document.getElementById('customSummaryName');
+            if (!summaryLabel) return;
+            const sourceValue = normalizeSummarySourceValue(document.getElementById('summarySource')?.value || 'auto');
+            if (sourceValue === 'imported') {
+                summaryLabel.textContent = getImportedSummaryLabel();
+                return;
+            }
+            summaryLabel.textContent = `Built-in summary: ${getBuiltinSummarySourceLabel(sourceValue)}`;
+        }
+
+        async function updateHistogramAfterSummarySourceChange(rowsForDefaults = [], { useCustomDefaults = false, autoFill = false, render = false } = {}) {
+            clearSummaryDataCaches();
+            const headers = await fetchSummaryHeaders();
+            restoreOrDefaultFeatureSelections(headers, Array.isArray(rowsForDefaults) ? rowsForDefaults : [], { useCustomDefaults });
+            const xSel = document.getElementById('axis-x');
+            const ySel = document.getElementById('axis-y');
+            try {
+                if (xSel) xSel.disabled = false;
+                if (ySel) ySel.disabled = false;
+            } catch (_) {}
+            await populateChannelsDynamic();
+            setMode(document.querySelector('input[name="hist-type"]:checked')?.value || '2d');
+            summarizeSelection();
+            syncHistogramDataSourceLabel();
+            if (!(headers && headers.length)) {
+                renderPlaceholder();
+                return headers;
+            }
+            if (autoFill) {
+                await autoFillFeatureMinMax('x');
+                await autoFillFeatureMinMax('y');
+                await autoFillFeatureMinMax('f');
+            }
+            if (render) await renderHistogram();
+            else renderPlaceholder();
+            return headers;
+        }
+
+        async function applyBuiltInHistogramSource(source, { render = true } = {}) {
+            LOCAL_SUMMARY = null;
+            LOCAL_SUMMARY_TOKEN = null;
+            const summarySourceSelect = document.getElementById('summarySource');
+            if (summarySourceSelect) summarySourceSelect.value = normalizeSummarySourceValue(source);
+            syncHistogramDataSourceLabel();
+            await updateHistogramAfterSummarySourceChange([], {
+                useCustomDefaults: false,
+                autoFill: false,
+                render,
+            });
+        }
+
+        async function applyImportedHistogramDataset(dataset, { render = true } = {}) {
+            LOCAL_SUMMARY = prepareSummaryDataset(dataset || { headers: [], rows: [] });
+            LOCAL_SUMMARY_TOKEN = createHistogramSessionSummaryToken(dataset?.name || dataset?.source_label || 'imported');
+            HISTOGRAM_SESSION_SUMMARIES.set(LOCAL_SUMMARY_TOKEN, LOCAL_SUMMARY);
+            const summarySourceSelect = document.getElementById('summarySource');
+            if (summarySourceSelect) summarySourceSelect.value = 'imported';
+            syncHistogramDataSourceLabel();
+            await updateHistogramAfterSummarySourceChange(Array.isArray(dataset?.rows) ? dataset.rows : [], {
+                useCustomDefaults: true,
+                autoFill: true,
+                render,
+            });
+        }
+
+        async function fetchHistogramImporterJson(url, options = {}) {
+            const response = await fetch(url, options);
+            let payload = null;
+            try {
+                payload = await response.json();
+            } catch (_) {
+                payload = null;
+            }
+            if (!response.ok) throw new Error(payload?.error || `Request failed (${response.status})`);
+            if (payload?.error) throw new Error(payload.error);
+            return payload || {};
+        }
+
+        function formatDataImporterCell(value) {
+            if (value === null || value === undefined) return '';
+            let out;
+            if (typeof value === 'string') out = value;
+            else if (typeof value === 'number' || typeof value === 'boolean') out = String(value);
+            else {
+                try {
+                    out = JSON.stringify(value);
+                } catch (_) {
+                    out = String(value);
+                }
+            }
+            return out.length > 220 ? `${out.slice(0, 217)}...` : out;
+        }
+
+        function renderDataImporterMetaChips(items) {
+            const meta = document.getElementById('dataImporterPreviewMeta');
+            if (!meta) return;
+            meta.replaceChildren();
+            (Array.isArray(items) ? items : []).filter(Boolean).forEach((item) => {
+                const chip = document.createElement('span');
+                chip.className = 'data-importer-meta-chip';
+                chip.textContent = String(item);
+                meta.appendChild(chip);
+            });
+        }
+
+        function setDataImporterPreviewMessage(message, tone = 'neutral') {
+            const previewMessage = document.getElementById('dataImporterPreviewMessage');
+            if (!previewMessage) return;
+            previewMessage.textContent = message || '';
+            previewMessage.style.display = message ? '' : 'none';
+            previewMessage.style.borderColor = tone === 'error' ? 'rgba(220, 38, 38, 0.22)' : 'rgba(226, 232, 240, 0.95)';
+            previewMessage.style.background = tone === 'error' ? 'rgba(254, 242, 242, 0.96)' : 'rgba(248,250,252,0.96)';
+            previewMessage.style.color = tone === 'error' ? '#b91c1c' : '#475569';
+        }
+
+        function buildDataImporterStructureCard(title, lines) {
+            const items = (Array.isArray(lines) ? lines : []).filter(Boolean);
+            if (!items.length) return null;
+            const card = document.createElement('div');
+            card.className = 'data-importer-structure-card';
+            const heading = document.createElement('h5');
+            heading.textContent = title;
+            const list = document.createElement('ul');
+            list.className = 'data-importer-structure-list';
+            items.forEach((line) => {
+                const entry = document.createElement('li');
+                entry.textContent = String(line);
+                list.appendChild(entry);
+            });
+            card.append(heading, list);
+            return card;
+        }
+
+        function renderDataImporterTable(headers, rows) {
+            const wrap = document.getElementById('dataImporterTableWrap');
+            if (!wrap) return;
+            wrap.replaceChildren();
+            const headerList = Array.isArray(headers) ? headers : [];
+            const rowList = Array.isArray(rows) ? rows : [];
+            if (!headerList.length || !rowList.length) {
+                wrap.hidden = true;
+                return;
+            }
+            wrap.hidden = false;
+            const table = document.createElement('table');
+            table.className = 'data-importer-table';
+            const thead = document.createElement('thead');
+            const headRow = document.createElement('tr');
+            headerList.forEach((header) => {
+                const th = document.createElement('th');
+                th.textContent = String(header);
+                headRow.appendChild(th);
+            });
+            thead.appendChild(headRow);
+            const tbody = document.createElement('tbody');
+            rowList.forEach((row) => {
+                const tr = document.createElement('tr');
+                headerList.forEach((header) => {
+                    const td = document.createElement('td');
+                    td.textContent = formatDataImporterCell(row?.[header]);
+                    tr.appendChild(td);
+                });
+                tbody.appendChild(tr);
+            });
+            table.append(thead, tbody);
+            wrap.appendChild(table);
+        }
+
+        function describeDataImporterBrowserItem(item) {
+            if (!item) return 'Item';
+            if (item.type === 'parent') return 'Up';
+            if (item.is_directory) return 'Folder';
+            return String(item.file_kind || 'file').toUpperCase();
+        }
+
+        function canLoadDataImporterSelection() {
+            const preview = DATA_IMPORTER_STATE.preview;
+            if (DATA_IMPORTER_STATE.kind === 'builtin') {
+                return !!(preview && preview.supported && Number(preview.total_rows) > 0);
+            }
+            if (DATA_IMPORTER_STATE.kind === 'csv') {
+                return !!(DATA_IMPORTER_STATE.selectedPath && preview && preview.supported && Number(preview.total_rows) > 0);
+            }
+            if (DATA_IMPORTER_STATE.kind === 'root') {
+                const selectedTree = preview?.selected_tree || null;
+                return !!(
+                    DATA_IMPORTER_STATE.selectedPath
+                    && preview
+                    && preview.supported
+                    && selectedTree
+                    && Number(selectedTree.entry_count) > 0
+                    && (DATA_IMPORTER_STATE.rootTreePath || selectedTree.path)
+                );
+            }
+            return false;
+        }
+
+        function getDataImporterSelectionSummary() {
+            if (DATA_IMPORTER_STATE.kind === 'builtin') {
+                return `Built-in summary: ${getBuiltinSummarySourceLabel(DATA_IMPORTER_STATE.builtinSource)}`;
+            }
+            if (!DATA_IMPORTER_STATE.selectedPath) {
+                return DATA_IMPORTER_STATE.kind === 'root' ? 'ROOT file not selected' : 'CSV file not selected';
+            }
+            const fileLabel = getDataImporterFileLabel(DATA_IMPORTER_STATE.selectedPath) || DATA_IMPORTER_STATE.selectedPath;
+            if (DATA_IMPORTER_STATE.kind === 'root' && DATA_IMPORTER_STATE.rootTreePath) {
+                return `${fileLabel} :: ${DATA_IMPORTER_STATE.rootTreePath}`;
+            }
+            return fileLabel;
+        }
+
+        function deriveDataImporterDirectory(path) {
+            const normalized = String(path || '').trim();
+            if (!normalized) return '';
+            const sanitized = normalized.replace(/\\/g, '/');
+            const slashIndex = sanitized.lastIndexOf('/');
+            if (slashIndex <= 0) return sanitized;
+            return sanitized.slice(0, slashIndex);
+        }
+
+        function getDataImporterFileLabel(path) {
+            const normalized = String(path || '').trim();
+            if (!normalized) return '';
+            const sanitized = normalized.replace(/\\/g, '/');
+            const slashIndex = sanitized.lastIndexOf('/');
+            return slashIndex >= 0 ? sanitized.slice(slashIndex + 1) : sanitized;
+        }
+
+        function getDataImporterPreferredStartPath() {
+            return String(DATA_IMPORTER_STATE.browsePath || DATA_IMPORTER_STATE.selectedPath || '').trim();
+        }
+
+        function getDataImporterStartFolderLabel() {
+            const normalized = String(DATA_IMPORTER_STATE.browsePath || '').trim();
+            return normalized || 'SciPlotter workspace root';
+        }
+
+        function getDataImporterFriendlyErrorMessage(errorMessage = '') {
+            const normalized = String(errorMessage || '').trim();
+            if (!normalized) return '';
+            const lower = normalized.toLowerCase();
+            if (
+                DATA_IMPORTER_STATE.kind === 'builtin'
+                && (lower.startsWith('file does not exist:') || lower.includes('no such file'))
+            ) {
+                return 'No built-in summary file is currently available for the selected source. Choose another built-in option or import a CSV or ROOT file.';
+            }
+            return normalized;
+        }
+
+        function getDataImporterPreviewHeaders(preview = DATA_IMPORTER_STATE.preview) {
+            if (!preview) return [];
+            if (DATA_IMPORTER_STATE.kind === 'root') {
+                return Array.isArray(preview.selected_tree?.headers) ? preview.selected_tree.headers : [];
+            }
+            return Array.isArray(preview.headers) ? preview.headers : [];
+        }
+
+        function syncDataImporterChannelFieldControls(headers) {
+            const row = document.getElementById('dataImporterChannelFieldRow');
+            const label = document.getElementById('dataImporterChannelFieldLabel');
+            const select = document.getElementById('dataImporterChannelField');
+            const hint = document.getElementById('dataImporterChannelFieldHint');
+            const options = getChannelFieldOptions(headers);
+
+            if (label) label.textContent = DATA_IMPORTER_STATE.kind === 'root' ? 'Channel branch' : 'Channel column';
+            if (row) row.hidden = options.length === 0;
+            if (!select) return detectChannelField(headers, DATA_IMPORTER_STATE.channelField);
+
+            select.replaceChildren();
+            if (!options.length) {
+                const option = document.createElement('option');
+                option.value = '';
+                option.textContent = 'No columns or branches available';
+                select.appendChild(option);
+                select.disabled = true;
+                if (hint) hint.textContent = '';
+                return detectChannelField([], '');
+            }
+
+            const placeholder = document.createElement('option');
+            placeholder.value = '';
+            placeholder.textContent = 'Choose column or branch…';
+            select.appendChild(placeholder);
+            options.forEach((field) => {
+                const option = document.createElement('option');
+                option.value = field;
+                option.textContent = field;
+                select.appendChild(option);
+            });
+
+            const detection = detectChannelField(headers, DATA_IMPORTER_STATE.channelField);
+            DATA_IMPORTER_STATE.channelField = detection.key || '';
+            select.disabled = DATA_IMPORTER_STATE.busy;
+            select.value = DATA_IMPORTER_STATE.channelField;
+            if (hint) {
+                if (!detection.key) {
+                    hint.textContent = 'Choose the column or branch that identifies channel values before loading.';
+                } else if (detection.matchedBy === 'manual' && detection.autoKey && detection.autoKey !== detection.key) {
+                    hint.textContent = `Using ${detection.key}. Auto-detected suggestion: ${detection.autoKey}.`;
+                } else if (detection.matchedBy === 'manual') {
+                    hint.textContent = `Using ${detection.key}.`;
+                } else {
+                    hint.textContent = `Auto-detected ${detection.key}.`;
+                }
+            }
+            return detection;
+        }
+
+        async function pickDataImporterFile() {
+            if (DATA_IMPORTER_STATE.busy || DATA_IMPORTER_STATE.kind === 'builtin') return;
+            DATA_IMPORTER_STATE.busy = true;
+            syncDataImporterControls();
+            setDataImporterPreviewMessage('Waiting for the system file picker…');
+            try {
+                const payload = await fetchHistogramImporterJson('/api/data-importer/pick-file', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        kind: DATA_IMPORTER_STATE.kind,
+                        start_path: getDataImporterPreferredStartPath(),
+                    }),
+                });
+                if (payload.cancelled) {
+                    DATA_IMPORTER_STATE.browsePath = String(payload.current_path || DATA_IMPORTER_STATE.browsePath || '');
+                    renderDataImporterPreview();
+                    return;
+                }
+                DATA_IMPORTER_STATE.selectedPath = String(payload.selected_path || '');
+                DATA_IMPORTER_STATE.browsePath = String(payload.current_path || deriveDataImporterDirectory(DATA_IMPORTER_STATE.selectedPath));
+                DATA_IMPORTER_STATE.rootTreePath = '';
+                DATA_IMPORTER_STATE.channelField = '';
+                DATA_IMPORTER_STATE.preview = null;
+                syncDataImporterControls();
+                await previewDataImporterSelection();
+            } catch (error) {
+                renderDataImporterPreview(error.message || 'File picker failed.');
+            } finally {
+                DATA_IMPORTER_STATE.busy = false;
+                syncDataImporterControls();
+            }
+        }
+
+        function updateDataImporterActionState() {
+            const builtInSource = document.getElementById('dataImporterBuiltInSource');
+            const loadButton = document.getElementById('dataImporterLoad');
+            const rootTreeSelect = document.getElementById('dataImporterRootTree');
+            const pickFileButton = document.getElementById('dataImporterPickFile');
+            const channelFieldSelect = document.getElementById('dataImporterChannelField');
+            document.querySelectorAll('.data-importer-kind-btn').forEach((button) => {
+                if (button instanceof HTMLButtonElement) button.disabled = DATA_IMPORTER_STATE.busy;
+            });
+            if (pickFileButton) pickFileButton.disabled = DATA_IMPORTER_STATE.busy || DATA_IMPORTER_STATE.kind === 'builtin';
+            if (builtInSource) builtInSource.disabled = DATA_IMPORTER_STATE.busy;
+            if (rootTreeSelect) {
+                rootTreeSelect.disabled = DATA_IMPORTER_STATE.busy || !(Array.isArray(DATA_IMPORTER_STATE.preview?.tree_options) && DATA_IMPORTER_STATE.preview.tree_options.length);
+            }
+            if (channelFieldSelect) {
+                channelFieldSelect.disabled = DATA_IMPORTER_STATE.busy || !getChannelFieldOptions(getDataImporterPreviewHeaders()).length;
+            }
+            if (loadButton) loadButton.disabled = DATA_IMPORTER_STATE.busy || !canLoadDataImporterSelection();
+        }
+
+        function renderDataImporterBrowserList() {
+            const browserList = document.getElementById('dataImporterBrowserList');
+            if (!browserList) return;
+            browserList.replaceChildren();
+            if (DATA_IMPORTER_STATE.kind === 'builtin') return;
+            const items = Array.isArray(DATA_IMPORTER_STATE.browser?.items) ? DATA_IMPORTER_STATE.browser.items : [];
+            if (!items.length) {
+                const emptyState = document.createElement('div');
+                emptyState.className = 'data-importer-preview-message';
+                emptyState.style.margin = '12px';
+                emptyState.textContent = DATA_IMPORTER_STATE.busy ? 'Loading matching files…' : 'No matching files found in this folder.';
+                browserList.appendChild(emptyState);
+                return;
+            }
+            items.forEach((item) => {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'data-importer-browser-item';
+                if (item?.type === 'file' && String(item.path || '') === DATA_IMPORTER_STATE.selectedPath) {
+                    button.classList.add('is-selected');
+                }
+                const name = document.createElement('span');
+                name.className = 'data-importer-browser-name';
+                name.textContent = item?.type === 'parent' ? 'Go up one level' : String(item?.name || 'Untitled');
+                const kind = document.createElement('span');
+                kind.className = 'data-importer-browser-kind';
+                kind.textContent = describeDataImporterBrowserItem(item);
+                button.append(name, kind);
+                button.addEventListener('click', async () => {
+                    if (DATA_IMPORTER_STATE.busy) return;
+                    if (item?.is_directory) {
+                        await loadDataImporterBrowser(String(item.path || ''));
+                        return;
+                    }
+                    DATA_IMPORTER_STATE.selectedPath = String(item?.path || '');
+                    DATA_IMPORTER_STATE.rootTreePath = '';
+                    DATA_IMPORTER_STATE.preview = null;
+                    syncDataImporterControls();
+                    await previewDataImporterSelection();
+                });
+                browserList.appendChild(button);
+            });
+        }
+
+        function syncDataImporterControls() {
+            const builtInPanel = document.getElementById('dataImporterBuiltinPanel');
+            const filePanel = document.getElementById('dataImporterFilePanel');
+            const selectedPath = document.getElementById('dataImporterSelectedPath');
+            const currentPath = document.getElementById('dataImporterCurrentPath');
+            const summary = document.getElementById('dataImporterSelectionSummary');
+            const builtInSelect = document.getElementById('dataImporterBuiltInSource');
+            const pickFileButton = document.getElementById('dataImporterPickFile');
+            const pickerHint = document.getElementById('dataImporterFileHint');
+
+            document.querySelectorAll('.data-importer-kind-btn').forEach((button) => {
+                if (!(button instanceof HTMLElement)) return;
+                button.classList.toggle('is-active', button.dataset.importKind === DATA_IMPORTER_STATE.kind);
+            });
+            if (builtInPanel) builtInPanel.hidden = DATA_IMPORTER_STATE.kind !== 'builtin';
+            if (filePanel) filePanel.hidden = DATA_IMPORTER_STATE.kind === 'builtin';
+            if (selectedPath) selectedPath.textContent = DATA_IMPORTER_STATE.selectedPath || 'No file selected yet.';
+            if (currentPath) currentPath.textContent = getDataImporterStartFolderLabel();
+            if (summary) summary.textContent = getDataImporterSelectionSummary();
+            if (builtInSelect) builtInSelect.value = DATA_IMPORTER_STATE.builtinSource;
+            if (pickFileButton) {
+                pickFileButton.textContent = DATA_IMPORTER_STATE.kind === 'root' ? 'Choose ROOT File…' : 'Choose CSV File…';
+            }
+            if (pickerHint) {
+                pickerHint.textContent = DATA_IMPORTER_STATE.kind === 'root'
+                    ? 'The system picker reopens in the last ROOT folder when available, otherwise it starts from the SciPlotter workspace.'
+                    : 'The system picker reopens in the last CSV folder when available, otherwise it starts from the SciPlotter workspace.';
+            }
+            renderDataImporterBrowserList();
+            updateDataImporterActionState();
+        }
+
+        function renderDataImporterPreview(errorMessage = '') {
+            const preview = DATA_IMPORTER_STATE.preview;
+            const previewTitle = document.getElementById('dataImporterPreviewTitle');
+            const structure = document.getElementById('dataImporterStructure');
+            const structureSection = document.getElementById('dataImporterStructureSection');
+            const sampleSection = document.getElementById('dataImporterSampleSection');
+            const sampleTitle = document.getElementById('dataImporterSampleTitle');
+            const rootTreeRow = document.getElementById('dataImporterRootTreeRow');
+            const rootTreeSelect = document.getElementById('dataImporterRootTree');
+            if (structure) structure.replaceChildren();
+            if (structureSection) structureSection.hidden = true;
+            if (sampleSection) sampleSection.hidden = true;
+            renderDataImporterMetaChips([]);
+            renderDataImporterTable([], []);
+            syncDataImporterChannelFieldControls([]);
+
+            if (rootTreeSelect) rootTreeSelect.replaceChildren();
+            if (rootTreeRow) rootTreeRow.hidden = DATA_IMPORTER_STATE.kind !== 'root';
+
+            if (errorMessage) {
+                const friendlyError = getDataImporterFriendlyErrorMessage(errorMessage);
+                if (previewTitle) previewTitle.textContent = DATA_IMPORTER_STATE.kind === 'builtin' ? 'Built-in Preview' : 'Preview unavailable';
+                setDataImporterPreviewMessage(friendlyError, 'error');
+                updateDataImporterActionState();
+                return;
+            }
+
+            if (!preview) {
+                if (previewTitle) previewTitle.textContent = DATA_IMPORTER_STATE.kind === 'builtin' ? 'Built-in Preview' : 'Preview';
+                setDataImporterPreviewMessage(
+                    DATA_IMPORTER_STATE.kind === 'builtin'
+                        ? 'Choose which built-in summary should drive the histogram page.'
+                        : 'Choose a file with the system picker to inspect headers, branches, and sample rows before loading.'
+                );
+                updateDataImporterActionState();
+                return;
+            }
+
+            if (DATA_IMPORTER_STATE.kind === 'builtin' || DATA_IMPORTER_STATE.kind === 'csv') {
+                const channelDetection = syncDataImporterChannelFieldControls(preview.headers);
+                if (previewTitle) previewTitle.textContent = preview.source_label || preview.display_name || 'CSV Preview';
+                renderDataImporterMetaChips([
+                    Number(preview.total_rows) > 0 ? `${Number(preview.total_rows).toLocaleString()} rows` : '0 rows',
+                    `${Number(preview.column_count) || 0} columns`,
+                    Number(preview.sample_row_count) > 0 ? `Preview ${preview.sample_row_count}/${preview.sample_row_limit}` : '',
+                    getChannelFieldPreviewChip(preview.headers, channelDetection.key),
+                ]);
+                const sourceCard = buildDataImporterStructureCard(
+                    DATA_IMPORTER_STATE.kind === 'builtin' ? 'Resolved Source' : 'Selected File',
+                    [
+                        DATA_IMPORTER_STATE.kind === 'builtin'
+                            ? `Using: ${getBuiltinSummarySourceLabel(preview.builtin_source || DATA_IMPORTER_STATE.builtinSource)}`
+                            : `Path: ${preview.path || DATA_IMPORTER_STATE.selectedPath}`,
+                        preview.path ? `Location: ${preview.path}` : '',
+                        getChannelFieldDetailLine(preview.headers, 'column', channelDetection.key),
+                    ]
+                );
+                if (sourceCard && structure) structure.appendChild(sourceCard);
+                if (structureSection) structureSection.hidden = !sourceCard;
+                if (!preview.supported || Number(preview.total_rows) <= 0) {
+                    setDataImporterPreviewMessage('The selected table does not expose any data rows that can be loaded yet.', 'error');
+                    updateDataImporterActionState();
+                    return;
+                }
+                setDataImporterPreviewMessage(`Previewing the first ${preview.sample_row_count} rows from ${preview.source_label || preview.display_name || 'the selected table'}.`);
+                if (sampleTitle) sampleTitle.textContent = `Sample rows (first ${preview.sample_row_count})`;
+                if (sampleSection) sampleSection.hidden = false;
+                renderDataImporterTable(preview.headers, preview.sample_rows);
+                updateDataImporterActionState();
+                return;
+            }
+
+            if (previewTitle) previewTitle.textContent = preview.display_name || 'ROOT Preview';
+            const treeOptions = Array.isArray(preview.tree_options) ? preview.tree_options : [];
+            const selectedTree = preview.selected_tree || null;
+            const channelDetection = syncDataImporterChannelFieldControls(selectedTree?.headers || []);
+            if (rootTreeRow) rootTreeRow.hidden = !treeOptions.length;
+            if (rootTreeSelect) {
+                treeOptions.forEach((option) => {
+                    const nextOption = document.createElement('option');
+                    nextOption.value = String(option.path || '');
+                    nextOption.textContent = option.title ? `${option.path} — ${option.title}` : String(option.path || '');
+                    rootTreeSelect.appendChild(nextOption);
+                });
+                if (treeOptions.length) {
+                    rootTreeSelect.value = DATA_IMPORTER_STATE.rootTreePath || selectedTree?.path || String(treeOptions[0].path || '');
+                }
+            }
+            renderDataImporterMetaChips([
+                `${treeOptions.length} tree${treeOptions.length === 1 ? '' : 's'}`,
+                Array.isArray(preview.objects) ? `${preview.objects.length} ROOT objects` : '',
+                selectedTree ? `${Number(selectedTree.entry_count).toLocaleString()} entries` : '',
+                selectedTree ? `${selectedTree.loadable_branch_count}/${selectedTree.branch_count} scalar branches` : '',
+                selectedTree?.will_truncate_on_load ? `Load ${Number(selectedTree.load_entry_count || 0).toLocaleString()} rows` : '',
+                selectedTree ? getChannelFieldPreviewChip(selectedTree.headers, channelDetection.key) : '',
+            ]);
+
+            const structureCards = [];
+            if (Array.isArray(preview.objects) && preview.objects.length) {
+                structureCards.push(buildDataImporterStructureCard(
+                    'ROOT Objects',
+                    preview.objects.slice(0, 12).map((item) => `${item.path} (${item.class_name})`)
+                ));
+            }
+            if (treeOptions.length) {
+                structureCards.push(buildDataImporterStructureCard(
+                    'Available TTrees',
+                    treeOptions.slice(0, 10).map((item) => `${item.path} (${item.entry_count} entries, ${item.branch_count} branches)`)
+                ));
+            }
+            if (selectedTree) {
+                structureCards.push(buildDataImporterStructureCard(
+                    'Selected Tree',
+                    [
+                        `Path: ${selectedTree.path}`,
+                        selectedTree.title ? `Title: ${selectedTree.title}` : '',
+                        `${selectedTree.entry_count} entries`,
+                        `${selectedTree.loadable_branch_count}/${selectedTree.branch_count} scalar branches previewable`,
+                        getChannelFieldDetailLine(selectedTree.headers, 'branch', channelDetection.key),
+                        selectedTree.will_truncate_on_load
+                            ? `Browser load limit: first ${Number(selectedTree.load_entry_count || 0).toLocaleString()} entries`
+                            : '',
+                    ]
+                ));
+                if (Array.isArray(selectedTree.branches) && selectedTree.branches.length) {
+                    structureCards.push(buildDataImporterStructureCard(
+                        'Branch Preview',
+                        selectedTree.branches.slice(0, 16).map((branch) => {
+                            const interpretation = branch.interpretation ? ` (${branch.interpretation})` : '';
+                            return `${branch.loadable ? 'Loadable' : 'Skipped'}: ${branch.name}${interpretation}`;
+                        })
+                    ));
+                }
+            }
+            const visibleStructureCards = structureCards.filter(Boolean);
+            visibleStructureCards.forEach((card) => {
+                if (card && structure) structure.appendChild(card);
+            });
+            if (structureSection) structureSection.hidden = visibleStructureCards.length === 0;
+
+            if (!preview.supported || !selectedTree || Number(selectedTree.entry_count) <= 0) {
+                setDataImporterPreviewMessage(preview.message || 'No previewable scalar TTree data was found in this ROOT file.', 'error');
+                updateDataImporterActionState();
+                return;
+            }
+            if (selectedTree.will_truncate_on_load) {
+                setDataImporterPreviewMessage(
+                    `Previewing ${selectedTree.sample_row_count} entries from ${selectedTree.path}. Browser mode will load the first ${Number(selectedTree.load_entry_count || 0).toLocaleString()} of ${Number(selectedTree.entry_count || 0).toLocaleString()} entries.`
+                );
+            } else {
+                setDataImporterPreviewMessage(`Previewing ${selectedTree.sample_row_count} entries from ${selectedTree.path}.`);
+            }
+            if (sampleTitle) sampleTitle.textContent = `Sample entries (first ${selectedTree.sample_row_count})`;
+            if (sampleSection) sampleSection.hidden = false;
+            renderDataImporterTable(selectedTree.headers, selectedTree.sample_rows);
+            updateDataImporterActionState();
+        }
+
+        function initializeDataImporterStateFromCurrentSource() {
+            const currentSource = normalizeSummarySourceValue(document.getElementById('summarySource')?.value || 'auto');
+            DATA_IMPORTER_STATE.preview = null;
+            DATA_IMPORTER_STATE.browser = null;
+            DATA_IMPORTER_STATE.busy = false;
+            if (currentSource === 'imported' && LOCAL_SUMMARY) {
+                const importedKind = String(LOCAL_SUMMARY.kind || LOCAL_SUMMARY.source_kind || 'csv').trim().toLowerCase();
+                DATA_IMPORTER_STATE.kind = importedKind === 'root' ? 'root' : 'csv';
+                DATA_IMPORTER_STATE.selectedPath = String(LOCAL_SUMMARY.source_path || '');
+                DATA_IMPORTER_STATE.browsePath = deriveDataImporterDirectory(DATA_IMPORTER_STATE.selectedPath);
+                DATA_IMPORTER_STATE.rootTreePath = DATA_IMPORTER_STATE.kind === 'root'
+                    ? String(LOCAL_SUMMARY.meta?.tree_path || '')
+                    : '';
+                DATA_IMPORTER_STATE.channelField = String(LOCAL_SUMMARY.meta?.channel_field || '');
+                DATA_IMPORTER_STATE.builtinSource = 'auto';
+                return;
+            }
+            DATA_IMPORTER_STATE.kind = 'builtin';
+            DATA_IMPORTER_STATE.builtinSource = currentSource;
+            DATA_IMPORTER_STATE.browsePath = '';
+            DATA_IMPORTER_STATE.selectedPath = '';
+            DATA_IMPORTER_STATE.rootTreePath = '';
+            DATA_IMPORTER_STATE.channelField = '';
+        }
+
+        async function loadDataImporterBrowser(path = '') {
+            const targetPath = String(path || DATA_IMPORTER_STATE.browsePath || DATA_IMPORTER_STATE.selectedPath || '').trim();
+            DATA_IMPORTER_STATE.browser = null;
+            if (targetPath) DATA_IMPORTER_STATE.browsePath = targetPath;
+            syncDataImporterControls();
+        }
+
+        async function previewDataImporterSelection() {
+            const previewTitle = document.getElementById('dataImporterPreviewTitle');
+            if (previewTitle) previewTitle.textContent = 'Loading Preview';
+            renderDataImporterMetaChips([]);
+            renderDataImporterTable([], []);
+            const structure = document.getElementById('dataImporterStructure');
+            if (structure) structure.replaceChildren();
+            setDataImporterPreviewMessage(
+                DATA_IMPORTER_STATE.kind === 'builtin'
+                    ? 'Loading built-in summary preview…'
+                    : 'Loading data preview…'
+            );
+            DATA_IMPORTER_STATE.busy = true;
+            syncDataImporterControls();
+            try {
+                let requestBody = null;
+                if (DATA_IMPORTER_STATE.kind === 'builtin') {
+                    requestBody = {
+                        kind: 'builtin',
+                        source: DATA_IMPORTER_STATE.builtinSource,
+                    };
+                } else {
+                    if (!DATA_IMPORTER_STATE.selectedPath) {
+                        DATA_IMPORTER_STATE.preview = null;
+                        renderDataImporterPreview();
+                        return;
+                    }
+                    requestBody = {
+                        kind: DATA_IMPORTER_STATE.kind,
+                        path: DATA_IMPORTER_STATE.selectedPath,
+                    };
+                    if (DATA_IMPORTER_STATE.kind === 'root' && DATA_IMPORTER_STATE.rootTreePath) {
+                        requestBody.tree_path = DATA_IMPORTER_STATE.rootTreePath;
+                    }
+                }
+                const preview = await fetchHistogramImporterJson('/api/data-importer/preview', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestBody),
+                });
+                DATA_IMPORTER_STATE.preview = preview;
+                if (DATA_IMPORTER_STATE.kind === 'root') {
+                    DATA_IMPORTER_STATE.rootTreePath = String(preview.selected_tree?.path || DATA_IMPORTER_STATE.rootTreePath || '');
+                }
+                renderDataImporterPreview();
+            } catch (error) {
+                DATA_IMPORTER_STATE.preview = null;
+                renderDataImporterPreview(error.message || 'Preview failed.');
+            } finally {
+                DATA_IMPORTER_STATE.busy = false;
+                syncDataImporterControls();
+            }
+        }
+
+        async function setDataImporterKind(kind) {
+            const normalizedKind = String(kind || '').trim().toLowerCase();
+            if (!normalizedKind || DATA_IMPORTER_STATE.busy || normalizedKind === DATA_IMPORTER_STATE.kind) return;
+            DATA_IMPORTER_STATE.kind = normalizedKind;
+            DATA_IMPORTER_STATE.preview = null;
+            DATA_IMPORTER_STATE.browser = null;
+            if (normalizedKind === 'builtin') {
+                DATA_IMPORTER_STATE.selectedPath = '';
+                DATA_IMPORTER_STATE.browsePath = '';
+                DATA_IMPORTER_STATE.rootTreePath = '';
+                DATA_IMPORTER_STATE.channelField = '';
+                syncDataImporterControls();
+                renderDataImporterPreview();
+                await previewDataImporterSelection();
+                return;
+            }
+
+            const currentImportedKind = String(LOCAL_SUMMARY?.kind || LOCAL_SUMMARY?.source_kind || '').trim().toLowerCase();
+            if (LOCAL_SUMMARY && currentImportedKind === normalizedKind) {
+                DATA_IMPORTER_STATE.selectedPath = String(LOCAL_SUMMARY.source_path || '');
+                DATA_IMPORTER_STATE.browsePath = deriveDataImporterDirectory(DATA_IMPORTER_STATE.selectedPath);
+                DATA_IMPORTER_STATE.rootTreePath = normalizedKind === 'root'
+                    ? String(LOCAL_SUMMARY.meta?.tree_path || '')
+                    : '';
+                DATA_IMPORTER_STATE.channelField = String(LOCAL_SUMMARY.meta?.channel_field || '');
+            } else {
+                DATA_IMPORTER_STATE.selectedPath = '';
+                DATA_IMPORTER_STATE.browsePath = '';
+                DATA_IMPORTER_STATE.rootTreePath = '';
+                DATA_IMPORTER_STATE.channelField = '';
+            }
+            syncDataImporterControls();
+            renderDataImporterPreview();
+            if (DATA_IMPORTER_STATE.selectedPath) await previewDataImporterSelection();
+        }
+
+        async function openDataImporterModal() {
+            const modal = document.getElementById('data-importer-modal');
+            if (!modal) return;
+            initializeDataImporterStateFromCurrentSource();
+            modal.hidden = false;
+            modal.setAttribute('aria-hidden', 'false');
+            syncDataImporterControls();
+            renderDataImporterPreview();
+            if (DATA_IMPORTER_STATE.kind === 'builtin') {
+                await previewDataImporterSelection();
+                return;
+            }
+            if (DATA_IMPORTER_STATE.selectedPath) await previewDataImporterSelection();
+        }
+
+        function closeDataImporterModal() {
+            const modal = document.getElementById('data-importer-modal');
+            if (!modal) return;
+            modal.hidden = true;
+            modal.setAttribute('aria-hidden', 'true');
+        }
+
+        async function loadDataImporterSelection() {
+            if (DATA_IMPORTER_STATE.busy) return;
+            const loadButton = document.getElementById('dataImporterLoad');
+            const previousLabel = loadButton?.textContent || 'Load This Data';
+            DATA_IMPORTER_STATE.busy = true;
+            if (loadButton) loadButton.textContent = 'Loading…';
+            syncDataImporterControls();
+            try {
+                if (DATA_IMPORTER_STATE.kind === 'builtin') {
+                    await applyBuiltInHistogramSource(DATA_IMPORTER_STATE.builtinSource, { render: true });
+                    closeDataImporterModal();
+                    return;
+                }
+                const requestBody = {
+                    kind: DATA_IMPORTER_STATE.kind,
+                    path: DATA_IMPORTER_STATE.selectedPath,
+                    tree_path: DATA_IMPORTER_STATE.kind === 'root'
+                        ? (DATA_IMPORTER_STATE.rootTreePath || DATA_IMPORTER_STATE.preview?.selected_tree?.path || '')
+                        : '',
+                };
+                const dataset = await fetchHistogramImporterJson('/api/data-importer/load', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestBody),
+                });
+                setDatasetChannelField(dataset, DATA_IMPORTER_STATE.channelField);
+                await applyImportedHistogramDataset(dataset, { render: true });
+                closeDataImporterModal();
+            } catch (error) {
+                renderDataImporterPreview(error.message || 'Failed to load the selected data source.');
+            } finally {
+                DATA_IMPORTER_STATE.busy = false;
+                if (loadButton) loadButton.textContent = previousLabel;
+                syncDataImporterControls();
+            }
+        }
+
         async function fetchSmoothedSummary() {
             // Load the selected summary CSV. In 'auto' mode, pick the most recently modified
             // among unsmoothed, smoothed, and original using /api/summaries.
             if (CACHED_SUMMARY) return CACHED_SUMMARY;
-            const sel = document.getElementById('summarySource')?.value || 'auto';
-            if (sel === 'custom' && LOCAL_SUMMARY) {
+            const sel = normalizeSummarySourceValue(document.getElementById('summarySource')?.value || 'auto');
+            if (isImportedSummarySource(sel) && LOCAL_SUMMARY) {
                 CACHED_SUMMARY = prepareSummaryDataset(LOCAL_SUMMARY);
                 return CACHED_SUMMARY;
             }
@@ -11103,7 +13290,7 @@
             } = opts;
 
             // Detect channel and a likely trace/file grouping key
-            const chanKey = getChannelKey(headers);
+            const chanKey = getChannelKey(headers, dataset);
             const traceCandidates = ['trace_id', 'TraceID', 'trace', 'Trace', 'file', 'File', 'filename', 'basename', 'source_file', 'source', 'run', 'Run', 'segment', 'Segment', 'cycle_id', 'CycleID', 'cycle'];
             const traceKey = traceCandidates.find(k => headers.includes(k)) || null;
 
@@ -11392,9 +13579,12 @@
                 const wrapPhase = !!document.getElementById('wrapPhase')?.checked;
 
                 // Channel filtering: expect a column named 'channel' or 'Channel' with values like C2/C3/C4 (case-insensitive)
-                const checked = Array.from(document.querySelectorAll('#channels-row input.chan:checked')).map(e => String(e.value).trim().toUpperCase());
-                const chanKey = getChannelKey(headers);
-                let frows = chanKey ? rows.filter(r => checked.includes(String(r[chanKey] ?? '').trim().toUpperCase())) : rows;
+                const channelInputs = getChannelInputs();
+                const checkedSet = new Set(channelInputs.filter((input) => input.checked).map((input) => String(input.value ?? '')));
+                const chanKey = getChannelKey(headers, summaryDataset);
+                let frows = (chanKey && channelInputs.length)
+                    ? rows.filter(r => checkedSet.has(String(r[chanKey] ?? '')))
+                    : rows;
 
                 // Advanced Filter: C3_Filter handling (compute allowed C4 event_ids)
                 const fSelVal = document.getElementById('axis-f')?.value;
@@ -11699,7 +13889,7 @@
                             const dtKey = headers.includes('delta_t_ns') ? 'delta_t_ns'
                                 : (headers.includes('deltaT_ns') ? 'deltaT_ns' : (headers.includes('deltaT') ? 'deltaT' : null));
                             if (!dtKey) return inVals.slice();
-                            const chanKey = getChannelKey(headers);
+                            const chanKey = getChannelKey(headers, summaryDataset);
                             const traceCandidates = ['trace_id', 'TraceID', 'trace', 'Trace', 'file', 'File', 'filename', 'basename', 'source_file', 'source', 'run', 'Run', 'segment', 'Segment', 'cycle_id', 'CycleID', 'cycle'];
                             const traceKey = traceCandidates.find(k => headers.includes(k)) || null;
                             // If neighbor-only is selected, use actual values (in/out arrays) for bounds.
@@ -12217,9 +14407,9 @@
             const summaryDataset = await fetchSmoothedSummary();
             const { headers, rows } = summaryDataset;
             if (!headers.length || !rows.length) return null;
-            const checked = Array.from(document.querySelectorAll('#channels-row input.chan:checked')).map(e => String(e.value).trim().toUpperCase());
-            const chanKey = getChannelKey(headers);
-            const frows = chanKey ? rows.filter(r => checked.includes(String(r[chanKey] ?? '').trim().toUpperCase())) : rows;
+            const checkedSet = new Set(Array.from(document.querySelectorAll('#channels-row input.chan:checked')).map((input) => String(input.value ?? '')));
+            const chanKey = getChannelKey(headers, summaryDataset);
+            const frows = chanKey ? rows.filter(r => checkedSet.has(String(r[chanKey] ?? ''))) : rows;
             if (!frows.length) return null;
             const key = (which === 'x') ? document.getElementById('axis-x').value : (which === 'y' ? document.getElementById('axis-y').value : document.getElementById('axis-f').value);
             if (key === 'C3_Filter') return null; // no numeric range for advanced filters
@@ -12362,6 +14552,7 @@
                             opt.disabled = false;
                         }
                     });
+                    syncHistogramDataSourceLabel();
                 }).catch(() => { });
             }
 
@@ -12381,7 +14572,14 @@
                     psRow.style.display = showPhaseShift ? 'grid' : 'none';
                 }
                 setMode(mode0);
+            } else {
+                syncChannelFieldSelect([], null);
+                renderChannelsRowOptions([]);
             }
+            syncHistogramDataSourceLabel();
+            renderDataImporterPreview();
+            syncDataImporterControls();
+            syncChannelSelectorControls();
 
             function wire(id) { const e = document.getElementById(id); if (e) e.addEventListener('change', summarizeSelection); }
             document.getElementById('hist-1d').addEventListener('change', async () => {
@@ -12494,9 +14692,37 @@
                 }
             });
             document.getElementById('axis-f').addEventListener('change', () => { autoFillFeatureMinMax('f'); });
-            // Channel filters: auto-render on change, with range capture to keep scale
-            document.querySelectorAll('#channels-row input.chan').forEach(e => {
-                e.addEventListener('change', async () => { await rerenderHistogramFromUpdate(); });
+            document.getElementById('channelFieldSelect')?.addEventListener('change', async (event) => {
+                const nextField = String(event.target?.value || '').trim();
+                const summaryDataset = await fetchSmoothedSummary();
+                setDatasetChannelField(summaryDataset, nextField);
+                if (LOCAL_SUMMARY && isImportedSummarySource(normalizeSummarySourceValue(document.getElementById('summarySource')?.value || 'auto'))) {
+                    setDatasetChannelField(LOCAL_SUMMARY, nextField);
+                }
+                captureCurrentRanges();
+                await populateChannelsDynamic();
+                summarizeSelection();
+                await renderHistogram();
+            });
+            document.getElementById('channelSelectorToggle')?.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                const button = event.currentTarget;
+                if (!(button instanceof HTMLButtonElement) || button.disabled) return;
+                setChannelSelectorExpanded(button.getAttribute('aria-expanded') !== 'true');
+            });
+            document.getElementById('channelSelectorSearch')?.addEventListener('input', (event) => {
+                filterChannelSelectorOptions(String(event.target?.value || ''));
+            });
+            document.getElementById('channelToggleAll')?.addEventListener('click', async () => {
+                const inputs = getChannelInputs();
+                const allSelected = inputs.length > 0 && inputs.every((input) => input.checked);
+                await setAllChannelSelections(!allSelected);
+            });
+            document.addEventListener('click', (event) => {
+                const section = document.getElementById('channels-section');
+                if (!section || !(event.target instanceof Node)) return;
+                if (!section.contains(event.target)) setChannelSelectorExpanded(false);
             });
             // Merge toggle: re-render and preserve ranges in 1D
             const mergeToggle = document.getElementById('mergeChannels1d');
@@ -12583,64 +14809,69 @@
             const srcSel = document.getElementById('summarySource');
             if (srcSel) {
                 srcSel.addEventListener('change', async () => {
-                    CACHED_SUMMARY = null;
-                    CACHED_EVENT_TO_EVENT_DT_RAW = null;
-                    const headers = await fetchSummaryHeaders();
-                    restoreOrDefaultFeatureSelections(headers, [], { useCustomDefaults: false });
-            // Ensure X/Y selects are usable even if /api/summaries fail
-            try { xSel.disabled = false; ySel.disabled = false; } catch(_) {}
-                    await populateChannelsDynamic();
-                    setMode(document.querySelector('input[name="hist-type"]:checked')?.value || '2d');
-                    summarizeSelection();
-                    renderPlaceholder();
+                    const normalizedSource = normalizeSummarySourceValue(srcSel.value);
+                    if (normalizedSource === 'imported' && !LOCAL_SUMMARY) {
+                        srcSel.value = 'auto';
+                    } else if (srcSel.value !== normalizedSource) {
+                        srcSel.value = normalizedSource;
+                    }
+                    syncHistogramDataSourceLabel();
+                    await updateHistogramAfterSummarySourceChange(
+                        normalizedSource === 'imported' && LOCAL_SUMMARY && Array.isArray(LOCAL_SUMMARY.rows)
+                            ? LOCAL_SUMMARY.rows
+                            : [],
+                        {
+                            useCustomDefaults: false,
+                            autoFill: false,
+                            render: false,
+                        }
+                    );
                 });
             }
-            // Folder icon click => open file picker
+            // Folder icon click => open importer modal
             const browseBtn = document.getElementById('browseSummary');
-            const fileIn = document.getElementById('summaryFileInput');
-            const nameSpan = document.getElementById('customSummaryName');
-            if (browseBtn && fileIn) {
-                browseBtn.addEventListener('click', () => fileIn.click());
-                fileIn.addEventListener('change', async (e) => {
-                    const f = e.target.files && e.target.files[0];
-                    if (!f) return;
-                    showLoading();
-                    // Yield to let browser paint the spinner before heavy sync work
-                    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-                    try {
-                        const text = await f.text();
-                        const parsed = parseCSV(text, f.name);
-                        const headers = parsed.headers || [];
-                        const rows = parsed.rows || [];
-                        if (!headers.length || !rows.length) return;
-                        LOCAL_SUMMARY = prepareSummaryDataset(parsed);
-                        LOCAL_SUMMARY_TOKEN = createHistogramSessionSummaryToken(f.name);
-                        HISTOGRAM_SESSION_SUMMARIES.set(LOCAL_SUMMARY_TOKEN, LOCAL_SUMMARY);
-                        // Enable and select the custom option
-                        const opt = document.querySelector('#summarySource option[value="custom"]');
-                        if (opt) { opt.disabled = false; }
-                        const sel = document.getElementById('summarySource');
-                        if (sel) sel.value = 'custom';
-                        if (nameSpan) nameSpan.textContent = f.name;
-                        CACHED_SUMMARY = null;
-                        CACHED_EVENT_TO_EVENT_DT_RAW = null;
-                        const hdrs = await fetchSummaryHeaders();
-                        restoreOrDefaultFeatureSelections(hdrs, rows, { useCustomDefaults: true });
-                        await populateChannelsDynamic();
-                        // Ensure X/Y selects are enabled for custom uploads
-                        try { xSel.disabled = false; ySel.disabled = false; } catch(_) {}
-                        summarizeSelection();
-                        // Auto-fill ranges for the new dataset, then render immediately
-                        await autoFillFeatureMinMax('x');
-                        await autoFillFeatureMinMax('y');
-                        await autoFillFeatureMinMax('f');
-                        // Provide quick feedback in meta area before/after render
-                        const meta = document.getElementById('hist-meta');
-                        if (meta) setHistogramMeta(`Loaded custom file: ${f.name} (rows: ${rows.length}, columns: ${headers.length})`);
-                        await renderHistogram();
-                    } catch (_) { /* ignore */ }
+            const dataImporterModal = document.getElementById('data-importer-modal');
+            if (browseBtn) {
+                browseBtn.addEventListener('click', async () => {
+                    await openDataImporterModal();
                 });
             }
+            if (dataImporterModal) {
+                dataImporterModal.addEventListener('click', (event) => {
+                    if (event.target === dataImporterModal) closeDataImporterModal();
+                });
+            }
+            document.getElementById('dataImporterClose')?.addEventListener('click', closeDataImporterModal);
+            document.getElementById('dataImporterCancel')?.addEventListener('click', closeDataImporterModal);
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape') setChannelSelectorExpanded(false);
+                if (event.key === 'Escape' && dataImporterModal && !dataImporterModal.hidden) {
+                    closeDataImporterModal();
+                }
+            });
+            document.querySelectorAll('.data-importer-kind-btn').forEach((button) => {
+                button.addEventListener('click', async () => {
+                    await setDataImporterKind(button.getAttribute('data-import-kind') || 'builtin');
+                });
+            });
+            document.getElementById('dataImporterBuiltInSource')?.addEventListener('change', async (event) => {
+                DATA_IMPORTER_STATE.builtinSource = normalizeSummarySourceValue(event.target?.value || 'auto');
+                await previewDataImporterSelection();
+            });
+            document.getElementById('dataImporterPickFile')?.addEventListener('click', async () => {
+                await pickDataImporterFile();
+            });
+            document.getElementById('dataImporterRootTree')?.addEventListener('change', async (event) => {
+                DATA_IMPORTER_STATE.rootTreePath = String(event.target?.value || '');
+                await previewDataImporterSelection();
+            });
+            document.getElementById('dataImporterChannelField')?.addEventListener('change', (event) => {
+                DATA_IMPORTER_STATE.channelField = String(event.target?.value || '').trim();
+                renderDataImporterPreview();
+            });
+            document.getElementById('dataImporterLoad')?.addEventListener('click', async () => {
+                await loadDataImporterSelection();
+            });
             // Apply feature value filters button
                         setMode(document.querySelector('input[name="hist-type"]:checked')?.value || '2d');
             document.getElementById('apply-feature-filter').addEventListener('click', async () => {

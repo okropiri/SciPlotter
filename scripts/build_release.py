@@ -55,11 +55,70 @@ def run_command(args: list[str]) -> None:
     subprocess.run(args, check=True, cwd=str(PROJECT_ROOT))
 
 
+def env_or_none(name: str) -> str | None:
+    value = os.environ.get(name)
+    if value is None:
+        return None
+    value = value.strip()
+    return value or None
+
+
+def macos_codesign_identity() -> str:
+    return env_or_none('SCIPLOTTER_MACOS_CODESIGN_IDENTITY') or '-'
+
+
+def macos_notary_auth_args() -> list[str]:
+    key_path = env_or_none('SCIPLOTTER_MACOS_NOTARY_KEY_PATH')
+    key_id = env_or_none('SCIPLOTTER_MACOS_NOTARY_KEY_ID')
+    issuer = env_or_none('SCIPLOTTER_MACOS_NOTARY_ISSUER')
+    if any([key_path, key_id, issuer]):
+        if not all([key_path, key_id, issuer]):
+            raise RuntimeError(
+                'Incomplete App Store Connect notarization configuration. '
+                'Set SCIPLOTTER_MACOS_NOTARY_KEY_PATH, SCIPLOTTER_MACOS_NOTARY_KEY_ID, and SCIPLOTTER_MACOS_NOTARY_ISSUER.'
+            )
+        return ['--key', key_path, '--key-id', key_id, '--issuer', issuer]
+
+    apple_id = env_or_none('SCIPLOTTER_MACOS_NOTARY_APPLE_ID')
+    team_id = env_or_none('SCIPLOTTER_MACOS_NOTARY_TEAM_ID')
+    password = env_or_none('SCIPLOTTER_MACOS_NOTARY_PASSWORD')
+    if any([apple_id, team_id, password]):
+        if not all([apple_id, team_id, password]):
+            raise RuntimeError(
+                'Incomplete Apple ID notarization configuration. '
+                'Set SCIPLOTTER_MACOS_NOTARY_APPLE_ID, SCIPLOTTER_MACOS_NOTARY_TEAM_ID, and SCIPLOTTER_MACOS_NOTARY_PASSWORD.'
+            )
+        return ['--apple-id', apple_id, '--team-id', team_id, '--password', password]
+
+    return []
+
+
 def codesign_macos_app(app_bundle: Path) -> None:
     if sys.platform != 'darwin':
         return
-    run_command(['/usr/bin/codesign', '--force', '--deep', '--sign', '-', str(app_bundle)])
+    identity = macos_codesign_identity()
+    command = ['/usr/bin/codesign', '--force', '--deep']
+    if identity != '-':
+        command.extend(['--options', 'runtime', '--timestamp'])
+    command.extend(['--sign', identity, str(app_bundle)])
+    run_command(command)
     run_command(['/usr/bin/codesign', '--verify', '--deep', '--strict', '--verbose=2', str(app_bundle)])
+
+
+def notarize_macos_archive(archive_path: Path) -> None:
+    auth_args = macos_notary_auth_args()
+    if not auth_args:
+        return
+    if macos_codesign_identity() == '-':
+        raise RuntimeError(
+            'macOS notarization requires SCIPLOTTER_MACOS_CODESIGN_IDENTITY to be set to a Developer ID Application identity.'
+        )
+    run_command(['/usr/bin/xcrun', 'notarytool', 'submit', str(archive_path), '--wait', *auth_args])
+
+
+def staple_macos_app(app_bundle: Path) -> None:
+    run_command(['/usr/bin/xcrun', 'stapler', 'staple', '-v', str(app_bundle)])
+    run_command(['/usr/bin/xcrun', 'stapler', 'validate', '-v', str(app_bundle)])
 
 
 def zip_macos_app(app_bundle: Path, archive_path: Path) -> Path:
@@ -135,6 +194,10 @@ def package_release_artifact(target: str, dist_dir: Path, *, skip_appimage: bool
         built_app = dist_dir / f'{APP_NAME}.app'
         codesign_macos_app(built_app)
         archive_path = zip_macos_app(built_app, RELEASE_ROOT / 'SciPlotter-macos.zip')
+        if macos_notary_auth_args():
+            notarize_macos_archive(archive_path)
+            staple_macos_app(built_app)
+            archive_path = zip_macos_app(built_app, RELEASE_ROOT / 'SciPlotter-macos.zip')
         return [archive_path]
 
     built_dir = dist_dir / APP_NAME

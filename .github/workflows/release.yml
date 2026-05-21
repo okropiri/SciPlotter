@@ -41,7 +41,68 @@ jobs:
       - name: Bootstrap build environment
         run: python scripts/bootstrap.py --build
 
+      - name: Install macOS signing certificate
+        if: runner.os == 'macOS'
+        env:
+          MACOS_CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          if [ -z "$MACOS_CERTIFICATE_P12_BASE64" ] || [ -z "$MACOS_CERTIFICATE_PASSWORD" ]; then
+            echo "No macOS signing certificate configured; build will use ad-hoc signing."
+            exit 0
+          fi
+
+          KEYCHAIN_PATH="$RUNNER_TEMP/sciplotter-signing.keychain-db"
+          CERT_PATH="$RUNNER_TEMP/sciplotter-signing.p12"
+          export KEYCHAIN_PATH CERT_PATH
+
+          python - <<'PY'
+          import base64
+          import os
+          from pathlib import Path
+
+          Path(os.environ['CERT_PATH']).write_bytes(base64.b64decode(os.environ['MACOS_CERTIFICATE_P12_BASE64']))
+          PY
+
+          security create-keychain -p "$MACOS_CERTIFICATE_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$MACOS_CERTIFICATE_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -P "$MACOS_CERTIFICATE_PASSWORD" -A -f pkcs12 -t cert
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$MACOS_CERTIFICATE_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+
+      - name: Write macOS notary API key
+        if: runner.os == 'macOS'
+        env:
+          MACOS_NOTARY_KEY_BASE64: ${{ secrets.MACOS_NOTARY_KEY_BASE64 }}
+          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+        run: |
+          if [ -z "$MACOS_NOTARY_KEY_BASE64" ] || [ -z "$MACOS_NOTARY_KEY_ID" ]; then
+            echo "No macOS notary API key configured; notarization will be skipped."
+            exit 0
+          fi
+
+          NOTARY_KEY_PATH="$RUNNER_TEMP/AuthKey_${MACOS_NOTARY_KEY_ID}.p8"
+          export NOTARY_KEY_PATH
+
+          python - <<'PY'
+          import base64
+          import os
+          from pathlib import Path
+
+          Path(os.environ['NOTARY_KEY_PATH']).write_bytes(base64.b64decode(os.environ['MACOS_NOTARY_KEY_BASE64']))
+          PY
+
+          echo "SCIPLOTTER_MACOS_NOTARY_KEY_PATH=$NOTARY_KEY_PATH" >> "$GITHUB_ENV"
+
       - name: Build packaged artifact
+        env:
+          SCIPLOTTER_MACOS_CODESIGN_IDENTITY: ${{ secrets.MACOS_CODESIGN_IDENTITY }}
+          SCIPLOTTER_MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          SCIPLOTTER_MACOS_NOTARY_ISSUER: ${{ secrets.MACOS_NOTARY_ISSUER }}
+          SCIPLOTTER_MACOS_NOTARY_APPLE_ID: ${{ secrets.MACOS_NOTARY_APPLE_ID }}
+          SCIPLOTTER_MACOS_NOTARY_TEAM_ID: ${{ secrets.MACOS_NOTARY_TEAM_ID }}
+          SCIPLOTTER_MACOS_NOTARY_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
         run: ${{ matrix.venv_python }} scripts/build_release.py --clean
 
       - name: Upload workflow artifact

@@ -111,12 +111,27 @@ Build result:
 
 The zip contains `SciPlotter.app`.
 
-The macOS release build now ad-hoc signs the generated app bundle and archives it with Apple's `ditto` tool so the bundle metadata and symlinks survive download and extraction correctly.
+The macOS release build always signs the generated app bundle and archives it with Apple's `ditto` tool so the bundle metadata and symlinks survive download and extraction correctly.
+
+Default behavior without Apple credentials:
+
+- The app is ad-hoc signed.
+- This is enough for bundle integrity testing and direct binary execution, but normal Finder or LaunchServices opening may still be blocked by macOS security policy.
+
+Optional notarized release behavior:
+
+- If `SCIPLOTTER_MACOS_CODESIGN_IDENTITY` is set to a `Developer ID Application` identity, the build uses that identity with hardened runtime and timestamped signing.
+- If notarization credentials are also configured, the build submits the macOS zip with `xcrun notarytool`, waits for approval, staples the app bundle, and then re-zips the stapled app for release.
+
+Supported notarization authentication methods:
+
+- App Store Connect API key: `SCIPLOTTER_MACOS_NOTARY_KEY_PATH`, `SCIPLOTTER_MACOS_NOTARY_KEY_ID`, `SCIPLOTTER_MACOS_NOTARY_ISSUER`
+- Apple ID credentials: `SCIPLOTTER_MACOS_NOTARY_APPLE_ID`, `SCIPLOTTER_MACOS_NOTARY_TEAM_ID`, `SCIPLOTTER_MACOS_NOTARY_PASSWORD`
 
 Important limitation:
 
-- The app is still not notarized with an Apple Developer ID certificate, so Gatekeeper may still warn that Apple cannot verify the developer.
-- A notarization warning is different from the app being reported as damaged. The packaging flow is intended to avoid the damaged-app case.
+- If you do not provide a Developer ID Application certificate and notarization credentials, Gatekeeper may still warn that Apple cannot verify the developer or block Finder launch entirely.
+- Notarized output depends on Apple credentials being present at build time; otherwise the script falls back to ad-hoc signing.
 
 If a user allows the app to open but no browser window appears, collect these files first:
 
@@ -155,6 +170,19 @@ It does the following:
 3. Runs the build with the Python executable from the created `.venv`.
 4. Uploads the per-OS artifact as a workflow artifact.
 5. On `v*` tags, publishes those assets to the GitHub release.
+
+Optional macOS signing and notarization in GitHub Actions:
+
+- `MACOS_CERTIFICATE_P12_BASE64`: base64-encoded `.p12` containing your `Developer ID Application` certificate.
+- `MACOS_CERTIFICATE_PASSWORD`: password for that `.p12` file.
+- `MACOS_CODESIGN_IDENTITY`: full signing identity name, for example `Developer ID Application: Example Name (TEAMID)`.
+- `MACOS_NOTARY_KEY_BASE64`: base64-encoded App Store Connect API key `.p8` content.
+- `MACOS_NOTARY_KEY_ID`: App Store Connect key ID.
+- `MACOS_NOTARY_ISSUER`: App Store Connect issuer UUID.
+
+If the certificate secrets are absent, the workflow still produces an ad-hoc signed macOS zip. If both the signing identity and notarization credentials are present, the workflow will notarize and staple the macOS app automatically.
+
+For a short operational checklist, see [docs/macos-release-checklist.md](docs/macos-release-checklist.md).
 
 ## Freeze-Aware Runtime Notes
 
