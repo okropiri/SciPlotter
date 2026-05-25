@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import math
 from pathlib import Path
 import subprocess
 import sys
@@ -17,6 +18,15 @@ SUPPORTED_IMPORT_FILE_TYPES: dict[str, tuple[str, ...]] = {
 IMPORTER_DEFAULT_ROOT = Path(__file__).resolve().parent.parent
 
 
+def infer_import_kind(path: str) -> str:
+    suffix = Path(str(path or '')).suffix.lower()
+    if suffix == '.csv':
+        return 'csv'
+    if suffix == '.root':
+        return 'root'
+    raise ValueError(f'Unsupported file type: {suffix or "(none)"}')
+
+
 def pick_importable_file(*, kind: str = 'all', start_path: Optional[str] = None) -> Dict[str, Any]:
     allowed_suffixes = _allowed_suffixes(kind)
     initial_dir = _resolve_dialog_start_dir(start_path)
@@ -30,8 +40,10 @@ def pick_importable_file(*, kind: str = 'all', start_path: Optional[str] = None)
         }
 
     resolved_path = _resolve_file(selected_path, allowed_suffixes=allowed_suffixes)
+    detected_kind = infer_import_kind(resolved_path)
     return {
         'kind': kind,
+        'detected_kind': detected_kind,
         'cancelled': False,
         'selected_path': resolved_path,
         'current_path': str(Path(resolved_path).parent),
@@ -486,13 +498,25 @@ def _normalize_root_cell(value: Any) -> Any:
     if isinstance(value, bytes):
         return value.decode('utf-8', errors='ignore')
     if isinstance(value, (str, bool, int, float)) or value is None:
-        return value
+        return _sanitize_json_value(value)
     if hasattr(value, 'tolist'):
         try:
-            return value.tolist()
+            return _sanitize_json_value(value.tolist())
         except Exception:
             pass
-    return str(value)
+    return _sanitize_json_value(str(value))
+
+
+def _sanitize_json_value(value: Any) -> Any:
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, list):
+        return [_sanitize_json_value(item) for item in value]
+    if isinstance(value, tuple):
+        return [_sanitize_json_value(item) for item in value]
+    if isinstance(value, dict):
+        return {str(key): _sanitize_json_value(item) for key, item in value.items()}
+    return value
 
 
 def _strip_root_cycle(path: str) -> str:

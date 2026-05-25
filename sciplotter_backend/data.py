@@ -3,8 +3,7 @@ from __future__ import annotations
 import os
 from flask import Blueprint, Response, jsonify, request, stream_with_context
 
-from . import common
-from . import importer
+from . import aggregation, common, importer
 
 bp = Blueprint('data', __name__)
 
@@ -180,7 +179,11 @@ def api_data_importer_pick_file():
 def api_data_importer_preview():
     try:
         data = request.get_json(silent=True) or {}
-        kind = (data.get('kind') or 'builtin').strip().lower()
+        path = str(data.get('path') or '').strip()
+        kind = (data.get('kind') or '').strip().lower()
+
+        if kind in ('', 'auto'):
+            kind = importer.infer_import_kind(path) if path else 'builtin'
 
         if kind == 'builtin':
             source_label, path = _resolve_builtin_summary_source(data.get('source'))
@@ -207,16 +210,119 @@ def api_data_importer_preview():
 def api_data_importer_load():
     try:
         data = request.get_json(silent=True) or {}
+        path = str(data.get('path') or '').strip()
         kind = (data.get('kind') or '').strip().lower()
 
+        if kind in ('', 'auto'):
+            kind = importer.infer_import_kind(path) if path else ''
+
         if kind == 'csv':
-            return jsonify(importer.load_csv_file(str(data.get('path') or ''), source_kind='csv'))
+            return jsonify(importer.load_csv_file(path, source_kind='csv'))
 
         if kind == 'root':
             tree_path = (data.get('tree_path') or '').strip()
-            return jsonify(importer.load_root_tree(str(data.get('path') or ''), tree_path=tree_path))
+            channel_field = (data.get('channel_field') or '').strip()
+            payload = importer.load_root_tree(path, tree_path=tree_path)
+            try:
+                session_payload = aggregation.create_root_dataset_session(
+                    path,
+                    tree_path=tree_path,
+                    channel_field=channel_field,
+                )
+                if not isinstance(payload.get('meta'), dict):
+                    payload['meta'] = {}
+                payload['meta']['dataset_session'] = session_payload
+                payload['exact_aggregation'] = {
+                    'available': True,
+                    'session_id': session_payload['session_id'],
+                    'supports': session_payload.get('supports', {}),
+                }
+            except Exception as session_error:
+                payload['exact_aggregation'] = {
+                    'available': False,
+                    'error': str(session_error),
+                }
+            return jsonify(payload)
 
         return jsonify({'error': f'Unsupported importer load kind: {kind}'}), 400
+    except (FileNotFoundError, ValueError, RuntimeError) as exc:
+        return jsonify({'error': str(exc)}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@bp.post('/api/data-importer/session')
+def api_data_importer_session():
+    try:
+        data = request.get_json(silent=True) or {}
+        kind = (data.get('kind') or '').strip().lower()
+        if kind != 'root':
+            return jsonify({'error': 'Exact backend sessions are currently supported only for ROOT imports'}), 400
+
+        tree_path = (data.get('tree_path') or '').strip()
+        channel_field = (data.get('channel_field') or '').strip()
+        payload = aggregation.create_root_dataset_session(
+            str(data.get('path') or ''),
+            tree_path=tree_path,
+            channel_field=channel_field,
+        )
+        return jsonify(payload)
+    except (FileNotFoundError, ValueError, RuntimeError) as exc:
+        return jsonify({'error': str(exc)}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@bp.post('/api/data-importer/aggregate')
+def api_data_importer_aggregate():
+    try:
+        data = request.get_json(silent=True) or {}
+        payload = aggregation.aggregate_dataset_session(str(data.get('session_id') or ''), data)
+        return jsonify(payload)
+    except aggregation.DatasetSessionNotFoundError as exc:
+        return jsonify({'error': str(exc)}), 404
+    except aggregation.UnsupportedAggregationError as exc:
+        return jsonify({'error': str(exc)}), 400
+    except (FileNotFoundError, ValueError, RuntimeError) as exc:
+        return jsonify({'error': str(exc)}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@bp.post('/api/data-importer/session/channel-values')
+def api_data_importer_session_channel_values():
+    try:
+        data = request.get_json(silent=True) or {}
+        payload = aggregation.get_dataset_channel_values(
+            str(data.get('session_id') or ''),
+            channel_field=str(data.get('channel_field') or ''),
+        )
+        return jsonify(payload)
+    except aggregation.DatasetSessionNotFoundError as exc:
+        return jsonify({'error': str(exc)}), 404
+    except aggregation.UnsupportedAggregationError as exc:
+        return jsonify({'error': str(exc)}), 400
+    except (FileNotFoundError, ValueError, RuntimeError) as exc:
+        return jsonify({'error': str(exc)}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@bp.post('/api/data-importer/session/feature-bounds')
+def api_data_importer_session_feature_bounds():
+    try:
+        data = request.get_json(silent=True) or {}
+        payload = aggregation.get_dataset_feature_bounds(
+            str(data.get('session_id') or ''),
+            feature=str(data.get('feature') or ''),
+            channel_field=str(data.get('channel_field') or ''),
+            channel_values=data.get('channel_values'),
+        )
+        return jsonify(payload)
+    except aggregation.DatasetSessionNotFoundError as exc:
+        return jsonify({'error': str(exc)}), 404
+    except aggregation.UnsupportedAggregationError as exc:
+        return jsonify({'error': str(exc)}), 400
     except (FileNotFoundError, ValueError, RuntimeError) as exc:
         return jsonify({'error': str(exc)}), 400
     except Exception as e:

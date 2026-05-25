@@ -16,6 +16,14 @@ REQUEST_LOG_FILE = runtime.request_log_path()
 RECENT_REQUESTS = deque(maxlen=200)
 
 
+def _send_html(filename: str):
+    response = send_from_directory(str(STATIC_DIR), filename)
+    response.headers['Cache-Control'] = 'no-store, max-age=0, must-revalidate'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
+
+
 @bp.before_app_request
 def _log_request():
     try:
@@ -57,17 +65,17 @@ def favicon():
 
 @bp.get('/')
 def root_html():
-    return send_from_directory(str(STATIC_DIR), 'histogram.html')
+    return _send_html('histogram.html')
 
 
 @bp.get('/index.html')
 def index_html():
-    return send_from_directory(str(STATIC_DIR), 'index.html')
+    return _send_html('index.html')
 
 
 @bp.get('/histogram.html')
 def histogram_html():
-    return send_from_directory(str(STATIC_DIR), 'histogram.html')
+    return _send_html('histogram.html')
 
 
 @bp.get('/assets/<path:filename>')
@@ -96,5 +104,7 @@ def passthrough(filename: str):
         abort(404)
     fpath = STATIC_DIR / filename
     if fpath.is_file():
+        if fpath.suffix == '.html':
+            return _send_html(filename)
         return send_from_directory(str(STATIC_DIR), filename)
     return ('Not Found', 404)
