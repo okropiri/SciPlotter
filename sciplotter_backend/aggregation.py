@@ -301,6 +301,7 @@ def _aggregate_root_session(session: _DatasetSession, query: Dict[str, Any]) -> 
     filter_range = _parse_range_spec(query.get('filter_range')) if filter_feature else (None, None)
     x_hist_range = _parse_range_spec(query.get('x_hist_range'))
     y_hist_range = _parse_range_spec(query.get('y_hist_range')) if mode == '2d' else (None, None)
+    selection_geometry = _parse_selection_geometry(query.get('selection_geometry')) if mode == '2d' else None
     pileup_field = _resolve_pileup_field(session, query)
 
     bins_x = _parse_bins(query.get('bins_x'), 'bins_x')
@@ -340,6 +341,7 @@ def _aggregate_root_session(session: _DatasetSession, query: Dict[str, Any]) -> 
         x_filter_range=x_filter_range,
         y_filter_range=y_filter_range,
         filter_range=filter_range,
+        selection_geometry=selection_geometry,
         x_hist_range=x_hist_range,
         y_hist_range=y_hist_range,
         pileup_field=pileup_field,
@@ -505,6 +507,7 @@ def _aggregate_root_session(session: _DatasetSession, query: Dict[str, Any]) -> 
                 y_filter_range=y_filter_range,
                 filter_range=filter_range,
                 pileup_values=(arrays[pileup_field] if pileup_field else None),
+                selection_geometry=selection_geometry,
             )
             if c3_filter_fields is not None and c3_allowed_event_ids is not None:
                 selection &= _build_c3_filter_mask(arrays, c3_filter_fields, c3_allowed_event_ids)
@@ -607,6 +610,7 @@ def _aggregate_root_session(session: _DatasetSession, query: Dict[str, Any]) -> 
             y_filter_range=y_filter_range,
             filter_range=filter_range,
             pileup_values=(arrays[pileup_field] if pileup_field else None),
+            selection_geometry=selection_geometry,
         )
         if c3_filter_fields is not None and c3_allowed_event_ids is not None:
             selection &= _build_c3_filter_mask(arrays, c3_filter_fields, c3_allowed_event_ids)
@@ -726,6 +730,7 @@ def _aggregate_root_session(session: _DatasetSession, query: Dict[str, Any]) -> 
             y_filter_range=y_filter_range,
             filter_range=filter_range,
             pileup_values=(arrays[pileup_field] if pileup_field else None),
+            selection_geometry=selection_geometry,
         )
         if c3_filter_fields is not None and c3_allowed_event_ids is not None:
             selection &= _build_c3_filter_mask(arrays, c3_filter_fields, c3_allowed_event_ids)
@@ -1108,6 +1113,7 @@ def _build_root_aggregate_cache_key(
     x_filter_range: tuple[Optional[float], Optional[float]],
     y_filter_range: tuple[Optional[float], Optional[float]],
     filter_range: tuple[Optional[float], Optional[float]],
+    selection_geometry: Optional[Dict[str, Any]],
     x_hist_range: tuple[Optional[float], Optional[float]],
     y_hist_range: tuple[Optional[float], Optional[float]],
     pileup_field: str,
@@ -1131,6 +1137,7 @@ def _build_root_aggregate_cache_key(
         'x_filter_range': [x_filter_range[0], x_filter_range[1]],
         'y_filter_range': [y_filter_range[0], y_filter_range[1]],
         'filter_range': [filter_range[0], filter_range[1]],
+        'selection_geometry': selection_geometry,
         'x_hist_range': [x_hist_range[0], x_hist_range[1]],
         'y_hist_range': [y_hist_range[0], y_hist_range[1]],
         'pileup_field': pileup_field,
@@ -1592,6 +1599,86 @@ def _parse_range_spec(raw_range: Any) -> tuple[Optional[float], Optional[float]]
     return lower, upper
 
 
+def _parse_selection_pair(raw_value: Any, field_name: str) -> tuple[float, float]:
+    if isinstance(raw_value, dict):
+        x_value = _to_optional_float(raw_value.get('x'))
+        y_value = _to_optional_float(raw_value.get('y'))
+    elif isinstance(raw_value, (list, tuple)) and len(raw_value) >= 2:
+        x_value = _to_optional_float(raw_value[0])
+        y_value = _to_optional_float(raw_value[1])
+    else:
+        raise ValueError(f'{field_name} must be an object with x/y or an array of two numbers')
+
+    if x_value is None or y_value is None:
+        raise ValueError(f'{field_name} must contain finite numeric x/y values')
+    return x_value, y_value
+
+
+def _parse_selection_axis_spec(raw_value: Any, field_name: str) -> Dict[str, Any]:
+    if not isinstance(raw_value, dict):
+        raise ValueError(f'{field_name} must be an object')
+
+    axis_type = str(raw_value.get('type') or 'linear').strip().lower()
+    if axis_type not in ('linear', 'log'):
+        raise ValueError(f"{field_name}.type must be 'linear' or 'log'")
+
+    start = _to_optional_float(raw_value.get('start'))
+    end = _to_optional_float(raw_value.get('end'))
+    if start is None or end is None or start == end:
+        raise ValueError(f'{field_name} must include distinct finite start/end values')
+    if axis_type == 'log' and (start <= 0 or end <= 0):
+        raise ValueError(f'{field_name} log selections require positive start/end values')
+
+    return {
+        'type': axis_type,
+        'start': start,
+        'end': end,
+    }
+
+
+def _parse_selection_geometry(raw_geometry: Any) -> Optional[Dict[str, Any]]:
+    if raw_geometry in (None, '', False):
+        return None
+    if not isinstance(raw_geometry, dict):
+        raise ValueError('selection_geometry must be an object')
+
+    geometry_type = str(raw_geometry.get('type') or '').strip().lower()
+    if geometry_type not in ('polygon', 'ellipse'):
+        raise ValueError("selection_geometry.type must be 'polygon' or 'ellipse'")
+
+    axes_raw = raw_geometry.get('axes')
+    if not isinstance(axes_raw, dict):
+        raise ValueError('selection_geometry.axes must be an object with x and y axis specifications')
+    axes = {
+        'x': _parse_selection_axis_spec(axes_raw.get('x'), 'selection_geometry.axes.x'),
+        'y': _parse_selection_axis_spec(axes_raw.get('y'), 'selection_geometry.axes.y'),
+    }
+
+    if geometry_type == 'polygon':
+        raw_points = raw_geometry.get('points')
+        if not isinstance(raw_points, (list, tuple)):
+            raise ValueError('selection_geometry.points must be an array')
+        points = [_parse_selection_pair(point, 'selection_geometry.points[]') for point in raw_points]
+        if len(points) < 3:
+            raise ValueError('selection_geometry.points must include at least three vertices')
+        return {
+            'type': 'polygon',
+            'axes': axes,
+            'points': points,
+        }
+
+    center = _parse_selection_pair(raw_geometry.get('center'), 'selection_geometry.center')
+    radius = _parse_selection_pair(raw_geometry.get('radius'), 'selection_geometry.radius')
+    if radius[0] <= 0 or radius[1] <= 0:
+        raise ValueError('selection_geometry.radius must contain positive x/y values')
+    return {
+        'type': 'ellipse',
+        'axes': axes,
+        'center': center,
+        'radius': radius,
+    }
+
+
 def _to_optional_float(value: Any) -> Optional[float]:
     if value is None:
         return None
@@ -1660,6 +1747,7 @@ def _build_selection_mask(
     y_filter_range: tuple[Optional[float], Optional[float]],
     filter_range: tuple[Optional[float], Optional[float]],
     pileup_values: Any,
+    selection_geometry: Optional[Dict[str, Any]] = None,
 ) -> np.ndarray:
     mask = np.isfinite(x_values)
     if x_filter_range[0] is not None:
@@ -1689,7 +1777,95 @@ def _build_selection_mask(
     if pileup_values is not None:
         mask &= ~_match_truthy_values(np.asarray(pileup_values))
 
+    if selection_geometry is not None:
+        if y_values is None:
+            raise ValueError('selection_geometry requires y_values in 2D exact aggregation mode')
+        mask &= _build_selection_geometry_mask(x_values, y_values, selection_geometry)
+
     return mask
+
+
+def _project_values_to_normalized_axis(values: np.ndarray, axis_spec: Dict[str, Any]) -> np.ndarray:
+    projected = np.full(values.shape, np.nan, dtype=np.float64)
+    start = float(axis_spec['start'])
+    end = float(axis_spec['end'])
+    if start == end:
+        return projected
+
+    if axis_spec['type'] == 'log':
+        valid = np.isfinite(values) & (values > 0)
+        if not np.any(valid):
+            return projected
+        log_start = math.log10(start)
+        log_end = math.log10(end)
+        denominator = log_end - log_start
+        if denominator == 0:
+            return projected
+        projected[valid] = (np.log10(values[valid]) - log_start) / denominator
+        return projected
+
+    valid = np.isfinite(values)
+    if not np.any(valid):
+        return projected
+    denominator = end - start
+    if denominator == 0:
+        return projected
+    projected[valid] = (values[valid] - start) / denominator
+    return projected
+
+
+def _build_polygon_selection_mask(normalized_x: np.ndarray, normalized_y: np.ndarray, points: Sequence[tuple[float, float]]) -> np.ndarray:
+    point_x = np.asarray([float(point[0]) for point in points], dtype=np.float64)
+    point_y = np.asarray([float(point[1]) for point in points], dtype=np.float64)
+    inside = np.zeros(normalized_x.shape, dtype=bool)
+    if normalized_x.size == 0 or point_x.size < 3:
+        return inside
+
+    last_index = point_x.size - 1
+    for index in range(point_x.size):
+        xi = point_x[index]
+        yi = point_y[index]
+        xj = point_x[last_index]
+        yj = point_y[last_index]
+        denominator = yj - yi
+        intersects = ((yi > normalized_y) != (yj > normalized_y))
+        if denominator == 0:
+            cross_x = np.full(normalized_x.shape, np.nan, dtype=np.float64)
+        else:
+            cross_x = (((xj - xi) * (normalized_y - yi)) / denominator) + xi
+        inside ^= intersects & (normalized_x < cross_x)
+        last_index = index
+    return inside
+
+
+def _build_selection_geometry_mask(
+    x_values: np.ndarray,
+    y_values: np.ndarray,
+    selection_geometry: Dict[str, Any],
+) -> np.ndarray:
+    normalized_x = _project_values_to_normalized_axis(x_values, selection_geometry['axes']['x'])
+    normalized_y = _project_values_to_normalized_axis(y_values, selection_geometry['axes']['y'])
+    valid = np.isfinite(normalized_x) & np.isfinite(normalized_y)
+    geometry_mask = np.zeros(x_values.shape, dtype=bool)
+    if not np.any(valid):
+        return geometry_mask
+
+    valid_x = normalized_x[valid]
+    valid_y = normalized_y[valid]
+    geometry_type = selection_geometry['type']
+    if geometry_type == 'ellipse':
+        center_x, center_y = selection_geometry['center']
+        radius_x, radius_y = selection_geometry['radius']
+        dx = (valid_x - float(center_x)) / float(radius_x)
+        dy = (valid_y - float(center_y)) / float(radius_y)
+        geometry_mask[valid] = ((dx * dx) + (dy * dy)) <= 1.0
+        return geometry_mask
+
+    if geometry_type == 'polygon':
+        geometry_mask[valid] = _build_polygon_selection_mask(valid_x, valid_y, selection_geometry['points'])
+        return geometry_mask
+
+    raise ValueError(f"Unsupported selection geometry type: {geometry_type}")
 
 
 def _match_channel_values(raw_values: np.ndarray, selected_values: Sequence[str]) -> np.ndarray:

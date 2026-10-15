@@ -7,9 +7,16 @@ import subprocess
 import sys
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
+import numpy as np
+
 
 PREVIEW_ROW_LIMIT = 100
 ROOT_LOAD_ENTRY_LIMIT = 20_000
+ROOT_HISTOGRAM_CLASSES = {
+    f'TH{dimension}{storage}'
+    for dimension in (1, 2)
+    for storage in ('C', 'S', 'I', 'L', 'F', 'D')
+}
 SUPPORTED_IMPORT_FILE_TYPES: dict[str, tuple[str, ...]] = {
     'all': ('.csv', '.root'),
     'csv': ('.csv',),
@@ -129,23 +136,67 @@ def load_csv_file(path: str, *, source_label: Optional[str] = None, source_kind:
     }
 
 
-def preview_root_file(path: str, *, tree_path: Optional[str] = None, sample_rows: int = PREVIEW_ROW_LIMIT) -> Dict[str, Any]:
+def preview_root_file(
+    path: str,
+    *,
+    tree_path: Optional[str] = None,
+    histogram_path: Optional[str] = None,
+    sample_rows: int = PREVIEW_ROW_LIMIT,
+) -> Dict[str, Any]:
     file_path = _resolve_file(path, allowed_suffixes=SUPPORTED_IMPORT_FILE_TYPES['root'])
     uproot = _require_uproot()
 
     with uproot.open(file_path) as root_file:
         objects = _root_objects(root_file)
         tree_options = _root_tree_options(root_file, objects)
+        histogram_options = [
+            {
+                'path': item['path'],
+                'class_name': item['class_name'],
+                'supported': item['class_name'] in ROOT_HISTOGRAM_CLASSES,
+            }
+            for item in objects if item['kind'] == 'histogram'
+        ]
+        payload = {
+            'kind': 'root',
+            'path': file_path,
+            'display_name': Path(file_path).name,
+            'objects': objects,
+            'tree_options': tree_options,
+            'histogram_options': histogram_options,
+        }
+        if tree_path and histogram_path:
+            raise ValueError('Select either a ROOT histogram or a TTree, not both')
+        if histogram_path or not tree_options:
+            supported_histograms = [item for item in histogram_options if item['supported']]
+            if histogram_path or supported_histograms:
+                selected_path = histogram_path or supported_histograms[0]['path']
+                histogram = _require_root_histogram(root_file, selected_path)
+                values, axes = _read_root_histogram_bins(histogram)
+                selected = _describe_root_histogram(histogram, selected_path, values, axes)
+                indices = np.argwhere(values != 0)[:sample_rows]
+                selected['sample_bins'] = [
+                    {
+                        **{
+                            f'{name}_center': float((axes[axis]['edges'][index[axis]] + axes[axis]['edges'][index[axis] + 1]) / 2)
+                            for axis, name in enumerate(('x', 'y')[:values.ndim])
+                        },
+                        'content': float(values[tuple(index)]),
+                    }
+                    for index in indices
+                ]
+                return {
+                    **payload,
+                    'supported': True,
+                    'selected_histogram': selected,
+                    'message': 'Saved histogram: native bins are loaded directly, without reconstructing events.',
+                }
 
         if not tree_options:
             return {
-                'kind': 'root',
+                **payload,
                 'supported': False,
-                'path': file_path,
-                'display_name': Path(file_path).name,
-                'objects': objects,
-                'tree_options': [],
-                'message': 'No TTree objects were found in this ROOT file.',
+                'message': 'No supported TH1/TH2 histograms or TTrees were found. TH3, TH2Poly and TProfile objects are not supported.',
             }
 
         valid_tree_paths = {option['path'] for option in tree_options}
@@ -160,12 +211,8 @@ def preview_root_file(path: str, *, tree_path: Optional[str] = None, sample_rows
         load_count = min(total_entries, ROOT_LOAD_ENTRY_LIMIT) if loadable_headers else 0
 
         return {
-            'kind': 'root',
+            **payload,
             'supported': bool(loadable_headers),
-            'path': file_path,
-            'display_name': Path(file_path).name,
-            'objects': objects,
-            'tree_options': tree_options,
             'selected_tree': {
                 'path': selected_tree_path,
                 'title': getattr(tree, 'title', '') or '',
@@ -183,6 +230,157 @@ def preview_root_file(path: str, *, tree_path: Optional[str] = None, sample_rows
             },
             'message': None if loadable_headers else 'The selected TTree does not expose scalar branches that can be previewed yet.',
         }
+
+
+def _require_root_histogram(root_file, histogram_path: str):
+    normalized_path = str(histogram_path or '').strip()
+    if not normalized_path:
+        raise ValueError('histogram_path parameter required')
+    class_name = root_file.classnames(recursive=True, cycle=False).get(normalized_path)
+    if class_name is None:
+        raise ValueError(f'ROOT histogram not found: {normalized_path}')
+    if class_name not in ROOT_HISTOGRAM_CLASSES:
+        raise ValueError(f'Unsupported ROOT histogram class {class_name}: select a TH1 or TH2 histogram')
+    return root_file[normalized_path]
+
+
+def _read_root_histogram_bins(histogram) -> Tuple[np.ndarray, List[Dict[str, Any]]]:
+    values = np.asarray(histogram.values(flow=False), dtype=np.float64)
+    if values.ndim not in (1, 2) or not values.size or not np.all(np.isfinite(values)):
+        raise ValueError('ROOT histogram must contain finite 1D or 2D bin contents')
+    axes = []
+    for index, axis in enumerate(histogram.axes):
+        edges = np.asarray(axis.edges(), dtype=np.float64)
+        if len(edges) != values.shape[index] + 1 or not np.all(np.isfinite(edges)) or not np.all(np.diff(edges) > 0):
+            raise ValueError('ROOT histogram bin edges must be finite and strictly increasing')
+        labels = axis.labels()
+        axes.append({
+            'title': str(axis.member('fTitle') or ''),
+            'edges': edges.tolist(),
+            'bin_count': values.shape[index],
+            'min': float(edges[0]),
+            'max': float(edges[-1]),
+            'labels': [str(label) for label in labels] if labels is not None else None,
+        })
+    return values, axes
+
+
+def _describe_root_histogram(histogram, path: str, values: np.ndarray, axes: List[Dict[str, Any]]) -> Dict[str, Any]:
+    flow_values = np.asarray(histogram.values(flow=True), dtype=np.float64)
+    entries = float(histogram.member('fEntries'))
+    if not np.all(np.isfinite(flow_values)) or not math.isfinite(entries):
+        raise ValueError('ROOT histogram entries and flow bins must be finite')
+    integral = float(values.sum())
+    flow_integral = float(flow_values.sum() - integral)
+    if not math.isfinite(integral) or not math.isfinite(flow_integral):
+        raise ValueError('ROOT histogram regular and flow bin sums must be finite')
+    return {
+        'path': path,
+        'class_name': histogram.classname,
+        'title': str(histogram.title or ''),
+        'dimension': values.ndim,
+        'axes': axes,
+        'bin_count': int(values.size),
+        'nonzero_bin_count': int(np.count_nonzero(values)),
+        'entry_count': entries,
+        'integral': integral,
+        'flow_integral': flow_integral,
+        'has_negative_bins': bool(np.any(values < 0)),
+        'min_bin_content': float(values.min()),
+        'max_bin_content': float(values.max()),
+    }
+
+
+def _root_histogram_axis_stats(values: np.ndarray, edges: Sequence[float]) -> Optional[Dict[str, Any]]:
+    total = float(values.sum())
+    if total <= 0 or np.any(values < 0):
+        return None
+    centers = (np.asarray(edges[:-1]) + np.asarray(edges[1:])) / 2
+    occupied = values != 0
+    mean = float(np.dot(values, centers) / total)
+    mean_square = float(np.dot(values, centers * centers) / total)
+    return {
+        'count': total,
+        'min': float(centers[occupied][0]),
+        'max': float(centers[occupied][-1]),
+        'mean': mean,
+        'median': None,
+        'std_dev': math.sqrt(max(0, float(np.dot(values, (centers - mean) ** 2) / total))),
+        'rms': math.sqrt(max(0, mean_square)),
+    }
+
+
+def load_root_histogram(path: str, *, histogram_path: str) -> Dict[str, Any]:
+    file_path = _resolve_file(path, allowed_suffixes=SUPPORTED_IMPORT_FILE_TYPES['root'])
+    uproot = _require_uproot()
+    with uproot.open(file_path) as root_file:
+        histogram = _require_root_histogram(root_file, histogram_path)
+        values, axes = _read_root_histogram_bins(histogram)
+        metadata = _describe_root_histogram(histogram, histogram_path, values, axes)
+        sumw2_size = len(histogram.member('fSumw2'))
+        if sumw2_size and sumw2_size != math.prod(axis['bin_count'] + 2 for axis in axes):
+            raise ValueError('ROOT histogram stored variances must include one value per regular and flow bin')
+        if sumw2_size:
+            variances = histogram.variances(flow=False)
+            metadata['variance_source'] = 'stored_sumw2'
+        elif metadata['has_negative_bins']:
+            variances = None
+            metadata['variance_source'] = 'unavailable'
+        else:
+            variances = values.copy()
+            metadata['variance_source'] = 'poisson_default'
+        if variances is not None:
+            variances = np.asarray(variances, dtype=np.float64)
+            if variances.shape != values.shape or not np.all(np.isfinite(variances)) or np.any(variances < 0):
+                raise ValueError('ROOT histogram variances must be finite, nonnegative and match its bins')
+
+    if values.ndim == 1:
+        bins = {
+            'counts': values.tolist(),
+            'edges': axes[0]['edges'],
+            'centers': ((np.asarray(axes[0]['edges'][:-1]) + np.asarray(axes[0]['edges'][1:])) / 2).tolist(),
+            'variances': variances.tolist() if variances is not None else None,
+        }
+        stats = _root_histogram_axis_stats(values, axes[0]['edges'])
+    else:
+        bins = {
+            'counts': values.T.tolist(),
+            'x_edges': axes[0]['edges'],
+            'y_edges': axes[1]['edges'],
+            'x_centers': ((np.asarray(axes[0]['edges'][:-1]) + np.asarray(axes[0]['edges'][1:])) / 2).tolist(),
+            'y_centers': ((np.asarray(axes[1]['edges'][:-1]) + np.asarray(axes[1]['edges'][1:])) / 2).tolist(),
+            'variances': variances.T.tolist() if variances is not None else None,
+        }
+        stats = {
+            'x': _root_histogram_axis_stats(values.sum(axis=1), axes[0]['edges']),
+            'y': _root_histogram_axis_stats(values.sum(axis=0), axes[1]['edges']),
+        } if not metadata['has_negative_bins'] else None
+    display_name = f'{Path(file_path).name} :: {histogram_path}'
+    notes = [
+        f"ROOT entries: {metadata['entry_count']:g}; in-range bin sum: {metadata['integral']:g}; flow-bin sum: {metadata['flow_integral']:g}.",
+        'Native bin edges and contents are preserved; underflow/overflow bins are not plotted.',
+        'Statistics use weighted bin centers, not original events. Event filters are unavailable; rebinning merges existing whole bins.',
+    ]
+    if metadata['variance_source'] == 'poisson_default':
+        notes.append('No Sumw2 array is stored. Bin variances use the default Poisson assumption (variance = bin content), not measured weighted uncertainties.')
+    elif metadata['variance_source'] == 'unavailable':
+        notes.append('No Sumw2 array is stored. Variances are unavailable for signed bins; no uncertainty model is invented.')
+    else:
+        notes.append('Stored Sumw2 bin variances are retained; inter-bin covariance is not available.')
+    if metadata['has_negative_bins']:
+        notes.append('Signed bin contents are preserved; event-like statistics are unavailable for negative weights.')
+    return {
+        'kind': 'root',
+        'name': display_name,
+        'source_label': display_name,
+        'source_path': file_path,
+        'headers': ['X', 'Y'][:values.ndim],
+        'rows': [],
+        'histogram': bins,
+        'stats': stats,
+        'notes': notes,
+        'meta': {**metadata, 'root_object_kind': 'histogram', 'histogram_path': histogram_path, 'prebinned': True},
+    }
 
 
 def load_root_tree(path: str, *, tree_path: str) -> Dict[str, Any]:
@@ -406,10 +604,15 @@ def _require_uproot():
 
 def _root_objects(root_file) -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
-    classnames = root_file.classnames(recursive=True)
+    classnames = root_file.classnames(recursive=True, cycle=False)
     for raw_path, class_name in sorted(classnames.items(), key=lambda item: item[0].lower()):
         path = _strip_root_cycle(raw_path)
-        kind = 'tree' if class_name == 'TTree' else 'directory' if 'Directory' in class_name else 'object'
+        kind = (
+            'tree' if class_name == 'TTree'
+            else 'histogram' if class_name.startswith(('TH1', 'TH2', 'TH3', 'TProfile'))
+            else 'directory' if 'Directory' in class_name
+            else 'object'
+        )
         out.append({
             'path': path,
             'class_name': class_name,

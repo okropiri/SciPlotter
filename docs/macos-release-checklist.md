@@ -59,7 +59,7 @@ Before cutting a macOS release, verify:
 
 1. The GitHub secrets above are populated.
 2. The certificate identity text exactly matches `MACOS_CODESIGN_IDENTITY`.
-3. `scripts/build_release.py --clean` succeeds on macOS.
+3. `.venv/bin/python -m scripts.build_release --clean` succeeds on macOS.
 4. The GitHub Actions macOS job completes without skipping notarization unexpectedly.
 
 ## Post-Release Checks

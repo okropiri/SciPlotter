@@ -197,7 +197,14 @@ def api_data_importer_preview():
 
         if kind == 'root':
             tree_path = data.get('tree_path')
-            return jsonify(importer.preview_root_file(str(data.get('path') or ''), tree_path=(str(tree_path) if tree_path else None)))
+            histogram_path = data.get('histogram_path')
+            if histogram_path is not None and not isinstance(histogram_path, str):
+                raise ValueError('histogram_path must be a string')
+            return jsonify(importer.preview_root_file(
+                path,
+                tree_path=str(tree_path) if tree_path else None,
+                histogram_path=str(histogram_path) if histogram_path else None,
+            ))
 
         return jsonify({'error': f'Unsupported importer kind: {kind}'}), 400
     except (FileNotFoundError, ValueError, RuntimeError) as exc:
@@ -221,6 +228,14 @@ def api_data_importer_load():
 
         if kind == 'root':
             tree_path = (data.get('tree_path') or '').strip()
+            histogram_path = data.get('histogram_path')
+            if histogram_path is not None and not isinstance(histogram_path, str):
+                raise ValueError('histogram_path must be a string')
+            histogram_path = (histogram_path or '').strip()
+            if histogram_path:
+                if tree_path:
+                    raise ValueError('Select either a ROOT histogram or a TTree, not both')
+                return jsonify(importer.load_root_histogram(path, histogram_path=histogram_path))
             channel_field = (data.get('channel_field') or '').strip()
             payload = importer.load_root_tree(path, tree_path=tree_path)
             try:

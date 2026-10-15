@@ -92,8 +92,11 @@ python scripts/bootstrap.py --build
 Then build the native package for the current OS:
 
 ```bash
-python scripts/build_release.py --clean
+.venv/bin/python -m scripts.build_release --clean
 ```
+
+On Windows, use `.venv\Scripts\python.exe -m scripts.build_release --clean`.
+Use the project environment so packaging can find the installed build dependencies.
 
 Outputs go to `dist/release/`.
 
