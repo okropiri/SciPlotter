@@ -175,15 +175,32 @@ def api_data_importer_pick_file():
         return jsonify({'error': str(e)}), 500
 
 
+def _importer_source(data, *, default_kind: str) -> tuple[str, list[str]]:
+    paths = data.get('paths')
+    if paths is None:
+        paths = [str(data.get('path') or '').strip()]
+    elif not isinstance(paths, list) or not paths or any(
+        not isinstance(path, str) or not path.strip() for path in paths
+    ):
+        raise ValueError('paths must be a nonempty list of file paths')
+
+    kind = (data.get('kind') or '').strip().lower()
+    if kind in ('', 'auto'):
+        if len(paths) > 1:
+            kind = 'root'
+        else:
+            kind = importer.infer_import_kind(paths[0]) if paths[0] else default_kind
+    if len(paths) > 1 and kind != 'root':
+        raise ValueError('Only ROOT TTrees can be loaded from multiple files.')
+    return kind, paths
+
+
 @bp.post('/api/data-importer/preview')
 def api_data_importer_preview():
     try:
         data = request.get_json(silent=True) or {}
-        path = str(data.get('path') or '').strip()
-        kind = (data.get('kind') or '').strip().lower()
-
-        if kind in ('', 'auto'):
-            kind = importer.infer_import_kind(path) if path else 'builtin'
+        kind, paths = _importer_source(data, default_kind='builtin')
+        path = paths[0]
 
         if kind == 'builtin':
             source_label, path = _resolve_builtin_summary_source(data.get('source'))
@@ -193,13 +210,17 @@ def api_data_importer_preview():
             return jsonify(payload)
 
         if kind == 'csv':
-            return jsonify(importer.preview_csv_file(str(data.get('path') or '')))
+            return jsonify(importer.preview_csv_file(path))
 
         if kind == 'root':
             tree_path = data.get('tree_path')
             histogram_path = data.get('histogram_path')
             if histogram_path is not None and not isinstance(histogram_path, str):
                 raise ValueError('histogram_path must be a string')
+            if len(paths) > 1:
+                if histogram_path:
+                    raise ValueError('Cannot load these ROOT files together as saved histograms. Select TTrees.')
+                return jsonify(importer.preview_root_files(paths, tree_path=str(tree_path).strip() if tree_path else None))
             return jsonify(importer.preview_root_file(
                 path,
                 tree_path=str(tree_path) if tree_path else None,
@@ -217,11 +238,8 @@ def api_data_importer_preview():
 def api_data_importer_load():
     try:
         data = request.get_json(silent=True) or {}
-        path = str(data.get('path') or '').strip()
-        kind = (data.get('kind') or '').strip().lower()
-
-        if kind in ('', 'auto'):
-            kind = importer.infer_import_kind(path) if path else ''
+        kind, paths = _importer_source(data, default_kind='')
+        path = paths[0]
 
         if kind == 'csv':
             return jsonify(importer.load_csv_file(path, source_kind='csv'))
@@ -233,15 +251,24 @@ def api_data_importer_load():
                 raise ValueError('histogram_path must be a string')
             histogram_path = (histogram_path or '').strip()
             if histogram_path:
+                if len(paths) > 1:
+                    raise ValueError('Cannot load these ROOT files together as saved histograms. Select TTrees.')
                 if tree_path:
                     raise ValueError('Select either a ROOT histogram or a TTree, not both')
                 return jsonify(importer.load_root_histogram(path, histogram_path=histogram_path))
-            channel_field = (data.get('channel_field') or '').strip()
-            payload = importer.load_root_tree(path, tree_path=tree_path)
+            raw_channel_field = data.get('channel_field')
+            if raw_channel_field is not None and not isinstance(raw_channel_field, str):
+                raise ValueError('channel_field must be a string')
+            channel_field = (raw_channel_field or '').strip()
+            dataset = importer.describe_root_tree_dataset(paths, tree_path=tree_path)
+            if channel_field and channel_field not in dataset.headers:
+                raise ValueError(f"Unknown channel_field '{channel_field}' for this ROOT tree")
+            payload = importer.load_root_tree(dataset)
+            if raw_channel_field is not None:
+                payload['meta']['channel_field'] = channel_field
             try:
                 session_payload = aggregation.create_root_dataset_session(
-                    path,
-                    tree_path=tree_path,
+                    dataset,
                     channel_field=channel_field,
                 )
                 if not isinstance(payload.get('meta'), dict):
@@ -253,6 +280,8 @@ def api_data_importer_load():
                     'supports': session_payload.get('supports', {}),
                 }
             except Exception as session_error:
+                if len(paths) > 1:
+                    raise
                 payload['exact_aggregation'] = {
                     'available': False,
                     'error': str(session_error),
@@ -270,17 +299,14 @@ def api_data_importer_load():
 def api_data_importer_session():
     try:
         data = request.get_json(silent=True) or {}
-        kind = (data.get('kind') or '').strip().lower()
+        kind, paths = _importer_source(data, default_kind='')
         if kind != 'root':
             return jsonify({'error': 'Exact backend sessions are currently supported only for ROOT imports'}), 400
 
         tree_path = (data.get('tree_path') or '').strip()
         channel_field = (data.get('channel_field') or '').strip()
-        payload = aggregation.create_root_dataset_session(
-            str(data.get('path') or ''),
-            tree_path=tree_path,
-            channel_field=channel_field,
-        )
+        dataset = importer.describe_root_tree_dataset(paths, tree_path=tree_path)
+        payload = aggregation.create_root_dataset_session(dataset, channel_field=channel_field)
         return jsonify(payload)
     except (FileNotFoundError, ValueError, RuntimeError) as exc:
         return jsonify({'error': str(exc)}), 400
@@ -330,7 +356,7 @@ def api_data_importer_session_feature_bounds():
         payload = aggregation.get_dataset_feature_bounds(
             str(data.get('session_id') or ''),
             feature=str(data.get('feature') or ''),
-            channel_field=str(data.get('channel_field') or ''),
+            channel_field=data.get('channel_field'),
             channel_values=data.get('channel_values'),
         )
         return jsonify(payload)

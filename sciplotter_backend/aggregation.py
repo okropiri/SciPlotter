@@ -33,7 +33,7 @@ class UnsupportedAggregationError(ValueError):
 class _DatasetSession:
     session_id: str
     kind: str
-    source_path: str
+    parts: tuple[importer.RootTreePart, ...]
     display_name: str
     tree_path: str
     headers: tuple[str, ...]
@@ -51,7 +51,8 @@ class _DatasetSession:
         return {
             'session_id': self.session_id,
             'kind': self.kind,
-            'source_path': self.source_path,
+            'source_path': self.parts[0].path,
+            'source_paths': [part.path for part in self.parts],
             'display_name': self.display_name,
             'tree_path': self.tree_path,
             'headers': list(self.headers),
@@ -157,32 +158,24 @@ _SESSION_LOCK = threading.Lock()
 _DATASET_SESSIONS: Dict[str, _DatasetSession] = {}
 
 
-def create_root_dataset_session(path: str, *, tree_path: str, channel_field: str = '') -> Dict[str, Any]:
-    file_path = importer._resolve_file(path, allowed_suffixes=importer.SUPPORTED_IMPORT_FILE_TYPES['root'])
-    normalized_tree_path = str(tree_path or '').strip()
-    if not normalized_tree_path:
-        raise ValueError('tree_path parameter required')
-
-    uproot = importer._require_uproot()
-    with uproot.open(file_path) as root_file:
-        tree = root_file[normalized_tree_path]
-        branch_info, loadable_headers = importer._describe_root_tree(tree)
-        if not loadable_headers:
-            raise ValueError('Selected TTree does not expose scalar branches that can be aggregated')
-        entry_count = int(tree.num_entries)
+def create_root_dataset_session(dataset: importer.RootTreeDataset, *, channel_field: str = '') -> Dict[str, Any]:
+    if not dataset.headers:
+        raise ValueError('Selected TTree does not expose scalar branches that can be aggregated')
+    if channel_field and channel_field not in dataset.headers:
+        raise ValueError(f"Unknown channel_field '{channel_field}' for this ROOT tree")
 
     now = time.time()
     session = _DatasetSession(
         session_id=uuid.uuid4().hex,
         kind='root',
-        source_path=file_path,
-        display_name=f"{importer.Path(file_path).name} :: {normalized_tree_path}",
-        tree_path=normalized_tree_path,
-        headers=tuple(loadable_headers),
-        entry_count=entry_count,
-        branch_count=len(branch_info),
-        loadable_branch_count=len(loadable_headers),
-        channel_field=str(channel_field or '').strip(),
+        parts=dataset.parts,
+        display_name=dataset.display_name,
+        tree_path=dataset.parts[0].tree_path,
+        headers=tuple(dataset.headers),
+        entry_count=dataset.entry_count,
+        branch_count=len(dataset.branches),
+        loadable_branch_count=len(dataset.headers),
+        channel_field=channel_field,
         created_at=now,
         accessed_at=now,
     )
@@ -224,7 +217,7 @@ def get_dataset_feature_bounds(
     session_id: str,
     *,
     feature: str,
-    channel_field: str = '',
+    channel_field: Optional[str] = None,
     channel_values: Any = None,
 ) -> Dict[str, Any]:
     session = _get_dataset_session(session_id)
@@ -1557,7 +1550,7 @@ def _require_direct_feature(session: _DatasetSession, raw_feature: Any, field_na
 
 
 def _require_channel_field(session: _DatasetSession, raw_channel_field: Any, raw_channel_values: Any) -> str:
-    channel_field = str(raw_channel_field or session.channel_field or '').strip()
+    channel_field = session.channel_field if raw_channel_field is None else str(raw_channel_field).strip()
     if channel_field and channel_field not in session.headers:
         raise ValueError(f"Unknown channel_field '{channel_field}' for this dataset session")
     if _parse_channel_values(raw_channel_values) and not channel_field:
@@ -1714,10 +1707,11 @@ def _resolve_pileup_field(session: _DatasetSession, query: Dict[str, Any]) -> st
 
 def _iterate_root_chunks(session: _DatasetSession, branches: Sequence[str]):
     uproot = importer._require_uproot()
-    with uproot.open(session.source_path) as root_file:
-        tree = root_file[session.tree_path]
-        for arrays in tree.iterate(branches, library='np', step_size=ROOT_AGGREGATION_CHUNK_SIZE):
-            yield arrays
+    for part in session.parts:
+        with uproot.open(part.path) as root_file:
+            tree = root_file[part.tree_path]
+            yield from tree.iterate(branches, library='np', entry_stop=part.entry_count,
+                                    step_size=ROOT_AGGREGATION_CHUNK_SIZE)
 
 
 def _coerce_numeric_array(values: Any, feature_name: str) -> np.ndarray:

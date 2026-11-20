@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import csv
+import json
 import math
-from pathlib import Path
+import re
 import subprocess
 import sys
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import numpy as np
@@ -25,6 +28,31 @@ SUPPORTED_IMPORT_FILE_TYPES: dict[str, tuple[str, ...]] = {
 IMPORTER_DEFAULT_ROOT = Path(__file__).resolve().parent.parent
 
 
+@dataclass(frozen=True)
+class RootTreePart:
+    path: str
+    tree_path: str
+    entry_count: int
+    branch_count: int
+
+
+@dataclass(frozen=True)
+class RootTreeDataset:
+    parts: tuple[RootTreePart, ...]
+    title: str
+    branches: List[Dict[str, Any]]
+    headers: List[str]
+
+    @property
+    def entry_count(self) -> int:
+        return sum(part.entry_count for part in self.parts)
+
+    @property
+    def display_name(self) -> str:
+        label = Path(self.parts[0].path).name if len(self.parts) == 1 else f'{len(self.parts)} ROOT files'
+        return f'{label} :: {self.parts[0].tree_path}'
+
+
 def infer_import_kind(path: str) -> str:
     suffix = Path(str(path or '')).suffix.lower()
     if suffix == '.csv':
@@ -37,25 +65,34 @@ def infer_import_kind(path: str) -> str:
 def pick_importable_file(*, kind: str = 'all', start_path: Optional[str] = None) -> Dict[str, Any]:
     allowed_suffixes = _allowed_suffixes(kind)
     initial_dir = _resolve_dialog_start_dir(start_path)
-    selected_path = _show_native_file_picker(initial_dir, allowed_suffixes=allowed_suffixes, kind=kind)
-    if not selected_path:
+    selected = _show_native_file_picker(initial_dir, allowed_suffixes=allowed_suffixes, kind=kind)
+    if not selected:
         return {
             'kind': kind,
             'cancelled': True,
             'selected_path': None,
+            'selected_paths': [],
             'current_path': str(initial_dir),
         }
 
-    resolved_path = _resolve_file(selected_path, allowed_suffixes=allowed_suffixes)
-    detected_kind = infer_import_kind(resolved_path)
+    paths = [_resolve_file(path, allowed_suffixes=allowed_suffixes) for path in selected]
+    paths.sort(key=_natural_file_order)
+    resolved_path = paths[0]
+    detected_kind = 'root' if len(paths) > 1 else infer_import_kind(resolved_path)
     return {
         'kind': kind,
         'detected_kind': detected_kind,
         'cancelled': False,
         'selected_path': resolved_path,
+        'selected_paths': paths,
         'current_path': str(Path(resolved_path).parent),
         'display_name': Path(resolved_path).name,
     }
+
+
+def _natural_file_order(path: str) -> tuple:
+    parts = re.split(r'([0-9]+)', path.casefold())
+    return tuple(int(part) if index % 2 else part for index, part in enumerate(parts)), path
 
 
 def browse_importable_files(path: Optional[str], *, kind: str = 'all') -> Dict[str, Any]:
@@ -208,26 +245,12 @@ def preview_root_file(
         total_entries = int(tree.num_entries)
         sample_count = min(sample_rows, total_entries)
         sample = _arrays_to_rows(sample_arrays, loadable_headers, sample_count)
-        load_count = min(total_entries, ROOT_LOAD_ENTRY_LIMIT) if loadable_headers else 0
-
         return {
             **payload,
             'supported': bool(loadable_headers),
-            'selected_tree': {
-                'path': selected_tree_path,
-                'title': getattr(tree, 'title', '') or '',
-                'entry_count': total_entries,
-                'branch_count': len(branch_info),
-                'loadable_branch_count': len(loadable_headers),
-                'headers': loadable_headers,
-                'branches': branch_info,
-                'sample_rows': sample,
-                'sample_row_limit': sample_rows,
-                'sample_row_count': len(sample),
-                'load_entry_limit': ROOT_LOAD_ENTRY_LIMIT,
-                'load_entry_count': load_count,
-                'will_truncate_on_load': total_entries > ROOT_LOAD_ENTRY_LIMIT,
-            },
+            'selected_tree': _root_tree_preview(
+                selected_tree_path, tree.title, total_entries, branch_info, loadable_headers, sample, sample_rows,
+            ),
             'message': None if loadable_headers else 'The selected TTree does not expose scalar branches that can be previewed yet.',
         }
 
@@ -383,40 +406,201 @@ def load_root_histogram(path: str, *, histogram_path: str) -> Dict[str, Any]:
     }
 
 
-def load_root_tree(path: str, *, tree_path: str) -> Dict[str, Any]:
-    file_path = _resolve_file(path, allowed_suffixes=SUPPORTED_IMPORT_FILE_TYPES['root'])
-    if not tree_path or str(tree_path).strip() == '':
+def describe_root_tree_dataset(paths: Sequence[str], *, tree_path: str) -> RootTreeDataset:
+    if not tree_path:
         raise ValueError('tree_path parameter required')
 
-    uproot = _require_uproot()
-    with uproot.open(file_path) as root_file:
-        tree = root_file[str(tree_path)]
-        branch_info, loadable_headers = _describe_root_tree(tree)
-        if not loadable_headers:
-            raise ValueError('Selected TTree does not expose scalar branches that can be loaded')
-        total_entries = int(tree.num_entries)
-        loaded_entry_count = min(total_entries, ROOT_LOAD_ENTRY_LIMIT)
-        arrays = tree.arrays(loadable_headers, library='np', entry_stop=loaded_entry_count)
-        rows = _arrays_to_rows(arrays, loadable_headers, loaded_entry_count)
+    if len(paths) > 1:
+        return _describe_root_tree_parts(_match_root_tree_parts(paths, tree_path)[tree_path])
 
-    display_name = f"{Path(file_path).name} :: {tree_path}"
+    path = _resolve_file(paths[0], allowed_suffixes=SUPPORTED_IMPORT_FILE_TYPES['root'])
+    uproot = _require_uproot()
+    with uproot.open(path) as root_file:
+        try:
+            tree = root_file[tree_path]
+        except KeyError as exc:
+            raise ValueError(f'TTree not found: {tree_path}') from exc
+        if getattr(tree, 'classname', None) != 'TTree':
+            raise ValueError(f'ROOT object is not a TTree: {tree_path}')
+        branches, headers = _describe_root_tree(tree)
+        part = RootTreePart(path, tree_path, int(tree.num_entries), len(branches))
+        return RootTreeDataset((part,), tree.title, branches, headers)
+
+
+def _match_root_tree_parts(
+    paths: Sequence[str], selected_tree: Optional[str],
+) -> Dict[str, tuple[RootTreePart, ...]]:
+    prefix = 'Cannot load these ROOT files together.'
+    try:
+        resolved = [_resolve_file(path, allowed_suffixes=SUPPORTED_IMPORT_FILE_TYPES['root']) for path in paths]
+    except (FileNotFoundError, ValueError) as exc:
+        raise ValueError(f'{prefix} {exc}') from exc
+    if len(set(resolved)) != len(resolved):
+        raise ValueError(f'{prefix} Select each file only once.')
+
+    uproot = _require_uproot()
+    files = []
+    for path in resolved:
+        try:
+            with uproot.open(path) as root_file:
+                trees = {}
+                for item in _root_objects(root_file):
+                    if item['kind'] == 'tree':
+                        name = item['path']
+                        tree = root_file[name]
+                        schema = tree.typenames()
+                        trees[name] = RootTreePart(path, name, int(tree.num_entries), len(schema)), schema
+        except (OSError, ValueError, KeyError) as exc:
+            raise ValueError(f"{prefix} Could not read TTrees from '{Path(path).name}'. {exc}") from exc
+        if not trees:
+            raise ValueError(f"{prefix} '{Path(path).name}' contains no TTrees.")
+        files.append(trees)
+
+    first = files[0]
+    if selected_tree is not None and selected_tree not in first:
+        raise ValueError(f"{prefix} '{Path(resolved[0]).name}' has no TTree named '{selected_tree}'.")
+
+    compatible = {}
+    errors = {}
+    for name, (first_part, schema) in first.items():
+        parts = [first_part]
+        for path, trees in zip(resolved[1:], files[1:]):
+            if name in trees:
+                other_part, other_schema = trees[name]
+                if schema != other_schema:
+                    difference = _root_branch_difference(schema, other_schema)
+                    errors[name] = (
+                        f"'{Path(path).name}' and '{Path(first_part.path).name}' "
+                        f"have different branches in TTree '{name}' ({difference})."
+                    )
+                    break
+            else:
+                matches = [part for part, candidate in trees.values() if candidate == schema]
+                if len(matches) != 1:
+                    detail = 'has no TTree' if not matches else 'has more than one TTree'
+                    errors[name] = (
+                        f"'{Path(path).name}' {detail} matching the branches of "
+                        f"'{name}' in '{Path(first_part.path).name}'."
+                    )
+                    break
+                other_part = matches[0]
+            parts.append(other_part)
+        else:
+            compatible[name] = tuple(parts)
+
+    if selected_tree in errors:
+        raise ValueError(f'{prefix} {errors[selected_tree]}')
+    if not compatible:
+        raise ValueError(f'{prefix} {next(iter(errors.values()))}')
+    return compatible
+
+
+def _root_branch_difference(expected: Dict[str, str], actual: Dict[str, str]) -> str:
+    differences = (
+        ('missing', expected.keys() - actual.keys()),
+        ('extra', actual.keys() - expected.keys()),
+        ('different type', {name for name in expected.keys() & actual.keys() if expected[name] != actual[name]}),
+    )
+    return ', '.join(
+        f'{label} {", ".join(sorted(names)[:5])}{"…" if len(names) > 5 else ""}'
+        for label, names in differences if names
+    )
+
+
+def _describe_root_tree_parts(parts: tuple[RootTreePart, ...]) -> RootTreeDataset:
+    example = next((part for part in parts if part.entry_count), parts[0])
+    uproot = _require_uproot()
+    with uproot.open(example.path) as root_file:
+        tree = root_file[example.tree_path]
+        branches, headers = _describe_root_tree(tree)
+        return RootTreeDataset(parts, tree.title, branches, headers)
+
+
+def _read_root_tree_rows(dataset: RootTreeDataset, limit: int) -> List[Dict[str, Any]]:
+    rows = []
+    uproot = _require_uproot()
+    for part in dataset.parts:
+        row_count = min(part.entry_count, limit - len(rows))
+        if row_count <= 0:
+            continue
+        with uproot.open(part.path) as root_file:
+            arrays = root_file[part.tree_path].arrays(dataset.headers, library='np', entry_stop=row_count)
+            rows.extend(_arrays_to_rows(arrays, dataset.headers, row_count))
+        if len(rows) >= limit:
+            break
+    return rows
+
+
+def _root_tree_preview(path, title, entry_count, branches, headers, rows, sample_limit):
+    return {
+        'path': path,
+        'title': title,
+        'entry_count': entry_count,
+        'branch_count': len(branches),
+        'loadable_branch_count': len(headers),
+        'headers': headers,
+        'branches': branches,
+        'sample_rows': rows,
+        'sample_row_limit': sample_limit,
+        'sample_row_count': len(rows),
+        'load_entry_limit': ROOT_LOAD_ENTRY_LIMIT,
+        'load_entry_count': min(entry_count, ROOT_LOAD_ENTRY_LIMIT) if headers else 0,
+        'will_truncate_on_load': entry_count > ROOT_LOAD_ENTRY_LIMIT,
+    }
+
+
+def preview_root_files(paths: Sequence[str], *, tree_path: Optional[str] = None) -> Dict[str, Any]:
+    options = _match_root_tree_parts(paths, tree_path)
+    selected_path = tree_path or next(iter(options))
+    dataset = _describe_root_tree_parts(options[selected_path])
+    sample = _read_root_tree_rows(dataset, PREVIEW_ROW_LIMIT) if dataset.headers else []
+    selected = _root_tree_preview(
+        selected_path, dataset.title, dataset.entry_count, dataset.branches, dataset.headers, sample, PREVIEW_ROW_LIMIT,
+    )
+    selected['parts'] = [
+        {'path': part.path, 'tree_path': part.tree_path, 'entry_count': part.entry_count}
+        for part in dataset.parts
+    ]
+    return {
+        'kind': 'root',
+        'display_name': dataset.display_name,
+        'path': dataset.parts[0].path,
+        'source_paths': [part.path for part in dataset.parts],
+        'tree_options': [
+            {'path': name, 'entry_count': sum(part.entry_count for part in parts), 'branch_count': parts[0].branch_count}
+            for name, parts in options.items()
+        ],
+        'supported': bool(dataset.headers),
+        'selected_tree': selected,
+        'message': None if dataset.headers else 'The selected TTrees do not expose scalar branches that can be previewed.',
+    }
+
+
+def load_root_tree(dataset: RootTreeDataset) -> Dict[str, Any]:
+    if not dataset.headers:
+        raise ValueError('Selected TTree does not expose scalar branches that can be loaded')
+    total_entries = dataset.entry_count
+    rows = _read_root_tree_rows(dataset, ROOT_LOAD_ENTRY_LIMIT)
+    loaded_entry_count = len(rows)
+    display_name = dataset.display_name
     truncated = total_entries > ROOT_LOAD_ENTRY_LIMIT
     source_label = display_name if not truncated else f"{display_name} (first {loaded_entry_count:,} / {total_entries:,} entries)"
     return {
         'kind': 'root',
         'name': display_name,
         'source_label': source_label,
-        'source_path': file_path,
-        'headers': loadable_headers,
+        'source_path': dataset.parts[0].path,
+        'source_paths': [part.path for part in dataset.parts],
+        'headers': dataset.headers,
         'rows': rows,
         'meta': {
-            'tree_path': str(tree_path),
+            'tree_path': dataset.parts[0].tree_path,
             'entry_count': total_entries,
             'loaded_entry_count': loaded_entry_count,
             'truncated': truncated,
             'load_entry_limit': ROOT_LOAD_ENTRY_LIMIT,
-            'branch_count': len(branch_info),
-            'loadable_branch_count': len(loadable_headers),
+            'branch_count': len(dataset.branches),
+            'loadable_branch_count': len(dataset.headers),
         },
     }
 
@@ -436,7 +620,7 @@ def _resolve_dialog_start_dir(path: Optional[str]) -> Path:
     return IMPORTER_DEFAULT_ROOT.resolve()
 
 
-def _show_native_file_picker(initial_dir: Path, *, allowed_suffixes: Sequence[str], kind: str) -> Optional[str]:
+def _show_native_file_picker(initial_dir: Path, *, allowed_suffixes: Sequence[str], kind: str) -> List[str]:
     if sys.platform == 'darwin':
         return _show_native_file_picker_macos(initial_dir, kind=kind)
 
@@ -453,7 +637,7 @@ def _show_native_file_picker(initial_dir: Path, *, allowed_suffixes: Sequence[st
         pass
 
     try:
-        selected = filedialog.askopenfilename(
+        selected = filedialog.askopenfilenames(
             title=_dialog_title(kind),
             initialdir=str(initial_dir),
             filetypes=_dialog_file_types(allowed_suffixes),
@@ -464,18 +648,24 @@ def _show_native_file_picker(initial_dir: Path, *, allowed_suffixes: Sequence[st
         except Exception:
             pass
 
-    normalized = str(selected).strip()
-    return normalized or None
+    return list(selected)
 
 
-def _show_native_file_picker_macos(initial_dir: Path, *, kind: str) -> Optional[str]:
+def _show_native_file_picker_macos(initial_dir: Path, *, kind: str) -> List[str]:
     script_lines = [
+        'use framework "Foundation"',
+        'use scripting additions',
         f'set defaultLocation to POSIX file "{_escape_applescript_string(str(initial_dir))}"',
         'try',
-        f'    set selectedFile to choose file with prompt "{_escape_applescript_string(_dialog_title(kind))}" default location defaultLocation',
-        '    return POSIX path of selectedFile',
+        f'    set selectedFiles to choose file with prompt "{_escape_applescript_string(_dialog_title(kind))}" default location defaultLocation with multiple selections allowed',
+        '    set selectedPaths to {}',
+        '    repeat with selectedFile in selectedFiles',
+        '        set end of selectedPaths to POSIX path of (contents of selectedFile)',
+        '    end repeat',
+        "    set jsonData to current application's NSJSONSerialization's dataWithJSONObject:selectedPaths options:0 |error|:(missing value)",
+        "    return (current application's NSString's alloc()'s initWithData:jsonData encoding:(current application's NSUTF8StringEncoding)) as text",
         'on error number -128',
-        '    return ""',
+        '    return "[]"',
         'end try',
     ]
     command: List[str] = ['osascript']
@@ -489,11 +679,11 @@ def _show_native_file_picker_macos(initial_dir: Path, *, kind: str) -> Optional[
 
     selected = (result.stdout or '').strip()
     if result.returncode == 0:
-        return selected or None
+        return json.loads(selected)
 
     details = (result.stderr or selected or '').strip()
     if '-128' in details or 'User canceled' in details:
-        return None
+        return []
     raise RuntimeError(details or 'Native file picker failed.')
 
 
@@ -506,8 +696,8 @@ def _dialog_title(kind: str) -> str:
     if normalized == 'csv':
         return 'Select CSV data file'
     if normalized == 'root':
-        return 'Select ROOT data file'
-    return 'Select data file'
+        return 'Select ROOT files'
+    return 'Select a CSV or Shift-click to select split ROOT files'
 
 
 def _dialog_file_types(allowed_suffixes: Sequence[str]) -> List[Tuple[str, str]]:

@@ -1396,9 +1396,11 @@
                 lastYRange: cloneHistogramHistoryValue(LAST_Y_RANGE),
                 markers: cloneHistogramHistoryValue(MARKERS) || [],
                 markerIdSeq: normalizeHistogramHistoryNumber(MARKER_ID_SEQ) || 0,
+                rulers: cloneHistogramHistoryValue(RULERS) || [],
                 drawShapes: cloneHistogramHistoryValue(DRAW_SHAPES) || [],
                 drawAnnotations: cloneHistogramHistoryValue(DRAW_ANNOTATIONS) || [],
                 markerMode: !!MARKER_MODE,
+                rulerMode: RULER_MODE,
                 ellipseSelectionMode: !!ELLIPSE_SELECTION_MODE,
                 projectionMode: !!PROJECTION_MODE,
                 projectionLocked: !!PROJECTION_LOCKED,
@@ -1532,6 +1534,9 @@
                 MARKERS = cloneHistogramHistoryValue(snapshot.markers) || [];
                 MARKER_ID_SEQ = normalizeHistogramHistoryNumber(snapshot.markerIdSeq) || 0;
                 redrawMarkers(gd);
+                setRulerMode(gd, false, { silent: true });
+                RULERS = cloneHistogramHistoryValue(snapshot.rulers) || [];
+                redrawRulers(gd);
 
                 MARKER_MODE = false;
                 setProjectionMode(gd, false, { silent: true });
@@ -1548,6 +1553,8 @@
                     MARKER_MODE = true;
                     syncHistogramInteractionCursor(gd);
                     syncActiveToolChrome(gd);
+                } else if (snapshot.rulerMode) {
+                    setRulerMode(gd, true, { silent: true });
                 } else if (gd) {
                     syncHistogramInteractionCursor(gd);
                     syncActiveToolChrome(gd);
@@ -3552,12 +3559,7 @@
             applyPlotSize(size.width, size.height, gd);
         }
 
-        // --- Marker-aware export helpers ---
-        function hasCustomSelectionOverlay(gd) {
-            const overlay = gd?.querySelector('#selection-outline-svg');
-            return !!(overlay && overlay.childNodes && overlay.childNodes.length);
-        }
-
+        // --- Histogram export helpers ---
         async function drawCustomSelectionOverlayToCanvas(ctx, gd, w, h) {
             const overlay = gd?.querySelector('#selection-outline-svg');
             if (!(overlay && overlay.childNodes && overlay.childNodes.length)) return;
@@ -3768,85 +3770,113 @@
             ctx.restore();
         }
 
-        async function buildCompositeImageWithMarkers(gd, w, h){
-            // Base plot image from Plotly
-            const baseDataUrl = await Plotly.toImage(gd, { format:'png', width:w, height:h, scale:1 });
-            // If no markers or custom selection overlays exist, return original quickly
-            const hasStatsOverlay = buildStatsOverlaySections().length > 0;
-            const hasPlotFrameDividers = !!gd?._fullLayout?._size;
-            if((!Array.isArray(MARKERS) || MARKERS.length===0) && !hasCustomSelectionOverlay(gd) && !hasStatsOverlay && !hasPlotFrameDividers){
-                return baseDataUrl;
+        function captureInspectMarkings(gd) {
+            const plotRect = gd.getBoundingClientRect();
+            if (!plotRect.width || !plotRect.height) return { lines: [], labels: [], rulerBounds: null };
+            const toPlotX = gd.clientWidth / plotRect.width;
+            const toPlotY = gd.clientHeight / plotRect.height;
+            const rulerLayer = gd.querySelector('.histogram-rulers');
+            const rulerBounds = rulerLayer && {
+                left: parseFloat(rulerLayer.style.left),
+                top: parseFloat(rulerLayer.style.top),
+                width: rulerLayer.clientWidth,
+                height: rulerLayer.clientHeight,
+            };
+
+            const lines = Array.from(gd.querySelectorAll('#marker-svg line, .histogram-ruler-line:not(.is-preview)'), (line) => {
+                const style = getComputedStyle(line);
+                return {
+                    start: { x: Number(line.getAttribute('x1')), y: Number(line.getAttribute('y1')) },
+                    end: { x: Number(line.getAttribute('x2')), y: Number(line.getAttribute('y2')) },
+                    color: style.stroke,
+                    width: parseFloat(style.strokeWidth),
+                    ruler: line.classList.contains('histogram-ruler-line'),
+                };
+            });
+
+            const labels = [];
+            const selectors = ['.user-ruler:not([hidden]) .marker-label', '.user-marker .marker-label'];
+            for (const selector of selectors) {
+                for (const label of gd.querySelectorAll(selector)) {
+                    const rect = label.getBoundingClientRect();
+                    if (!rect.width || !rect.height) continue;
+                    const style = getComputedStyle(label);
+                    labels.push({
+                        x: (rect.left - plotRect.left) * toPlotX,
+                        y: (rect.top - plotRect.top) * toPlotY,
+                        width: rect.width * toPlotX,
+                        height: rect.height * toPlotY,
+                        radius: parseFloat(style.borderTopLeftRadius),
+                        background: style.backgroundColor,
+                        color: style.color,
+                        font: style.fontWeight + ' ' + style.fontSize + ' ' + style.fontFamily,
+                        lineHeight: parseFloat(style.lineHeight),
+                        paddingLeft: parseFloat(style.paddingLeft),
+                        paddingTop: parseFloat(style.paddingTop),
+                        lines: Array.from(label.children, (row) => row.textContent),
+                    });
+                }
             }
-            // Create canvas
+            return { lines, labels, rulerBounds };
+        }
+
+        function drawInspectMarkingsToCanvas(ctx, { lines, labels, rulerBounds }, scaleX, scaleY) {
+            ctx.save();
+            ctx.scale(scaleX, scaleY);
+            ctx.lineCap = 'round';
+            ctx.textBaseline = 'middle';
+            for (const line of lines) {
+                ctx.save();
+                if (line.ruler && rulerBounds) {
+                    const { left, top, width, height } = rulerBounds;
+                    ctx.translate(left, top);
+                    ctx.beginPath();
+                    ctx.rect(0, 0, width, height);
+                    ctx.clip();
+                }
+                ctx.strokeStyle = line.color;
+                ctx.lineWidth = line.width;
+                ctx.beginPath();
+                ctx.moveTo(line.start.x, line.start.y);
+                ctx.lineTo(line.end.x, line.end.y);
+                ctx.stroke();
+                ctx.restore();
+            }
+            for (const label of labels) {
+                drawRoundedRectPath(ctx, label.x, label.y, label.width, label.height, label.radius);
+                ctx.fillStyle = label.background;
+                ctx.fill();
+                ctx.fillStyle = label.color;
+                ctx.font = label.font;
+                label.lines.forEach((text, index) => {
+                    ctx.fillText(text, label.x + label.paddingLeft,
+                        label.y + label.paddingTop + (index + 0.5) * label.lineHeight);
+                });
+            }
+            ctx.restore();
+        }
+
+        async function buildCompositeHistogramImage(gd, w, h) {
+            const inspect = captureInspectMarkings(gd);
+            // Render at the current chart size so the plot margins and Inspect overlays share coordinates.
+            const width = gd._fullLayout.width || w;
+            const height = gd._fullLayout.height || h;
+            const baseDataUrl = await Plotly.toImage(gd, { format: 'png', width, height, scale: 1 });
             const canvas = document.createElement('canvas');
-            canvas.width = w; canvas.height = h;
+            canvas.width = w;
+            canvas.height = h;
             const ctx = canvas.getContext('2d');
-            // Draw base image first
-            await new Promise((resolve,reject)=>{
+
+            await new Promise((resolve, reject) => {
                 const img = new Image();
-                img.onload=()=>{ ctx.drawImage(img,0,0,w,h); resolve(); };
-                img.onerror=reject; img.src=baseDataUrl;
+                img.onload = () => { ctx.drawImage(img, 0, 0, w, h); resolve(); };
+                img.onerror = reject;
+                img.src = baseDataUrl;
             });
             await drawHistogramPlotFrameDividersToCanvas(ctx, gd, w, h);
             await drawCustomSelectionOverlayToCanvas(ctx, gd, w, h);
             await drawStatsOverlayToCanvas(ctx, gd, w, h);
-            // Helper to format numbers like existing labels
-            const fmt = v => (typeof v==='number' ? v.toFixed(2) : v);
-            // Draw each marker (lines + label box + text)
-            for(const m of MARKERS){
-                const anchor = dataPointPixels(gd, m.x, m.y);
-                if(!anchor) continue;
-                // Derive label DOM to measure size & text lines
-                const labelDiv = gd.querySelector(`.user-marker[data-marker-id="${m.id}"] .marker-label`);
-                // Rebuild text lines (fallback if DOM missing)
-                const textLines = [];
-                textLines.push(`x: ${fmt(m.x)}`);
-                if(typeof m.y==='number') textLines.push(`y: ${fmt(m.y)}`);
-                if(typeof m.z==='number') textLines.push(`z: ${fmt(m.z)}`);
-                // Position
-                const labelLeft = anchor.x + (typeof m.offset_dx==='number'? m.offset_dx : 6);
-                const labelTop  = anchor.y + (typeof m.offset_dy==='number'? m.offset_dy : -40);
-                // Approximate dimensions (use DOM if present)
-                let labelW = 0, labelH = 0;
-                if(labelDiv){
-                    labelW = labelDiv.offsetWidth;
-                    labelH = labelDiv.offsetHeight;
-                } else {
-                    ctx.font = '11px sans-serif';
-                    labelW = Math.max(...textLines.map(t=>ctx.measureText(t).width)) + 12; // padding
-                    labelH = textLines.length * 13 + 8; // lineHeight + padding
-                }
-                const padX = 6, padY = 4, lineHeight = 13;
-                // Connector line (to bottom-left corner of label box)
-                ctx.strokeStyle = '#ff9800';
-                ctx.lineWidth = 1.5;
-                ctx.beginPath();
-                ctx.moveTo(anchor.x, anchor.y);
-                ctx.lineTo(labelLeft, labelTop + labelH);
-                ctx.stroke();
-                // Label background (rounded rectangle)
-                const r = 4;
-                ctx.beginPath();
-                ctx.moveTo(labelLeft + r, labelTop);
-                ctx.lineTo(labelLeft + labelW - r, labelTop);
-                ctx.quadraticCurveTo(labelLeft + labelW, labelTop, labelLeft + labelW, labelTop + r);
-                ctx.lineTo(labelLeft + labelW, labelTop + labelH - r);
-                ctx.quadraticCurveTo(labelLeft + labelW, labelTop + labelH, labelLeft + labelW - r, labelTop + labelH);
-                ctx.lineTo(labelLeft + r, labelTop + labelH);
-                ctx.quadraticCurveTo(labelLeft, labelTop + labelH, labelLeft, labelTop + labelH - r);
-                ctx.lineTo(labelLeft, labelTop + r);
-                ctx.quadraticCurveTo(labelLeft, labelTop, labelLeft + r, labelTop);
-                ctx.closePath();
-                ctx.fillStyle = 'rgba(0,0,0,0.75)';
-                ctx.fill();
-                // Text
-                ctx.font = '11px sans-serif';
-                ctx.fillStyle = '#ffffff';
-                ctx.textBaseline = 'top';
-                textLines.forEach((ln,i)=>{
-                    ctx.fillText(ln, labelLeft + padX, labelTop + padY + i*lineHeight);
-                });
-            }
+            drawInspectMarkingsToCanvas(ctx, inspect, w / width, h / height);
             return canvas.toDataURL('image/png');
         }
 
@@ -3855,7 +3885,7 @@
             const w = EXPORT_WIDTH || gd._fullLayout.width || 1000;
             const h = EXPORT_HEIGHT || gd._fullLayout.height || 600;
             try {
-                const dataUrl = await buildCompositeImageWithMarkers(gd, w, h);
+                const dataUrl = await buildCompositeHistogramImage(gd, w, h);
                 const a = document.createElement('a');
                 a.href = dataUrl;
                 a.download = 'histogram.png';
@@ -3916,7 +3946,7 @@
             if (!jsPDF) { alert('jsPDF not available after load'); return; }
             const pdf = new jsPDF({ orientation: wPx >= hPx ? 'landscape' : 'portrait', unit: 'pt', format: [wPt, hPt] });
             try {
-                const composite = await buildCompositeImageWithMarkers(gd, wPx, hPx);
+                const composite = await buildCompositeHistogramImage(gd, wPx, hPx);
                 pdf.addImage(composite, 'PNG', 0, 0, wPt, hPt);
             } catch(e){
                 alert('PDF generation failed: '+ e.message);
@@ -3972,9 +4002,20 @@
                 icon: Plotly.Icons.pencil || Plotly.Icons.select2d,
                 click: () => toggleMarkerMode(gd)
             };
+            const rulerBtn = {
+                name: 'Ruler Tool',
+                title: 'Ruler Tool: click two points to measure ΔX, ΔY, length, and slope.',
+                icon: {
+                    width: 24,
+                    height: 24,
+                    path: 'M5 21L3 19a2 2 0 0 1 0-2.8L16.2 3a2 2 0 0 1 2.8 0l2 2a2 2 0 0 1 0 2.8L7.8 21a2 2 0 0 1-2.8 0ZM4.4 17.6l2 2L19.6 6.4l-2-2-2.1 2.1 2 2-1.4 1.4-2-2-1.4 1.4 2 2-1.4 1.4-2-2-1.4 1.4 2 2-1.4 1.4-2-2-1.4 1.4 2 2-1.4 1.4-2-2Z',
+                    transform: 'matrix(1 0 0 1 0 0)'
+                },
+                click: () => toggleRulerMode(gd)
+            };
             const clearBtn = {
                 name: 'Clear Interactions',
-                title: 'Clear Interactions: delete any markers or selections from the plot, including selection outlines.',
+                title: 'Clear Interactions: delete markers and rulers and clear plot selections.',
                 icon: {
                     width: 512,
                     height: 512,
@@ -4033,8 +4074,20 @@
                 },
                 click: () => { clearHistogramDrawObjects(gd); }
             };
+            const clearInspectBtn = {
+                name: 'Clear Inspect Markings',
+                title: 'Clear Inspect Markings: delete all markers and rulers.',
+                icon: clearDrawBtn.icon,
+                click: () => {
+                    commitHistogramHistorySnapshot();
+                    clearInspectMarkings(gd);
+                    commitHistogramHistorySnapshot();
+                    flashStatus(gd, 'Inspect markings cleared');
+                }
+            };
             return {
-                responsive: !hasCustomPlotSize(),
+                // The viewport handler sizes both the plot host and the Plotly canvas.
+                responsive: false,
                 scrollZoom: true,
                 displayModeBar: true,
                 displaylogo: false,
@@ -4050,8 +4103,8 @@
                     ['zoomIn2d', 'zoomOut2d', autoFitBtn, swapAxesBtn, 'resetScale2d'],
                     ['zoom2d', 'pan2d'],
                     [projectionBtn, 'select2d', ellipseBtn, 'lasso2d', clearBtn],
-                    ['drawline', 'drawopenpath', 'drawrect', 'drawcircle', markerBtn, textboxBtn, arrowNoteBtn, eraseShapeBtn, clearDrawBtn],
-                    ['hoverClosestCartesian', 'hoverCompareCartesian', 'toggleSpikelines']
+                    ['drawline', 'drawopenpath', 'drawrect', 'drawcircle', markerBtn, rulerBtn, textboxBtn, arrowNoteBtn, eraseShapeBtn, clearDrawBtn],
+                    ['hoverClosestCartesian', 'hoverCompareCartesian', 'toggleSpikelines', clearInspectBtn]
                 ]
             };
         }
@@ -4071,7 +4124,7 @@
                 { match: 'ellipse select', title: 'Ellipse Select: drag an ellipse to select points inside it.' },
                 { match: 'projection tool', title: 'Projection Tool: hover or drag on the 2D histogram to project a row or column.' },
                 { match: 'marker mode', title: 'Marker Mode: click a point to place a persistent marker label on the plot.' },
-                { match: 'clear interactions', title: 'Clear Interactions: delete any markers or selections from the plot, including selection outlines.' },
+                { match: 'clear interactions', title: 'Clear Interactions: delete markers and rulers and clear plot selections.' },
                 { match: 'draw line', title: 'Draw Line: draw a straight line shape on the plot.' },
                 { match: 'draw open freeform', title: 'Freehand Draw: draw a freeform path on the plot.' },
                 { match: 'draw rectangle', title: 'Draw Rectangle: draw a rectangular shape on the plot.' },
@@ -4171,9 +4224,11 @@
                 placement: 'after-text',
                 actions: [
                     { modebarLabel: 'marker mode', label: 'Marker' },
+                    { modebarLabel: 'ruler tool', label: 'Ruler' },
                     { modebarLabel: 'show closest data on hover', label: 'Hover Closest' },
                     { modebarLabel: 'compare data on hover', label: 'Hover Compare' },
                     { modebarLabel: 'toggle spike lines', label: 'Spikelines' },
+                    { modebarLabel: 'clear inspect markings', label: 'Clear All' },
                 ],
             },
         ];
@@ -4380,6 +4435,21 @@
             return svg;
         }
 
+        function buildToolbarInspectIcon(pathData) {
+            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.setAttribute('viewBox', '0 0 24 24');
+            svg.setAttribute('aria-hidden', 'true');
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttribute('d', pathData);
+            path.setAttribute('fill', 'none');
+            path.setAttribute('stroke', 'currentColor');
+            path.setAttribute('stroke-width', '1.7');
+            path.setAttribute('stroke-linecap', 'round');
+            path.setAttribute('stroke-linejoin', 'round');
+            svg.appendChild(path);
+            return svg;
+        }
+
         function renderHistogramToolbarActions(gd) {
             const leadingContainer = document.getElementById('hist-toolbar-tools-leading');
             const trailingContainer = document.getElementById('hist-toolbar-tools-trailing');
@@ -4417,6 +4487,10 @@
                         button.disabled = true;
                     } else if (action.modebarLabel === 'zoom') {
                         iconWrap.appendChild(buildToolbarLensIcon());
+                    } else if (action.modebarLabel === 'ruler tool') {
+                        iconWrap.appendChild(buildToolbarInspectIcon('M3.5 17L17 3.5l3.5 3.5L7 20.5z M14 6.5l2 2 M11 9.5l2 2 M8 12.5l2 2 M5 15.5l2 2'));
+                    } else if (action.modebarLabel === 'clear inspect markings') {
+                        iconWrap.appendChild(buildToolbarInspectIcon('M4.5 6.5H19.5M10 10.5V16M14 10.5V16M6.5 6.5L7.4 18.2C7.5 19.2 8.3 20 9.3 20H14.7C15.7 20 16.5 19.2 16.6 18.2L17.5 6.5M9.2 6.5V4.2C9.3 3.6 9.6 3.5 10 3.5H14C14.4 3.5 14.7 3.6 14.8 4.2V6.5'));
                     } else if (action.modebarLabel === 'add textbox') {
                         iconWrap.appendChild(buildToolbarTextboxIcon());
                     } else if (action.modebarLabel === 'add arrow note') {
@@ -4443,6 +4517,10 @@
                                 || sourceButton.classList.contains('is-marker-active')
                                 || sourceButton.classList.contains('is-projection-active')
                             );
+                            if (modebarLabel === 'clear inspect markings') {
+                                sourceButton.click();
+                                return;
+                            }
                             if (modebarLabel === 'erase shape') {
                                 const nextEnabled = !ERASE_SHAPE_MODE;
                                 if (!nextEnabled) {
@@ -4524,7 +4602,8 @@
                 const isHistogramButton = !!(button.closest('#histogram-plot') || button.closest('.plot-container') || button.closest('.js-plotly-plot'));
                 if (!isHistogramButton) return;
                 const isEraseButton = label.includes('erase shape') || label.includes('erase');
-                const isOtherToolButton = label.includes('marker') || label.includes('projection') || label.includes('ellipse')
+                const isRulerButton = label.startsWith('ruler');
+                const isOtherToolButton = label.startsWith('marker mode') || label.includes('projection') || label.includes('ellipse') || isRulerButton
                     || label.includes('draw line') || label.includes('draw open freeform') || label.includes('draw rectangle') || label.includes('draw circle')
                     || label.includes('add textbox') || label.includes('add arrow note') || label.includes('box select') || label.includes('lasso select');
                 if (isEraseButton) {
@@ -4539,6 +4618,7 @@
                     return;
                 }
                 if (isOtherToolButton) {
+                    if (!isRulerButton) setRulerMode(gd, false, { silent: true });
                     setEraseShapeMode(gd, false, { silent: true });
                     clearHistogramActiveDrawSelection(gd);
                 }
@@ -4554,9 +4634,11 @@
                     || source.classList.contains('is-ellipse-active')
                     || source.classList.contains('is-erase-active')
                     || source.classList.contains('is-marker-active')
+                    || source.classList.contains('is-ruler-active')
                     || source.classList.contains('is-projection-active')
                 );
                 button.classList.toggle('is-active', active);
+                if (button.dataset.modebarLabel === 'ruler tool') button.setAttribute('aria-pressed', String(active));
             });
         }
 
@@ -4632,6 +4714,9 @@
         let MARKER_MODE = false; // when true clicks add markers
         let MARKERS = []; // {x,y,z?,id}
         let MARKER_ID_SEQ = 0;
+        let RULER_MODE = false;
+        let RULERS = [];
+        let RULER_DRAFT = null;
         let DRAW_SHAPES = [];
         let DRAW_ANNOTATIONS = [];
         const STATS_OVERLAY = { main: false, selection: false, checked: {} };
@@ -4661,9 +4746,10 @@
         function syncHistogramInteractionCursor(gd) {
             if (!gd) return;
             gd.classList.toggle('is-erase-shape-mode', !!ERASE_SHAPE_MODE);
+            gd.classList.toggle('is-ruler-mode', RULER_MODE);
             gd.style.cursor = ERASE_SHAPE_MODE
                 ? ''
-                : ((ELLIPSE_SELECTION_MODE || PROJECTION_MODE || MARKER_MODE) ? 'crosshair' : '');
+                : ((ELLIPSE_SELECTION_MODE || PROJECTION_MODE || MARKER_MODE || RULER_MODE) ? 'crosshair' : '');
         }
 
         function findModebarButton(gd, labelNeedle, options = {}) {
@@ -4696,7 +4782,7 @@
 
         function updateNativeModebarButtons(gd) {
             if (!gd) return;
-            const customActive = !!(ELLIPSE_SELECTION_MODE || MARKER_MODE || PROJECTION_MODE || ERASE_SHAPE_MODE);
+            const customActive = ELLIPSE_SELECTION_MODE || MARKER_MODE || RULER_MODE || PROJECTION_MODE || ERASE_SHAPE_MODE;
             if (!customActive) return;
             ['zoom', 'pan', 'box select', 'lasso select'].forEach((label) => {
                 const button = findModebarButton(gd, label);
@@ -4707,6 +4793,7 @@
         function syncActiveToolChrome(gd) {
             updateEllipseModebarButton(gd);
             updateMarkerModebarButton(gd);
+            findModebarButton(gd, 'ruler tool')?.classList.toggle('is-ruler-active', RULER_MODE);
             updateEraseShapeModebarButton(gd);
             updateProjectionModebarButton(gd);
             updateNativeModebarButtons(gd);
@@ -5088,7 +5175,8 @@
         }
 
         function deactivateActiveInteractionTool(gd, options = {}) {
-            if (!gd || !(ELLIPSE_SELECTION_MODE || MARKER_MODE || PROJECTION_MODE || ERASE_SHAPE_MODE)) return false;
+            if (!gd || !(ELLIPSE_SELECTION_MODE || MARKER_MODE || RULER_MODE || PROJECTION_MODE || ERASE_SHAPE_MODE)) return false;
+            setRulerMode(gd, false, { silent: true });
             MARKER_MODE = false;
             ERASE_SHAPE_MODE = false;
             setProjectionMode(gd, false, { silent: true });
@@ -5114,6 +5202,7 @@
             ensureEraseShapeModeBinding(gd);
             ERASE_SHAPE_MODE = nextEnabled;
             if (ERASE_SHAPE_MODE) {
+                setRulerMode(gd, false, { silent: true });
                 closeHistogramDrawStylePopover(gd, { preserveToolState: true, clearSelection: false });
                 clearHistogramActiveDrawSelection(gd);
                 MARKER_MODE = false;
@@ -5136,6 +5225,7 @@
         function toggleMarkerMode(gd){
             if (!gd) return;
             if (!MARKER_MODE) {
+                setRulerMode(gd, false, { silent: true });
                 setEraseShapeMode(gd, false, { silent: true });
                 setEllipseSelectionMode(gd, false, { silent: true });
                 setProjectionMode(gd, false, { silent: true });
@@ -5290,6 +5380,30 @@
             redrawMarkers(gd);
         }
 
+        function createMeasurementLabel(lines, deleteLabel, onDelete) {
+            const box = document.createElement('div');
+            box.className = 'histogram-point-label';
+            const label = document.createElement('div');
+            label.className = 'marker-label';
+            for (const line of lines) {
+                const row = document.createElement('div');
+                row.textContent = line;
+                label.appendChild(row);
+            }
+            const close = document.createElement('button');
+            close.type = 'button';
+            close.className = 'marker-close';
+            close.textContent = '×';
+            close.title = deleteLabel;
+            close.setAttribute('aria-label', deleteLabel);
+            close.addEventListener('click', (event) => {
+                event.stopPropagation();
+                onDelete();
+            });
+            box.append(label, close);
+            return box;
+        }
+
         function redrawMarkers(gd){
             // Clear existing HTML markers and lines
             gd.querySelectorAll('.user-marker').forEach(n=>n.remove());
@@ -5304,25 +5418,13 @@
             const scatterX=[], scatterY=[];
             for(const m of MARKERS){
                 scatterX.push(m.x); scatterY.push(m.y);
-                const div=document.createElement('div');
-                div.className='user-marker';
-                div.dataset.markerId = m.id;
-                Object.assign(div.style,{position:'absolute',zIndex:60,fontFamily:'sans-serif',pointerEvents:'auto'});
-                const label=document.createElement('div');
-                label.className='marker-label';
-                Object.assign(label.style,{background:'rgba(0,0,0,0.75)',color:'#fff',padding:'4px 6px 4px 6px',fontSize:'11px',lineHeight:'1.2',borderRadius:'4px',position:'relative',boxShadow:'0 2px 4px rgba(0,0,0,0.3)',pointerEvents:'auto',whiteSpace:'nowrap',cursor:'move'});
                 const fmt=v=> (typeof v==='number' ? v.toFixed(2) : v);
                 let lines = [`x: ${fmt(m.x)}`];
                 if(typeof m.y !== 'undefined' && m.y !== null) lines.push(`y: ${fmt(m.y)}`);
                 if(typeof m.z !== 'undefined' && m.z !== null) lines.push(`z: ${fmt(m.z)}`);
-                label.innerHTML = lines.map(l=>`<div>${l}</div>`).join('');
-                const cross=document.createElement('div');
-                cross.textContent='×';
-                cross.className='marker-close';
-                Object.assign(cross.style,{position:'absolute',top:'2px',right:'2px',cursor:'pointer',background:'#fff',border:'1px solid #666',borderRadius:'50%',width:'16px',height:'16px',fontSize:'12px',display:'flex',alignItems:'center',justifyContent:'center',color:'#333',boxShadow:'0 1px 3px rgba(0,0,0,0.4)'});
-                cross.title='Delete marker';
-                cross.onclick=(e)=>{e.stopPropagation(); removeMarker(gd,m.id);};
-                div.appendChild(label); div.appendChild(cross);
+                const div = createMeasurementLabel(lines, 'Delete marker', () => removeMarker(gd, m.id));
+                div.classList.add('user-marker');
+                div.dataset.markerId = m.id;
                 gd.appendChild(div);
                 const anchor=dataPointPixels(gd,m.x,m.y);
                 if(!anchor) continue;
@@ -5353,7 +5455,7 @@
         function dataPointPixels(gd,x,y){
             const full=gd._fullLayout; if(!full) return null;
             const xa=full.xaxis, ya=full.yaxis; if(!(xa&&ya)) return null;
-            return {x: xa.l2p(x)+xa._offset, y: ya.l2p(y)+ya._offset};
+            return {x: xa.d2p(x)+xa._offset, y: ya.d2p(y)+ya._offset};
         }
 
         function drawMarkerLine(svg, marker, anchor, div){
@@ -5427,8 +5529,8 @@
             if(gd.__markerClickHandler){
                 gd.removeListener('plotly_click', gd.__markerClickHandler);
             }
-            if(gd.__markerRelayoutHandler){
-                gd.removeListener('plotly_relayout', gd.__markerRelayoutHandler);
+            if(gd.__markerAfterPlotHandler){
+                gd.removeListener('plotly_afterplot', gd.__markerAfterPlotHandler);
             }
             const clickHandler = ev => {
                 if(!MARKER_MODE) return;
@@ -5439,15 +5541,200 @@
                     : (typeof p.z !== 'undefined' ? p.z : undefined);
                 addMarker(gd,p.x,p.y, markerValue);
             };
-            const relayoutHandler = ()=>{
+            const updatePositions = ()=>{
                 for(const m of MARKERS){
                     updateMarkerPositionAndLine(gd,m);
                 }
             };
             gd.on('plotly_click', clickHandler);
-            gd.on('plotly_relayout', relayoutHandler);
+            gd.on('plotly_afterplot', updatePositions);
             gd.__markerClickHandler = clickHandler;
-            gd.__markerRelayoutHandler = relayoutHandler;
+            gd.__markerAfterPlotHandler = updatePositions;
+        }
+
+        function getRulerReadout({ start, end }) {
+            const dx = end.x - start.x;
+            const dy = end.y - start.y;
+            const format = (value) => Number.isFinite(value) ? String(Number(value.toPrecision(6))) : String(value);
+            return [
+                `ΔX: ${format(dx)}`,
+                `ΔY: ${format(dy)}`,
+                `Length: ${format(Math.hypot(dx, dy))}`,
+                `Slope: ${dx === 0 ? 'undefined' : format(dy / dx)}`,
+            ];
+        }
+
+        function rulerPointFromEvent(gd, bounds, event) {
+            const rect = gd.getBoundingClientRect();
+            if (!rect.width || !rect.height) return null;
+            const px = (event.clientX - rect.left) * gd.clientWidth / rect.width - bounds.left;
+            const py = (event.clientY - rect.top) * gd.clientHeight / rect.height - bounds.top;
+            if (px < 0 || px > bounds.width || py < 0 || py > bounds.height) return null;
+            const x = bounds.xa.p2d(px);
+            const y = bounds.ya.p2d(py);
+            return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
+        }
+
+        function rulerPointPixels(bounds, point) {
+            return { x: bounds.xa.d2p(point.x), y: bounds.ya.d2p(point.y) };
+        }
+
+        function getRulerLabelPosition(bounds, start, end, width, height) {
+            const x = (start.x + end.x) / 2;
+            const y = (start.y + end.y) / 2;
+            if (x < 0 || x > bounds.width || y < 0 || y > bounds.height) return null;
+
+            // Offset the box perpendicular to the line. Try the opposite side near an edge.
+            const dx = end.x - start.x;
+            const dy = end.y - start.y;
+            const length = Math.hypot(dx, dy);
+            const side = dx < 0 ? -1 : 1;
+            const nx = length ? side * dy / length : 0;
+            const ny = length ? -side * dx / length : -1;
+            const offset = Math.abs(nx) * width / 2 + Math.abs(ny) * height / 2 + 8;
+            let left = x + nx * offset - width / 2;
+            let top = y + ny * offset - height / 2;
+            if (left < 0 || left + width > bounds.width || top < 0 || top + height > bounds.height) {
+                left = x - nx * offset - width / 2;
+                top = y - ny * offset - height / 2;
+            }
+            return {
+                x: Math.max(0, Math.min(left, bounds.width - width)),
+                y: Math.max(0, Math.min(top, bounds.height - height)),
+            };
+        }
+
+        function redrawRulers(gd) {
+            if (!gd) return;
+            const bounds = getPlotAreaBounds(gd);
+            let layer = gd.querySelector('.histogram-rulers');
+            if (!bounds || !bounds.width || !bounds.height || (!RULERS.length && !RULER_DRAFT)) {
+                layer?.remove();
+                return;
+            }
+            if (!layer) {
+                layer = document.createElement('div');
+                layer.className = 'histogram-rulers';
+                gd.appendChild(layer);
+            }
+            Object.assign(layer.style, {
+                left: `${bounds.left}px`, top: `${bounds.top}px`,
+                width: `${bounds.width}px`, height: `${bounds.height}px`,
+            });
+
+            const svgNS = 'http://www.w3.org/2000/svg';
+            const svg = document.createElementNS(svgNS, 'svg');
+            svg.setAttribute('aria-hidden', 'true');
+            layer.replaceChildren(svg);
+
+            const measurements = RULER_DRAFT ? [...RULERS, RULER_DRAFT] : RULERS;
+            for (const ruler of measurements) {
+                const start = rulerPointPixels(bounds, ruler.start);
+                const end = rulerPointPixels(bounds, ruler.end);
+                if (![start.x, start.y, end.x, end.y].every(Number.isFinite)) continue;
+                const line = document.createElementNS(svgNS, 'line');
+                line.setAttribute('class', 'histogram-ruler-line');
+                for (const [attribute, value] of [['x1', start.x], ['y1', start.y], ['x2', end.x], ['y2', end.y]]) {
+                    line.setAttribute(attribute, value);
+                }
+                svg.appendChild(line);
+
+                if (ruler === RULER_DRAFT) {
+                    line.classList.add('is-preview');
+                    const anchor = document.createElementNS(svgNS, 'circle');
+                    anchor.setAttribute('cx', start.x);
+                    anchor.setAttribute('cy', start.y);
+                    anchor.setAttribute('r', 3);
+                    svg.appendChild(anchor);
+                    continue;
+                }
+
+                const label = createMeasurementLabel(getRulerReadout(ruler), 'Delete ruler', () => {
+                    commitHistogramHistorySnapshot();
+                    RULERS = RULERS.filter((item) => item !== ruler);
+                    redrawRulers(gd);
+                    commitHistogramHistorySnapshot();
+                });
+                label.classList.add('user-ruler');
+                layer.appendChild(label);
+                const position = getRulerLabelPosition(bounds, start, end, label.offsetWidth, label.offsetHeight);
+                if (position) {
+                    label.style.left = `${position.x}px`;
+                    label.style.top = `${position.y}px`;
+                } else {
+                    label.hidden = true;
+                }
+            }
+        }
+
+        function setRulerMode(gd, enabled, { silent = false } = {}) {
+            if (!gd || RULER_MODE === enabled) return;
+            RULER_MODE = enabled;
+            RULER_DRAFT = null;
+            if (enabled) setNativeDragMode(gd, false);
+            redrawRulers(gd);
+            syncHistogramInteractionCursor(gd);
+            syncActiveToolChrome(gd);
+            if (!silent) flashStatus(gd, enabled ? 'Ruler: click the first point' : 'Ruler: OFF');
+        }
+
+        function toggleRulerMode(gd) {
+            const enable = !RULER_MODE;
+            if (enable) {
+                deactivateActiveInteractionTool(gd, { silent: true });
+                clearHistogramActiveDrawSelection(gd);
+            }
+            setRulerMode(gd, enable);
+        }
+
+        function bindRulerInteractions(gd) {
+            if (!gd.__rulerPointerEventsBound) {
+                const plotClickPoint = (event) => {
+                    if (!RULER_MODE || event.button !== 0 || !(event.target instanceof Element)
+                        || event.target.closest('.histogram-point-label, button, a, .legend, .infolayer')) return null;
+                    const bounds = getPlotAreaBounds(gd);
+                    return bounds && rulerPointFromEvent(gd, bounds, event);
+                };
+                const preventPlotlyMouseAction = (event) => {
+                    if (!plotClickPoint(event)) return;
+                    event.preventDefault();
+                    event.stopImmediatePropagation();
+                };
+                gd.addEventListener('mousedown', preventPlotlyMouseAction, true);
+                gd.addEventListener('dblclick', preventPlotlyMouseAction, true);
+                gd.addEventListener('click', (event) => {
+                    const point = plotClickPoint(event);
+                    if (!point) return;
+                    event.stopPropagation();
+                    if (!RULER_DRAFT) {
+                        RULER_DRAFT = { start: point, end: point };
+                        flashStatus(gd, 'Ruler: click the second point');
+                    } else {
+                        commitHistogramHistorySnapshot();
+                        RULERS.push({ start: RULER_DRAFT.start, end: point });
+                        RULER_DRAFT = null;
+                        commitHistogramHistorySnapshot();
+                    }
+                    redrawRulers(gd);
+                }, true);
+                gd.addEventListener('pointermove', (event) => {
+                    if (!RULER_DRAFT) return;
+                    const bounds = getPlotAreaBounds(gd);
+                    const point = bounds && rulerPointFromEvent(gd, bounds, event);
+                    const line = gd.querySelector('.histogram-ruler-line.is-preview');
+                    if (!point || !line) return;
+                    RULER_DRAFT.end = point;
+                    const end = rulerPointPixels(bounds, point);
+                    line.setAttribute('x2', end.x);
+                    line.setAttribute('y2', end.y);
+                });
+                gd.__rulerPointerEventsBound = true;
+            }
+            if (gd.__rulerAfterPlotHandler) gd.removeListener('plotly_afterplot', gd.__rulerAfterPlotHandler);
+            gd.__rulerAfterPlotHandler = () => redrawRulers(gd);
+            gd.on('plotly_afterplot', gd.__rulerAfterPlotHandler);
+            if (RULER_MODE) setNativeDragMode(gd, false);
+            redrawRulers(gd);
         }
 
         function getSelectionOutlineSvg(gd) {
@@ -5914,6 +6201,7 @@
                 layer.style.pointerEvents = PROJECTION_MODE ? 'auto' : 'none';
             }
             if (PROJECTION_MODE) {
+                setRulerMode(gd, false, { silent: true });
                 if (gd.__rootHistogramContext) clearHistogramSelectionState(gd);
                 MARKER_MODE = false;
                 setEraseShapeMode(gd, false, { silent: true });
@@ -6160,6 +6448,7 @@
                 layer.style.pointerEvents = ELLIPSE_SELECTION_MODE ? 'auto' : 'none';
             }
             if (ELLIPSE_SELECTION_MODE) {
+                setRulerMode(gd, false, { silent: true });
                 MARKER_MODE = false;
                 setEraseShapeMode(gd, false, { silent: true });
                 setProjectionMode(gd, false, { silent: true });
@@ -6275,21 +6564,29 @@
             }
         }
 
+        function clearInspectMarkings(gd) {
+            MARKERS = [];
+            RULERS = [];
+            RULER_DRAFT = null;
+            redrawMarkers(gd);
+            redrawRulers(gd);
+        }
+
         function clearPlotInteractions(gd) {
             MARKER_MODE = false;
+            setRulerMode(gd, false, { silent: true });
             setProjectionMode(gd, false, { silent: true });
             setEllipseSelectionMode(gd, false, { silent: true });
             syncHistogramInteractionCursor(gd);
             syncActiveToolChrome(gd);
-            MARKERS = [];
-            redrawMarkers(gd);
+            clearInspectMarkings(gd);
             clearHistogramProjection();
             clearHistogramSelectionState(gd, {
                 selectionPlaceholder: getHistogramSelectionPlaceholder(),
                 syncPlotly: true,
                 clearMeta: true,
             });
-            flashStatus(gd, 'Deleted markers and cleared selections');
+            flashStatus(gd, 'Deleted markers and rulers and cleared selections');
             scheduleHistogramHistoryCommit();
         }
 
@@ -7232,7 +7529,7 @@
             pointer-events: none;
             opacity: 0;
             backdrop-filter: blur(1px);
-            transition: opacity 160ms ease, transform 180ms ease, box-shadow 140ms ease, filter 140ms ease;
+            transition: opacity 160ms ease, box-shadow 140ms ease, filter 140ms ease;
             z-index: 24;
             background-repeat: no-repeat, no-repeat;
             background-size: 14px 14px, 100% 100%;
@@ -7258,7 +7555,6 @@
             left: 0;
             background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M10.75 3.25 6 8l4.75 4.75' fill='none' stroke='%231b76b3' stroke-opacity='0.78' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"), linear-gradient(90deg, rgba(249, 250, 251, 0.98) 0%, rgba(249, 250, 251, 0.92) 54%, rgba(249, 250, 251, 0) 100%);
             background-position: 6px 50%, 0 0;
-            transform: translateX(-4px);
         }
 
         #toolbar-overflow-left:hover:not(:disabled),
@@ -7273,7 +7569,6 @@
             right: 0;
             background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M5.25 3.25 10 8l-4.75 4.75' fill='none' stroke='%231b76b3' stroke-opacity='0.78' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"), linear-gradient(270deg, rgba(249, 250, 251, 0.98) 0%, rgba(249, 250, 251, 0.92) 54%, rgba(249, 250, 251, 0) 100%);
             background-position: calc(100% - 6px) 50%, 100% 0;
-            transform: translateX(4px);
         }
 
         #toolbar-overflow-right:hover:not(:disabled),
@@ -7287,7 +7582,6 @@
         #app-toolbar-row.has-toolbar-overflow-left #toolbar-overflow-left,
         #app-toolbar-row.has-toolbar-overflow-right #toolbar-overflow-right {
             opacity: 1;
-            transform: translateX(0);
             pointer-events: auto;
         }
 
@@ -7304,7 +7598,6 @@
                 linear-gradient(180deg, rgba(255,255,255,0.9) 0%, rgba(248,250,252,0.96) 100%),
                 var(--surface-0);
             backdrop-filter: blur(10px);
-            transition: width 180ms ease, flex-basis 180ms ease, padding 180ms ease;
             display: flex;
             flex-direction: column;
             min-height: 0;
@@ -8218,6 +8511,12 @@
             word-break: break-word;
         }
 
+        .data-importer-selected-path {
+            max-height: 8rem;
+            overflow: auto;
+            white-space: pre-line;
+        }
+
         .data-importer-browser-list {
             flex: 1 1 auto;
             min-height: 0;
@@ -8358,6 +8657,12 @@
             display: grid;
             gap: 6px;
             min-width: 0;
+        }
+
+        .data-importer-channel-field-label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
         }
 
         .data-importer-field-hint {
@@ -9348,6 +9653,89 @@
             flex: 0 0 auto;
         }
 
+        .histogram-point-label {
+            position: absolute;
+            z-index: 60;
+            font-family: sans-serif;
+            pointer-events: auto;
+        }
+
+        .histogram-point-label .marker-label {
+            padding: 4px 24px 4px 6px;
+            border-radius: 4px;
+            background: rgba(0, 0, 0, 0.75);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+            color: #fff;
+            font-size: 11px;
+            line-height: 1.2;
+            white-space: nowrap;
+        }
+
+        .user-marker .marker-label {
+            cursor: move;
+        }
+
+        .histogram-point-label .marker-close {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            display: grid;
+            place-items: center;
+            width: 16px;
+            height: 16px;
+            min-height: 0;
+            padding: 0;
+            border: 1px solid #666;
+            border-radius: 50%;
+            background: #fff;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+            color: #333;
+            font: 12px/1 sans-serif;
+            cursor: pointer;
+        }
+
+        .histogram-point-label .marker-close:hover {
+            transform: none;
+            border-color: #666;
+            background: #fff;
+        }
+
+        #histogram-plot.is-ruler-mode .draglayer * {
+            cursor: crosshair;
+        }
+
+        .histogram-rulers {
+            position: absolute;
+            z-index: 56;
+            pointer-events: none;
+        }
+
+        .histogram-rulers > svg {
+            position: absolute;
+            inset: 0;
+            display: block;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        .histogram-rulers circle {
+            fill: #ff9800;
+            stroke: #fff;
+            stroke-width: 1;
+        }
+
+        .histogram-ruler-line {
+            stroke: #ff9800;
+            stroke-width: 2;
+            stroke-linecap: round;
+            filter: drop-shadow(0 0 1px rgba(15, 23, 42, 0.8));
+        }
+
+        .histogram-ruler-line.is-preview {
+            stroke-dasharray: 5 4;
+        }
+
         .hist-plot-frame-divider {
             position: absolute;
             pointer-events: none;
@@ -9485,7 +9873,6 @@
                 linear-gradient(180deg, rgba(255,255,255,0.9) 0%, rgba(248,250,252,0.96) 100%),
                 var(--surface-0);
             backdrop-filter: blur(10px);
-            transition: width 180ms ease, max-width 180ms ease, padding 180ms ease;
         }
 
         #hist-meta::before {
@@ -9600,9 +9987,9 @@
         #right .modebar .modebar-btn.is-ellipse-active,
         #right .modebar .modebar-btn.is-ellipse-active:hover,
         #right .modebar .modebar-btn.is-ellipse-active:focus-visible,
-        #right .modebar .modebar-btn.is-marker-active,
-        #right .modebar .modebar-btn.is-marker-active:hover,
-        #right .modebar .modebar-btn.is-marker-active:focus-visible,
+        #right .modebar .modebar-btn:is(.is-marker-active, .is-ruler-active),
+        #right .modebar .modebar-btn:is(.is-marker-active, .is-ruler-active):hover,
+        #right .modebar .modebar-btn:is(.is-marker-active, .is-ruler-active):focus-visible,
         #right .modebar .modebar-btn.is-projection-active,
         #right .modebar .modebar-btn.is-projection-active:hover,
         #right .modebar .modebar-btn.is-projection-active:focus-visible {
@@ -9614,27 +10001,27 @@
 
         #right .modebar .modebar-btn.active svg,
         #right .modebar .modebar-btn.is-ellipse-active svg,
-        #right .modebar .modebar-btn.is-marker-active svg,
+        #right .modebar .modebar-btn:is(.is-marker-active, .is-ruler-active) svg,
         #right .modebar .modebar-btn.is-projection-active svg,
         #right .modebar .modebar-btn.active svg path,
         #right .modebar .modebar-btn.is-ellipse-active svg path,
-        #right .modebar .modebar-btn.is-marker-active svg path,
+        #right .modebar .modebar-btn:is(.is-marker-active, .is-ruler-active) svg path,
         #right .modebar .modebar-btn.is-projection-active svg path,
         #right .modebar .modebar-btn.active svg rect,
         #right .modebar .modebar-btn.is-ellipse-active svg rect,
-        #right .modebar .modebar-btn.is-marker-active svg rect,
+        #right .modebar .modebar-btn:is(.is-marker-active, .is-ruler-active) svg rect,
         #right .modebar .modebar-btn.is-projection-active svg rect,
         #right .modebar .modebar-btn.active svg circle,
         #right .modebar .modebar-btn.is-ellipse-active svg circle,
-        #right .modebar .modebar-btn.is-marker-active svg circle,
+        #right .modebar .modebar-btn:is(.is-marker-active, .is-ruler-active) svg circle,
         #right .modebar .modebar-btn.is-projection-active svg circle,
         #right .modebar .modebar-btn.active svg line,
         #right .modebar .modebar-btn.is-ellipse-active svg line,
-        #right .modebar .modebar-btn.is-marker-active svg line,
+        #right .modebar .modebar-btn:is(.is-marker-active, .is-ruler-active) svg line,
         #right .modebar .modebar-btn.is-projection-active svg line,
         #right .modebar .modebar-btn.active svg polygon,
         #right .modebar .modebar-btn.is-ellipse-active svg polygon,
-        #right .modebar .modebar-btn.is-marker-active svg polygon,
+        #right .modebar .modebar-btn:is(.is-marker-active, .is-ruler-active) svg polygon,
         #right .modebar .modebar-btn.is-projection-active svg polygon {
             fill: currentColor !important;
             stroke: currentColor !important;
@@ -9642,7 +10029,7 @@
         }
 
         #right .modebar .modebar-btn.is-ellipse-active,
-        #right .modebar .modebar-btn.is-marker-active,
+        #right .modebar .modebar-btn:is(.is-marker-active, .is-ruler-active),
         #right .modebar .modebar-btn.is-projection-active {
             background: transparent !important;
             color: var(--brand-pink) !important;
@@ -11261,7 +11648,8 @@
 
     /* Marker overlay controls */
     .user-marker .marker-close { opacity: 0; transition: opacity 0.15s ease; }
-    .user-marker:hover .marker-close { opacity: 1; }
+    .user-marker:hover .marker-close,
+    .user-marker:focus-within .marker-close { opacity: 1; }
 
         .meta {
             display: flex;
@@ -12041,20 +12429,20 @@
                             </section>
                             <section id="dataImporterFilePanel" class="data-importer-panel">
                                 <h4>Load Your Data</h4>
-                                <p class="data-importer-source-note">Start here. Use Browse to pick a CSV or ROOT file and SciPlotter will detect the type automatically.</p>
+                                <p class="data-importer-source-note">Use Browse to pick a CSV or ROOT file.</p>
                                 <div class="data-importer-field">
                                     <label>Detected type</label>
                                     <div id="dataImporterDetectedKind" class="data-importer-current-path">Detected after you browse a file.</div>
                                 </div>
                                 <div class="data-importer-field">
-                                    <label>Selected file</label>
-                                    <div id="dataImporterSelectedPath" class="data-importer-selected-path">No file selected yet.</div>
+                                    <label>Selected files</label>
+                                    <div id="dataImporterSelectedPath" class="data-importer-selected-path">No files selected yet.</div>
                                 </div>
                                 <div class="data-importer-field">
                                     <label>Start folder</label>
                                     <div id="dataImporterCurrentPath" class="data-importer-current-path">SciPlotter workspace root</div>
                                 </div>
-                                <p id="dataImporterFileHint" class="data-importer-picker-hint">Browse opens the system picker, reuses the last imported folder when available, and detects CSV vs ROOT automatically.</p>
+                                <p class="data-importer-picker-hint">For a split ROOT dataset, select the first part in Browse, then Shift-click the last. SciPlotter checks that their TTree branches match.</p>
                             </section>
                         </div>
                         <div class="data-importer-preview">
@@ -12070,9 +12458,12 @@
                                     <select id="dataImporterRootTree"></select>
                                 </div>
                                 <div id="dataImporterChannelFieldRow" class="data-importer-channel-field-row" hidden>
-                                    <label id="dataImporterChannelFieldLabel" for="dataImporterChannelField">Channel field</label>
+                                    <div class="data-importer-channel-field-label">
+                                        <input id="dataImporterUseChannelBranch" type="checkbox" aria-label="Use channel branch" hidden>
+                                        <label id="dataImporterChannelFieldLabel" for="dataImporterChannelField">Channel field</label>
+                                    </div>
                                     <div class="data-importer-field-stack">
-                                        <select id="dataImporterChannelField"></select>
+                                        <select id="dataImporterChannelField" aria-labelledby="dataImporterChannelFieldLabel" aria-describedby="dataImporterChannelFieldHint"></select>
                                         <p id="dataImporterChannelFieldHint" class="data-importer-field-hint"></p>
                                     </div>
                                 </div>
@@ -12405,9 +12796,10 @@
             kind: 'builtin',
             builtinSource: 'auto',
             browsePath: '',
-            selectedPath: '',
+            selectedPaths: [],
             rootTreePath: '',
             rootHistogramPath: '',
+            useChannelBranch: false,
             channelField: '',
             preview: null,
             previewError: '',
@@ -13155,7 +13547,7 @@
                 filter_range: (!isC3Filter && options.fKey) ? buildRangeRequest(options.fMinF, options.fMaxF) : undefined,
                 x_hist_range: featureAxisRange,
                 y_hist_range: options.mode === '2d' ? buildEffectiveRangeRequest(options.yMin, options.yMax, options.rebinYRange) : undefined,
-                channel_field: options.chanKey || getDatasetChannelField(summaryDataset) || options.session?.channel_field || '',
+                channel_field: options.chanKey || '',
                 channel_values: selectedChannelValues || [],
                 bins_x: options.mode === '1d' ? (options.orientation === 'h' ? options.binsY : options.binsX) : options.binsX,
                 bins_y: options.mode === '2d' ? options.binsY : undefined,
@@ -13732,14 +14124,14 @@
         }
 
         function getDatasetChannelField(dataset = null) {
-            return String(dataset?.meta?.channel_field || dataset?.channel_field || '').trim();
+            return String(dataset?.meta?.channel_field ?? dataset?.channel_field ?? '').trim();
         }
 
         function setDatasetChannelField(dataset, field) {
             if (!dataset || typeof dataset !== 'object') return;
             const nextValue = String(field || '').trim();
             if (!dataset.meta || typeof dataset.meta !== 'object') dataset.meta = {};
-            if (nextValue) dataset.meta.channel_field = nextValue;
+            if (nextValue || isExactAggregationRootDataset(dataset)) dataset.meta.channel_field = nextValue;
             else delete dataset.meta.channel_field;
         }
 
@@ -13796,11 +14188,14 @@
         }
 
         function getChannelKey(headers, dataset = null, preferredField = '') {
+            if (dataset?.meta?.channel_field === '') return null;
             return detectChannelField(headers, preferredField || getDatasetChannelField(dataset) || getActiveChannelFieldSelection()).key;
         }
 
         function setChannelDetectionState(headers, preferredField = '') {
-            const detection = detectChannelField(headers, preferredField);
+            const detection = preferredField === null
+                ? { key: null, matchedBy: 'none', autoKey: '' }
+                : detectChannelField(headers, preferredField);
             CHANNEL_UI_STATE.detectedField = detection.key || '';
             CHANNEL_UI_STATE.autoDetectedField = detection.autoKey || '';
             CHANNEL_UI_STATE.matchedBy = detection.matchedBy || 'none';
@@ -13851,7 +14246,9 @@
             const row = document.getElementById('channel-field-row');
             const select = document.getElementById('channelFieldSelect');
             const options = getChannelFieldOptions(headers);
-            const preferredField = getDatasetChannelField(dataset) || getActiveChannelFieldSelection();
+            const preferredField = dataset?.meta?.channel_field === ''
+                ? null
+                : (getDatasetChannelField(dataset) || getActiveChannelFieldSelection());
 
             if (row) row.hidden = options.length === 0;
             if (!select) return setChannelDetectionState(headers, preferredField);
@@ -13869,7 +14266,9 @@
 
             const placeholder = document.createElement('option');
             placeholder.value = '';
-            placeholder.textContent = 'Choose column or branch…';
+            placeholder.textContent = isExactAggregationRootDataset(dataset)
+                ? 'No channel grouping'
+                : 'Choose column or branch…';
             select.appendChild(placeholder);
             options.forEach((field) => {
                 const option = document.createElement('option');
@@ -14066,12 +14465,16 @@
             syncChannelSelectorControls();
         }
 
+        let channelPopulationRequest = 0;
+
         // Populate the Channels checkbox row with unique channel values from the dataset
         async function populateChannelsDynamic() {
+            const request = ++channelPopulationRequest;
             const row = document.getElementById('channels-row');
             if (!row) return;
             try {
                 const summaryDataset = await fetchSmoothedSummary();
+                if (request !== channelPopulationRequest) return;
                 const { headers, rows } = summaryDataset;
                 const previousInputs = getChannelInputs();
                 const previousSelection = new Set(previousInputs.filter((input) => input.checked).map((input) => String(input.value ?? '')));
@@ -14089,6 +14492,7 @@
                 let values = [];
                 if (exactSession && isExactAggregationRootDataset(summaryDataset) && isDirectExactAggregationFeature(summaryDataset, detection.key)) {
                     values = await fetchExactSessionChannelValues(exactSession.session_id, detection.key);
+                    if (request !== channelPopulationRequest) return;
                 } else {
                     const uniq = new Map();
                     for (const r of rows) {
@@ -14115,6 +14519,7 @@
                     checked: preserveSelection ? previousSelection.has(value) : true,
                 })));
             } catch (_) {
+                if (request !== channelPopulationRequest) return;
                 syncChannelFieldSelect([], null);
                 renderChannelsRowOptions([]);
             }
@@ -15527,6 +15932,14 @@
             if (gd.__histDeselectHandler) gd.removeListener('plotly_deselect', gd.__histDeselectHandler);
             if (gd.__histModeChangeHandler) gd.removeListener('plotly_relayout', gd.__histModeChangeHandler);
             if (gd.__histSelectionDoubleClickHandler) gd.removeEventListener('dblclick', gd.__histSelectionDoubleClickHandler, true);
+            const modeChangeHandler = (ev) => {
+                if (['zoom', 'pan', 'select', 'lasso', 'drawline', 'drawopenpath', 'drawrect', 'drawcircle'].includes(ev?.dragmode)) {
+                    deactivateActiveInteractionTool(gd, { silent: true });
+                }
+            };
+            gd.on('plotly_relayout', modeChangeHandler);
+            gd.__histModeChangeHandler = modeChangeHandler;
+            bindRulerInteractions(gd);
             clearSelectionOutline(gd);
 
             const selectionPlaceholder = options.selectionPlaceholder || getHistogramSelectionPlaceholder(mode);
@@ -15592,20 +16005,11 @@
                 });
             };
 
-            const modeChangeHandler = (ev) => {
-                if (!ev || typeof ev.dragmode !== 'string') return;
-                if (['zoom', 'pan', 'select', 'lasso', 'drawline', 'drawopenpath', 'drawrect', 'drawcircle'].includes(ev.dragmode)) {
-                    deactivateActiveInteractionTool(gd, { silent: true });
-                }
-            };
-
             gd.on('plotly_selected', selectedHandler);
             gd.on('plotly_deselect', deselectHandler);
-            gd.on('plotly_relayout', modeChangeHandler);
             gd.addEventListener('dblclick', doubleClickHandler, true);
             gd.__histSelectionHandler = selectedHandler;
             gd.__histDeselectHandler = deselectHandler;
-            gd.__histModeChangeHandler = modeChangeHandler;
             gd.__histSelectionDoubleClickHandler = doubleClickHandler;
         }
 
@@ -15921,20 +16325,21 @@
                 return !!(preview && preview.supported && Number(preview.total_rows) > 0);
             }
             if (DATA_IMPORTER_STATE.kind === 'csv') {
-                return !!(DATA_IMPORTER_STATE.selectedPath && preview && preview.supported && Number(preview.total_rows) > 0);
+                return !!(DATA_IMPORTER_STATE.selectedPaths.length && preview && preview.supported && Number(preview.total_rows) > 0);
             }
             if (DATA_IMPORTER_STATE.kind === 'root') {
                 if (preview?.selected_histogram) {
-                    return !!(DATA_IMPORTER_STATE.selectedPath && preview.supported && DATA_IMPORTER_STATE.rootHistogramPath);
+                    return !!(DATA_IMPORTER_STATE.selectedPaths.length && preview.supported && DATA_IMPORTER_STATE.rootHistogramPath);
                 }
                 const selectedTree = preview?.selected_tree || null;
                 return !!(
-                    DATA_IMPORTER_STATE.selectedPath
+                    DATA_IMPORTER_STATE.selectedPaths.length
                     && preview
                     && preview.supported
                     && selectedTree
                     && Number(selectedTree.entry_count) > 0
                     && (DATA_IMPORTER_STATE.rootTreePath || selectedTree.path)
+                    && (!DATA_IMPORTER_STATE.useChannelBranch || DATA_IMPORTER_STATE.channelField)
                 );
             }
             return false;
@@ -15955,14 +16360,25 @@
         }
 
         function getDataImporterSelectedFileKind() {
-            if (!DATA_IMPORTER_STATE.selectedPath) return '';
-            return inferDataImporterKindFromPath(DATA_IMPORTER_STATE.selectedPath)
+            const paths = DATA_IMPORTER_STATE.selectedPaths;
+            if (!paths.length) return '';
+            if (paths.length > 1) return 'root';
+            return inferDataImporterKindFromPath(paths[0])
                 || normalizeDataImporterFileKind(DATA_IMPORTER_STATE.kind);
+        }
+
+        function getImportedDatasetPaths(dataset) {
+            return dataset.source_paths || (dataset.source_path ? [dataset.source_path] : []);
+        }
+
+        function matchesDataImporterPaths(paths) {
+            const selected = DATA_IMPORTER_STATE.selectedPaths;
+            return selected.length === paths.length && selected.every((path, index) => path === paths[index]);
         }
 
         function getDataImporterDetectedKindLabel() {
             const kind = getDataImporterSelectedFileKind();
-            if (kind === 'root') return 'ROOT file';
+            if (kind === 'root') return DATA_IMPORTER_STATE.selectedPaths.length > 1 ? 'ROOT TTree parts' : 'ROOT file';
             if (kind === 'csv') return 'CSV file';
             return 'Detected after you browse a file.';
         }
@@ -15985,10 +16401,15 @@
                     ? `Built-in source: ${sourceLabel} (not available)`
                     : `Built-in source: ${sourceLabel}`;
             }
-            if (!DATA_IMPORTER_STATE.selectedPath) {
+            const paths = DATA_IMPORTER_STATE.selectedPaths;
+            if (!paths.length) {
                 return 'Get started: browse a CSV or ROOT file';
             }
-            const fileLabel = getDataImporterFileLabel(DATA_IMPORTER_STATE.selectedPath) || DATA_IMPORTER_STATE.selectedPath;
+            if (paths.length > 1) {
+                const tree = DATA_IMPORTER_STATE.rootTreePath;
+                return tree ? `${paths.length} ROOT files · ${tree}` : `${paths.length} files selected`;
+            }
+            const fileLabel = getDataImporterFileLabel(paths[0]) || paths[0];
             const fileKind = getDataImporterSelectedFileKind();
             const prefix = fileKind === 'root' ? 'ROOT file' : 'CSV file';
             if (DATA_IMPORTER_STATE.kind === 'root' && DATA_IMPORTER_STATE.rootTreePath) {
@@ -16018,7 +16439,7 @@
         }
 
         function getDataImporterPreferredStartPath() {
-            return String(DATA_IMPORTER_STATE.browsePath || DATA_IMPORTER_STATE.selectedPath || '').trim();
+            return String(DATA_IMPORTER_STATE.browsePath || DATA_IMPORTER_STATE.selectedPaths[0] || '').trim();
         }
 
         function getDataImporterStartFolderLabel() {
@@ -16053,10 +16474,16 @@
             const select = document.getElementById('dataImporterChannelField');
             const hint = document.getElementById('dataImporterChannelFieldHint');
             const options = getChannelFieldOptions(headers);
+            const isRoot = DATA_IMPORTER_STATE.kind === 'root';
+            const groupingOff = isRoot && !DATA_IMPORTER_STATE.useChannelBranch;
+            const detection = detectChannelField(groupingOff ? [] : headers, DATA_IMPORTER_STATE.channelField);
 
-            if (label) label.textContent = DATA_IMPORTER_STATE.kind === 'root' ? 'Channel branch' : 'Channel column';
+            if (label) {
+                label.textContent = isRoot ? 'Channel branch' : 'Channel column';
+                label.htmlFor = isRoot ? 'dataImporterUseChannelBranch' : 'dataImporterChannelField';
+            }
             if (row) row.hidden = options.length === 0;
-            if (!select) return detectChannelField(headers, DATA_IMPORTER_STATE.channelField);
+            if (!select) return detection;
 
             select.replaceChildren();
             if (!options.length) {
@@ -16071,7 +16498,7 @@
 
             const placeholder = document.createElement('option');
             placeholder.value = '';
-            placeholder.textContent = 'Choose column or branch…';
+            placeholder.textContent = isRoot ? 'Choose a detector channel branch…' : 'Choose a channel column…';
             select.appendChild(placeholder);
             options.forEach((field) => {
                 const option = document.createElement('option');
@@ -16080,13 +16507,16 @@
                 select.appendChild(option);
             });
 
-            const detection = detectChannelField(headers, DATA_IMPORTER_STATE.channelField);
-            DATA_IMPORTER_STATE.channelField = detection.key || '';
-            select.disabled = DATA_IMPORTER_STATE.busy;
-            select.value = DATA_IMPORTER_STATE.channelField;
+            if (!groupingOff) DATA_IMPORTER_STATE.channelField = detection.key || '';
+            select.disabled = DATA_IMPORTER_STATE.busy || groupingOff;
+            select.value = detection.key || '';
             if (hint) {
-                if (!detection.key) {
-                    hint.textContent = 'Choose the column or branch that identifies channel values before loading.';
+                if (groupingOff) {
+                    hint.textContent = 'Channel grouping is off.';
+                } else if (!detection.key) {
+                    hint.textContent = isRoot
+                        ? 'Choose the branch that contains detector channel IDs.'
+                        : 'Choose the column that identifies channel values before loading.';
                 } else if (detection.matchedBy === 'manual' && detection.autoKey && detection.autoKey !== detection.key) {
                     hint.textContent = `Using ${detection.key}. Auto-detected suggestion: ${detection.autoKey}.`;
                 } else if (detection.matchedBy === 'manual') {
@@ -16117,15 +16547,17 @@
                     renderDataImporterPreview();
                     return;
                 }
-                const changedFile = String(payload.selected_path || '') !== DATA_IMPORTER_STATE.selectedPath;
+                const paths = payload.selected_paths || (payload.selected_path ? [payload.selected_path] : []);
+                const changedFiles = !matchesDataImporterPaths(paths);
                 DATA_IMPORTER_STATE.kind = normalizeDataImporterFileKind(payload.detected_kind)
-                    || inferDataImporterKindFromPath(payload.selected_path)
+                    || inferDataImporterKindFromPath(paths[0])
                     || 'csv';
-                DATA_IMPORTER_STATE.selectedPath = String(payload.selected_path || '');
-                DATA_IMPORTER_STATE.browsePath = String(payload.current_path || deriveDataImporterDirectory(DATA_IMPORTER_STATE.selectedPath));
-                if (changedFile || DATA_IMPORTER_STATE.previewError) {
+                DATA_IMPORTER_STATE.selectedPaths = paths;
+                DATA_IMPORTER_STATE.browsePath = String(payload.current_path || deriveDataImporterDirectory(paths[0]));
+                if (changedFiles || DATA_IMPORTER_STATE.previewError) {
                     DATA_IMPORTER_STATE.rootTreePath = '';
                     DATA_IMPORTER_STATE.rootHistogramPath = '';
+                    DATA_IMPORTER_STATE.useChannelBranch = false;
                     DATA_IMPORTER_STATE.channelField = '';
                 }
                 DATA_IMPORTER_STATE.preview = null;
@@ -16144,7 +16576,10 @@
             const loadButton = document.getElementById('dataImporterLoad');
             const rootTreeSelect = document.getElementById('dataImporterRootTree');
             const pickFileButton = document.getElementById('dataImporterPickFile');
+            const useChannelBranch = document.getElementById('dataImporterUseChannelBranch');
             const channelFieldSelect = document.getElementById('dataImporterChannelField');
+            const isRoot = DATA_IMPORTER_STATE.kind === 'root';
+            const hasChannelFields = getChannelFieldOptions(getDataImporterPreviewHeaders()).length > 0;
             if (pickFileButton) pickFileButton.disabled = DATA_IMPORTER_STATE.busy;
             if (builtInSource) builtInSource.disabled = DATA_IMPORTER_STATE.busy;
             if (rootTreeSelect) {
@@ -16152,8 +16587,13 @@
                     DATA_IMPORTER_STATE.preview?.tree_options?.length || DATA_IMPORTER_STATE.preview?.histogram_options?.length
                 );
             }
+            if (useChannelBranch) {
+                useChannelBranch.hidden = !isRoot;
+                useChannelBranch.checked = isRoot && DATA_IMPORTER_STATE.useChannelBranch;
+                useChannelBranch.disabled = DATA_IMPORTER_STATE.busy || !isRoot || !hasChannelFields;
+            }
             if (channelFieldSelect) {
-                channelFieldSelect.disabled = DATA_IMPORTER_STATE.busy || !getChannelFieldOptions(getDataImporterPreviewHeaders()).length;
+                channelFieldSelect.disabled = DATA_IMPORTER_STATE.busy || !hasChannelFields || (isRoot && !DATA_IMPORTER_STATE.useChannelBranch);
             }
             if (loadButton) loadButton.disabled = DATA_IMPORTER_STATE.busy || !canLoadDataImporterSelection();
         }
@@ -16176,7 +16616,7 @@
                 const button = document.createElement('button');
                 button.type = 'button';
                 button.className = 'data-importer-browser-item';
-                if (item?.type === 'file' && String(item.path || '') === DATA_IMPORTER_STATE.selectedPath) {
+                if (item?.type === 'file' && DATA_IMPORTER_STATE.selectedPaths.includes(item.path)) {
                     button.classList.add('is-selected');
                 }
                 const name = document.createElement('span');
@@ -16192,9 +16632,11 @@
                         await loadDataImporterBrowser(String(item.path || ''));
                         return;
                     }
-                    DATA_IMPORTER_STATE.selectedPath = String(item?.path || '');
+                    DATA_IMPORTER_STATE.selectedPaths = [item.path];
                     DATA_IMPORTER_STATE.rootTreePath = '';
                     DATA_IMPORTER_STATE.rootHistogramPath = '';
+                    DATA_IMPORTER_STATE.useChannelBranch = false;
+                    DATA_IMPORTER_STATE.channelField = '';
                     DATA_IMPORTER_STATE.preview = null;
                     syncDataImporterControls();
                     await previewDataImporterSelection();
@@ -16212,20 +16654,16 @@
             const summary = document.getElementById('dataImporterSelectionSummary');
             const builtInSelect = document.getElementById('dataImporterBuiltInSource');
             const pickFileButton = document.getElementById('dataImporterPickFile');
-            const pickerHint = document.getElementById('dataImporterFileHint');
 
             if (builtInPanel) builtInPanel.classList.toggle('is-active', DATA_IMPORTER_STATE.kind === 'builtin');
             if (filePanel) filePanel.classList.toggle('is-active', DATA_IMPORTER_STATE.kind === 'csv' || DATA_IMPORTER_STATE.kind === 'root');
             if (detectedKind) detectedKind.textContent = getDataImporterDetectedKindLabel();
-            if (selectedPath) selectedPath.textContent = DATA_IMPORTER_STATE.selectedPath || 'No file selected yet.';
+            if (selectedPath) selectedPath.textContent = DATA_IMPORTER_STATE.selectedPaths.join('\n') || 'No files selected yet.';
             if (currentPath) currentPath.textContent = getDataImporterStartFolderLabel();
             if (summary) summary.textContent = getDataImporterSelectionSummary();
             if (builtInSelect) builtInSelect.value = DATA_IMPORTER_STATE.builtinSource;
             if (pickFileButton) {
                 pickFileButton.textContent = 'Browse';
-            }
-            if (pickerHint) {
-                pickerHint.textContent = 'Browse selects a file. For ROOT files, choose a histogram or TTree below; reopen Load to select another object without browsing again.';
             }
             renderDataImporterBrowserList();
             updateDataImporterActionState();
@@ -16311,7 +16749,7 @@
                     [
                         DATA_IMPORTER_STATE.kind === 'builtin'
                             ? `Using: ${getBuiltinSummarySourceLabel(preview.builtin_source || DATA_IMPORTER_STATE.builtinSource)}`
-                            : `Path: ${preview.path || DATA_IMPORTER_STATE.selectedPath}`,
+                            : `Path: ${preview.path || DATA_IMPORTER_STATE.selectedPaths[0]}`,
                         preview.path ? `Location: ${preview.path}` : '',
                         getChannelFieldDetailLine(preview.headers, 'column', channelDetection.key),
                     ]
@@ -16368,10 +16806,17 @@
                 selectedTree ? `${Number(selectedTree.entry_count).toLocaleString()} entries` : '',
                 selectedTree ? `${selectedTree.loadable_branch_count}/${selectedTree.branch_count} scalar branches` : '',
                 selectedTree?.will_truncate_on_load ? `Load ${Number(selectedTree.load_entry_count || 0).toLocaleString()} rows` : '',
-                selectedTree ? getChannelFieldPreviewChip(selectedTree.headers, channelDetection.key) : '',
+                channelDetection.key ? `Channel field: ${channelDetection.key}` : '',
             ]);
 
             const structureCards = [];
+            if (selectedTree?.parts?.length > 1) {
+                structureCards.push(buildDataImporterStructureCard(
+                    'TTree Parts',
+                    selectedTree.parts.map((part) =>
+                        `${getDataImporterFileLabel(part.path)} · ${part.tree_path} · ${part.entry_count.toLocaleString()} entries`)
+                ));
+            }
             if (Array.isArray(preview.objects) && preview.objects.length) {
                 structureCards.push(buildDataImporterStructureCard(
                     'ROOT Objects',
@@ -16392,7 +16837,7 @@
                         selectedTree.title ? `Title: ${selectedTree.title}` : '',
                         `${selectedTree.entry_count} entries`,
                         `${selectedTree.loadable_branch_count}/${selectedTree.branch_count} scalar branches previewable`,
-                        getChannelFieldDetailLine(selectedTree.headers, 'branch', channelDetection.key),
+                        channelDetection.key ? getChannelFieldDetailLine(selectedTree.headers, 'branch', channelDetection.key) : '',
                         selectedTree.will_truncate_on_load
                             ? `Browser load limit: first ${Number(selectedTree.load_entry_count || 0).toLocaleString()} entries`
                             : '',
@@ -16419,7 +16864,13 @@
                 updateDataImporterActionState();
                 return;
             }
-            if (selectedTree.will_truncate_on_load) {
+            if (selectedTree.parts?.length > 1) {
+                const files = selectedTree.parts.length;
+                const entries = Number(selectedTree.entry_count).toLocaleString();
+                setDataImporterPreviewMessage(
+                    `Matching branches in ${files} files. Exact histograms use all ${entries} entries.`
+                );
+            } else if (selectedTree.will_truncate_on_load) {
                 setDataImporterPreviewMessage(
                     `Previewing ${selectedTree.sample_row_count} entries from ${selectedTree.path}. Browser mode will load the first ${Number(selectedTree.load_entry_count || 0).toLocaleString()} of ${Number(selectedTree.entry_count || 0).toLocaleString()} entries.`
                 );
@@ -16438,31 +16889,33 @@
             DATA_IMPORTER_STATE.previewError = '';
             DATA_IMPORTER_STATE.browser = null;
             DATA_IMPORTER_STATE.busy = false;
-            if (DATA_IMPORTER_STATE.selectedPath && DATA_IMPORTER_STATE.kind !== 'builtin') return;
+            if (DATA_IMPORTER_STATE.selectedPaths.length && DATA_IMPORTER_STATE.kind !== 'builtin') return;
             if (currentSource === 'imported' && LOCAL_SUMMARY) {
                 const importedKind = String(LOCAL_SUMMARY.kind || LOCAL_SUMMARY.source_kind || 'csv').trim().toLowerCase();
                 DATA_IMPORTER_STATE.kind = importedKind === 'root' ? 'root' : 'csv';
-                DATA_IMPORTER_STATE.selectedPath = String(LOCAL_SUMMARY.source_path || '');
-                DATA_IMPORTER_STATE.browsePath = deriveDataImporterDirectory(DATA_IMPORTER_STATE.selectedPath);
+                DATA_IMPORTER_STATE.selectedPaths = getImportedDatasetPaths(LOCAL_SUMMARY);
+                DATA_IMPORTER_STATE.browsePath = deriveDataImporterDirectory(DATA_IMPORTER_STATE.selectedPaths[0]);
                 DATA_IMPORTER_STATE.rootTreePath = DATA_IMPORTER_STATE.kind === 'root'
                     ? String(LOCAL_SUMMARY.meta?.tree_path || '')
                     : '';
                 DATA_IMPORTER_STATE.rootHistogramPath = String(LOCAL_SUMMARY.meta?.histogram_path || '');
                 DATA_IMPORTER_STATE.channelField = String(LOCAL_SUMMARY.meta?.channel_field || '');
+                DATA_IMPORTER_STATE.useChannelBranch = importedKind === 'root' && !!DATA_IMPORTER_STATE.channelField;
                 DATA_IMPORTER_STATE.builtinSource = 'auto';
                 return;
             }
             DATA_IMPORTER_STATE.kind = shouldPreferDataImporterFileMode(currentSource) ? 'csv' : 'builtin';
             DATA_IMPORTER_STATE.builtinSource = currentSource;
             DATA_IMPORTER_STATE.browsePath = '';
-            DATA_IMPORTER_STATE.selectedPath = '';
+            DATA_IMPORTER_STATE.selectedPaths = [];
             DATA_IMPORTER_STATE.rootTreePath = '';
             DATA_IMPORTER_STATE.rootHistogramPath = '';
+            DATA_IMPORTER_STATE.useChannelBranch = false;
             DATA_IMPORTER_STATE.channelField = '';
         }
 
         async function loadDataImporterBrowser(path = '') {
-            const targetPath = String(path || DATA_IMPORTER_STATE.browsePath || DATA_IMPORTER_STATE.selectedPath || '').trim();
+            const targetPath = String(path || DATA_IMPORTER_STATE.browsePath || DATA_IMPORTER_STATE.selectedPaths[0] || '').trim();
             DATA_IMPORTER_STATE.browser = null;
             if (targetPath) DATA_IMPORTER_STATE.browsePath = targetPath;
             syncDataImporterControls();
@@ -16491,14 +16944,14 @@
                         source: DATA_IMPORTER_STATE.builtinSource,
                     };
                 } else {
-                    if (!DATA_IMPORTER_STATE.selectedPath) {
+                    if (!DATA_IMPORTER_STATE.selectedPaths.length) {
                         DATA_IMPORTER_STATE.preview = null;
                         renderDataImporterPreview();
                         return;
                     }
                     requestBody = {
                         kind: DATA_IMPORTER_STATE.kind,
-                        path: DATA_IMPORTER_STATE.selectedPath,
+                        paths: DATA_IMPORTER_STATE.selectedPaths,
                     };
                     if (DATA_IMPORTER_STATE.kind === 'root' && DATA_IMPORTER_STATE.rootTreePath) {
                         requestBody.tree_path = DATA_IMPORTER_STATE.rootTreePath;
@@ -16532,8 +16985,9 @@
             DATA_IMPORTER_STATE.kind = normalizedKind;
             DATA_IMPORTER_STATE.preview = null;
             DATA_IMPORTER_STATE.browser = null;
+            DATA_IMPORTER_STATE.useChannelBranch = false;
             if (normalizedKind === 'builtin') {
-                DATA_IMPORTER_STATE.selectedPath = '';
+                DATA_IMPORTER_STATE.selectedPaths = [];
                 DATA_IMPORTER_STATE.browsePath = '';
                 DATA_IMPORTER_STATE.rootTreePath = '';
                 DATA_IMPORTER_STATE.rootHistogramPath = '';
@@ -16546,15 +17000,16 @@
 
             const currentImportedKind = String(LOCAL_SUMMARY?.kind || LOCAL_SUMMARY?.source_kind || '').trim().toLowerCase();
             if (LOCAL_SUMMARY && currentImportedKind === normalizedKind) {
-                DATA_IMPORTER_STATE.selectedPath = String(LOCAL_SUMMARY.source_path || '');
-                DATA_IMPORTER_STATE.browsePath = deriveDataImporterDirectory(DATA_IMPORTER_STATE.selectedPath);
+                DATA_IMPORTER_STATE.selectedPaths = getImportedDatasetPaths(LOCAL_SUMMARY);
+                DATA_IMPORTER_STATE.browsePath = deriveDataImporterDirectory(DATA_IMPORTER_STATE.selectedPaths[0]);
                 DATA_IMPORTER_STATE.rootTreePath = normalizedKind === 'root'
                     ? String(LOCAL_SUMMARY.meta?.tree_path || '')
                     : '';
                 DATA_IMPORTER_STATE.rootHistogramPath = String(LOCAL_SUMMARY.meta?.histogram_path || '');
                 DATA_IMPORTER_STATE.channelField = String(LOCAL_SUMMARY.meta?.channel_field || '');
+                DATA_IMPORTER_STATE.useChannelBranch = normalizedKind === 'root' && !!DATA_IMPORTER_STATE.channelField;
             } else {
-                DATA_IMPORTER_STATE.selectedPath = '';
+                DATA_IMPORTER_STATE.selectedPaths = [];
                 DATA_IMPORTER_STATE.browsePath = '';
                 DATA_IMPORTER_STATE.rootTreePath = '';
                 DATA_IMPORTER_STATE.rootHistogramPath = '';
@@ -16562,7 +17017,7 @@
             }
             syncDataImporterControls();
             renderDataImporterPreview();
-            if (DATA_IMPORTER_STATE.selectedPath) await previewDataImporterSelection();
+            if (DATA_IMPORTER_STATE.selectedPaths.length) await previewDataImporterSelection();
         }
 
         async function openDataImporterModal() {
@@ -16578,7 +17033,7 @@
                 if (!modal.hidden) document.getElementById('dataImporterPickFile')?.focus();
                 return;
             }
-            if (DATA_IMPORTER_STATE.selectedPath) await previewDataImporterSelection();
+            if (DATA_IMPORTER_STATE.selectedPaths.length) await previewDataImporterSelection();
             if (!modal.hidden) {
                 const objectSelect = document.getElementById('dataImporterRootTree');
                 const focusTarget = DATA_IMPORTER_STATE.kind === 'root' && objectSelect && !objectSelect.disabled
@@ -16596,7 +17051,7 @@
         }
 
         async function loadDataImporterSelection() {
-            if (DATA_IMPORTER_STATE.busy) return;
+            if (DATA_IMPORTER_STATE.busy || !canLoadDataImporterSelection()) return;
             const loadButton = document.getElementById('dataImporterLoad');
             const previousLabel = loadButton?.textContent || 'Load This Data';
             DATA_IMPORTER_STATE.busy = true;
@@ -16610,19 +17065,21 @@
                 }
                 const requestBody = {
                     kind: DATA_IMPORTER_STATE.kind,
-                    path: DATA_IMPORTER_STATE.selectedPath,
+                    paths: DATA_IMPORTER_STATE.selectedPaths,
                     tree_path: DATA_IMPORTER_STATE.kind === 'root'
                         ? (DATA_IMPORTER_STATE.rootTreePath || DATA_IMPORTER_STATE.preview?.selected_tree?.path || '')
                         : '',
                     histogram_path: DATA_IMPORTER_STATE.kind === 'root' ? DATA_IMPORTER_STATE.rootHistogramPath : '',
-                    channel_field: DATA_IMPORTER_STATE.kind === 'root' ? DATA_IMPORTER_STATE.channelField : '',
+                    channel_field: DATA_IMPORTER_STATE.kind === 'root' && DATA_IMPORTER_STATE.useChannelBranch
+                        ? DATA_IMPORTER_STATE.channelField
+                        : '',
                 };
                 const dataset = await fetchHistogramImporterJson('/api/data-importer/load', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(requestBody),
                 });
-                setDatasetChannelField(dataset, DATA_IMPORTER_STATE.channelField);
+                if (requestBody.kind === 'csv') setDatasetChannelField(dataset, DATA_IMPORTER_STATE.channelField);
                 await applyImportedHistogramDataset(dataset, { render: true });
                 closeDataImporterModal();
             } catch (error) {
@@ -18542,27 +18999,31 @@
                 document.getElementById('histnorm')?.value || ''
             );
 
+            let viewportResizeFrame = 0;
             window.addEventListener('resize', () => {
-                syncHistogramSidePanelWidth();
-                syncRightPanelChrome();
-                scheduleHistogramToolbarOverflowIndicatorSync();
-                syncFeatureSelectWidths();
-                syncPlotSizeControls();
-                const gd = document.getElementById('histogram-plot');
-                if (window.Plotly && gd && gd.data && !hasCustomPlotSize()) {
-                    applyPlotHostSizing();
-                    requestAnimationFrame(() => {
-                        Plotly.Plots.resize(gd).then(() => {
-                            return syncHistogramColorbarHeight(gd).catch(() => {});
-                        }).then(() => {
-                            centerPlot(gd);
-                            positionHistogramPlotFrameDividers(gd);
-                            syncPlotSizeControls();
-                        }).catch(() => {
-                            syncPlotSizeControls();
-                        });
-                    });
-                }
+                if (viewportResizeFrame) return;
+                viewportResizeFrame = requestAnimationFrame(async () => {
+                    viewportResizeFrame = 0;
+                    syncHistogramSidePanelWidth();
+                    syncRightPanelChrome();
+                    scheduleHistogramToolbarOverflowIndicatorSync();
+                    syncFeatureSelectWidths();
+                    const gd = document.getElementById('histogram-plot');
+                    if (window.Plotly && gd?._fullLayout && !hasCustomPlotSize()) {
+                        applyPlotHostSizing();
+                        const width = gd.clientWidth;
+                        const height = gd.clientHeight;
+                        if (width > 0 && height > 0
+                            && (width !== gd._fullLayout.width || height !== gd._fullLayout.height)) {
+                            try {
+                                await Plotly.relayout(gd, { width, height });
+                                await syncHistogramColorbarHeight(gd);
+                            } catch (_) {}
+                        }
+                        positionHistogramPlotFrameDividers(gd);
+                    }
+                    syncPlotSizeControls();
+                });
             });
 
             if (sel) {
@@ -18737,6 +19198,12 @@
                 setDatasetChannelField(summaryDataset, nextField);
                 if (LOCAL_SUMMARY && isImportedSummarySource(normalizeSummarySourceValue(document.getElementById('summarySource')?.value || 'auto'))) {
                     setDatasetChannelField(LOCAL_SUMMARY, nextField);
+                    if (DATA_IMPORTER_STATE.kind === 'root'
+                        && matchesDataImporterPaths(getImportedDatasetPaths(LOCAL_SUMMARY))
+                        && DATA_IMPORTER_STATE.rootTreePath === LOCAL_SUMMARY.meta?.tree_path) {
+                        DATA_IMPORTER_STATE.channelField = nextField;
+                        DATA_IMPORTER_STATE.useChannelBranch = !!nextField;
+                    }
                 }
                 captureCurrentRanges();
                 await populateChannelsDynamic();
@@ -18912,10 +19379,19 @@
                 const isHistogram = event.target?.selectedOptions?.[0]?.dataset.kind === 'histogram';
                 DATA_IMPORTER_STATE.rootTreePath = isHistogram ? '' : String(event.target?.value || '');
                 DATA_IMPORTER_STATE.rootHistogramPath = isHistogram ? String(event.target?.value || '') : '';
+                DATA_IMPORTER_STATE.useChannelBranch = false;
+                DATA_IMPORTER_STATE.channelField = '';
                 await previewDataImporterSelection();
+            });
+            document.getElementById('dataImporterUseChannelBranch')?.addEventListener('change', (event) => {
+                DATA_IMPORTER_STATE.useChannelBranch = event.currentTarget.checked;
+                renderDataImporterPreview();
             });
             document.getElementById('dataImporterChannelField')?.addEventListener('change', (event) => {
                 DATA_IMPORTER_STATE.channelField = String(event.target?.value || '').trim();
+                if (DATA_IMPORTER_STATE.kind === 'root' && !DATA_IMPORTER_STATE.channelField) {
+                    DATA_IMPORTER_STATE.useChannelBranch = false;
+                }
                 renderDataImporterPreview();
             });
             document.getElementById('dataImporterLoad')?.addEventListener('click', async () => {

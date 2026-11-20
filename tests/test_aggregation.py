@@ -119,6 +119,37 @@ class RootAggregationTests(unittest.TestCase):
         self.assertTrue(loaded['exact_aggregation']['available'])
         self.assertEqual(loaded['meta']['dataset_session']['entry_count'], len(self.arrays['x']))
 
+    def test_root_load_preserves_an_explicit_channel_field_choice(self):
+        for channel_field in ('', 'channel'):
+            with self.subTest(channel_field=channel_field):
+                response = self.client.post('/api/data-importer/load', json={
+                    'kind': 'root',
+                    'path': str(self.root_path),
+                    'tree_path': 'events',
+                    'channel_field': channel_field,
+                })
+                self.assertEqual(response.status_code, 200, response.get_json())
+                payload = response.get_json()
+                session = payload['meta']['dataset_session']
+                self.session_ids.append(session['session_id'])
+                self.assertEqual(payload['meta']['channel_field'], channel_field)
+                self.assertEqual(session['channel_field'], channel_field)
+                self.assertIn('channel', payload['headers'])
+
+    def test_empty_channel_field_overrides_the_session_default(self):
+        grouped = self.aggregate(mode='1d', merge_channels=False)
+        ungrouped = self.aggregate(mode='1d', merge_channels=False, channel_field='')
+        self.assertEqual([item['label'] for item in grouped['histogram']['series']], ['0', '1', '2'])
+        self.assertEqual([item['label'] for item in ungrouped['histogram']['series']], ['ALL'])
+        self.assertEqual(ungrouped['meta']['selected_count'], len(self.arrays['x']))
+
+        for params, expected in (({}, 'channel'), ({'channel_field': ''}, '')):
+            response = self.client.post('/api/data-importer/session/feature-bounds', json={
+                'session_id': self.session_id, 'feature': 'x', **params,
+            })
+            self.assertEqual(response.status_code, 200, response.get_json())
+            self.assertEqual(response.get_json()['channel_field'], expected)
+
     def test_exact_1d_uses_all_entries_and_excludes_pileup(self):
         payload = self.aggregate(mode='1d', exclude_pileup=True, x_hist_range=[0, 10])
         expected, edges = np.histogram(
