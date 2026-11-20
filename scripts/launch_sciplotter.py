@@ -24,7 +24,8 @@ from sciplotter_backend.server import run_server
 
 
 DEFAULT_HOST = os.environ.get("SCIPLOTTER_HOST", "127.0.0.1")
-DEFAULT_PORT = int(os.environ.get("SCIPLOTTER_PORT", "5000"))
+# macOS AirPlay Receiver can occupy port 5000.
+DEFAULT_PORT = int(os.environ.get("SCIPLOTTER_PORT", "5001" if sys.platform == "darwin" else "5000"))
 APP_ENTRY = PROJECT_ROOT / "app.py"
 
 
