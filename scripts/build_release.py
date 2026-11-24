@@ -169,6 +169,8 @@ def build_pyinstaller(target: str) -> Path:
         '--hidden-import', 'werkzeug.serving',
     ]
 
+    if target in ('windows', 'macos'):
+        command.extend(['--icon', str(ICON_PATH)])
     if target == 'windows':
         command.extend(['--onefile', '--windowed'])
     elif target == 'macos':
