@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import socket
 import subprocess
 import sys
 import time
 import traceback
-import urllib.error
 import urllib.request
 import webbrowser
 from pathlib import Path
@@ -26,6 +26,8 @@ from sciplotter_backend.server import run_server
 DEFAULT_HOST = os.environ.get("SCIPLOTTER_HOST", "127.0.0.1")
 # macOS AirPlay Receiver can occupy port 5000.
 DEFAULT_PORT = int(os.environ.get("SCIPLOTTER_PORT", "5001" if sys.platform == "darwin" else "5000"))
+MAX_PORTS_TO_CHECK = 10
+APP_VERSION = runtime.app_version()
 APP_ENTRY = PROJECT_ROOT / "app.py"
 
 
@@ -50,7 +52,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--no-browser", action="store_true")
     parser.add_argument("--server", action="store_true", help=argparse.SUPPRESS)
     argv = [arg for arg in sys.argv[1:] if not arg.startswith("-psn_")]
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    if not 1 <= args.port <= 65535:
+        parser.error("--port must be between 1 and 65535")
+    return args
 
 
 def build_url(host: str, port: int, path: str = "/") -> str:
@@ -67,9 +72,25 @@ def is_server_ready(host: str, port: int) -> bool:
     health_url = build_url(host, port, "/health")
     try:
         with urllib.request.urlopen(health_url, timeout=1.0) as response:
-            return 200 <= getattr(response, "status", 0) < 300
-    except (urllib.error.URLError, TimeoutError, OSError):
+            health = json.load(response)
+    except (OSError, ValueError):
         return False
+    return (
+        isinstance(health, dict)
+        and health.get("status") == "ok"
+        and health.get("app") == runtime.APP_NAME
+        and health.get("version") == APP_VERSION
+    )
+
+
+def select_server_port(host: str, preferred_port: int) -> tuple[int | None, bool]:
+    first_free = None
+    for port in range(preferred_port, min(65536, preferred_port + MAX_PORTS_TO_CHECK)):
+        if is_server_ready(host, port):
+            return port, True
+        if first_free is None and not is_port_open(host, port):
+            first_free = port
+    return first_free, False
 
 
 def build_server_command(host: str, port: int) -> list[str]:
@@ -150,17 +171,17 @@ def main() -> int:
             except Exception as exc:
                 log_launcher_event(f"Linux integration skipped: {exc}")
 
-        app_url = build_url(args.host, args.port)
+        port, ready = select_server_port(args.host, args.port)
+        if port is None:
+            message = f"No available port for SciPlotter near {args.port} on {args.host}."
+            log_launcher_event(message)
+            print(message, file=sys.stderr)
+            return 1
 
-        if not is_server_ready(args.host, args.port):
-            if is_port_open(args.host, args.port):
-                message = f"Port {args.port} is busy but SciPlotter is not responding on {app_url}."
-                log_launcher_event(message)
-                print(message, file=sys.stderr)
-                return 1
-
-            start_server(args.host, args.port)
-            if not wait_for_server(args.host, args.port, args.timeout):
+        app_url = build_url(args.host, port)
+        if not ready:
+            start_server(args.host, port)
+            if not wait_for_server(args.host, port, args.timeout):
                 message = f"SciPlotter did not become ready within {args.timeout} seconds."
                 log_launcher_event(message)
                 print(message, file=sys.stderr)

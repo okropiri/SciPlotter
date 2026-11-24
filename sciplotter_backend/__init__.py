@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import socket
 from flask import Flask, jsonify
 
 from . import runtime
@@ -9,6 +8,7 @@ from . import runtime
 
 def create_app() -> Flask:
     app = Flask(__name__, static_folder=str(runtime.static_dir()))
+    version = runtime.app_version()
 
     from .static_routes import bp as static_bp
     from .data import bp as data_bp
@@ -20,7 +20,7 @@ def create_app() -> Flask:
 
     @app.get('/health')
     def health():
-        return jsonify({'status': 'ok', 'pid': os.getpid()})
+        return jsonify({'app': runtime.APP_NAME, 'version': version, 'status': 'ok', 'pid': os.getpid()})
 
     return app
 

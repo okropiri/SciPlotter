@@ -10,8 +10,12 @@ import socket
 import subprocess
 import tempfile
 import time
+import urllib.error
 import urllib.request
 from pathlib import Path
+
+import numpy as np
+import uproot
 
 
 def stop_server(process: subprocess.Popen[bytes]) -> None:
@@ -31,6 +35,27 @@ def stop_server(process: subprocess.Popen[bytes]) -> None:
         except ProcessLookupError:
             pass
     process.wait(timeout=10)
+
+
+def smoke_test_root_histogram(opener, base_url: str, path: Path) -> None:
+    with uproot.recreate(path) as root:
+        edges = np.array([0.0, 1.0, 2.0])
+        root['timing'] = (np.array([[1.0, 2.0], [3.0, 4.0]]), edges, edges)
+
+    data = json.dumps({'kind': 'root', 'path': str(path), 'histogram_path': 'timing'}).encode()
+    for action, metadata_key in (('preview', 'selected_histogram'), ('load', 'meta')):
+        request = urllib.request.Request(
+            f'{base_url}/api/data-importer/{action}',
+            data=data,
+            headers={'Content-Type': 'application/json'},
+        )
+        try:
+            with opener.open(request, timeout=10) as response:
+                metadata = json.load(response)[metadata_key]
+        except urllib.error.HTTPError as error:
+            raise RuntimeError(f'Packaged ROOT {action} failed: {error.read().decode()}') from error
+        if metadata.get('dimension') != 2 or metadata.get('integral') != 10:
+            raise RuntimeError(f'Unexpected ROOT histogram metadata from {action}: {metadata}')
 
 
 def smoke_test(executable: Path) -> None:
@@ -73,13 +98,14 @@ def smoke_test(executable: Path) -> None:
                     with opener.open(base_url + path, timeout=5) as response:
                         if expected not in response.read():
                             raise RuntimeError(f'Unexpected response from {path}.')
+                smoke_test_root_histogram(opener, base_url, Path(directory) / 'timing.root')
             except Exception:
                 print(log_path.read_text(encoding='utf-8', errors='replace'))
                 raise
             finally:
                 stop_server(process)
 
-    print(f'SciPlotter started and served both pages and bundled assets from {executable}.')
+    print(f'SciPlotter started, served the interface, and imported a ROOT histogram from {executable}.')
 
 
 if __name__ == '__main__':

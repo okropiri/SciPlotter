@@ -26,6 +26,13 @@ def resource_path(*parts: str) -> Path:
     return project_root().joinpath(*parts)
 
 
+def app_version() -> str:
+    if not is_frozen():
+        return 'source'
+    version_file = resource_path('sciplotter-version.txt')
+    return version_file.read_text(encoding='utf-8').strip() if version_file.is_file() else 'unversioned'
+
+
 def static_dir() -> Path:
     return resource_path('static')
 

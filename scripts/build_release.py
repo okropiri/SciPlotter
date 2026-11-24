@@ -143,12 +143,14 @@ def clean_target(target: str) -> None:
     RELEASE_ROOT.mkdir(parents=True, exist_ok=True)
 
 
-def build_pyinstaller(target: str) -> Path:
+def build_pyinstaller(target: str, *, version: str) -> Path:
     dist_dir = DIST_ROOT / target
     work_dir = WORK_ROOT / target
     SPEC_PATH.mkdir(parents=True, exist_ok=True)
     dist_dir.mkdir(parents=True, exist_ok=True)
     work_dir.mkdir(parents=True, exist_ok=True)
+    version_file = work_dir / 'sciplotter-version.txt'
+    version_file.write_text(version + '\n', encoding='utf-8')
 
     command = [
         sys.executable,
@@ -163,6 +165,8 @@ def build_pyinstaller(target: str) -> Path:
         '--specpath', str(SPEC_PATH),
         '--add-data', add_data_arg(PROJECT_ROOT / 'static', 'static'),
         '--add-data', add_data_arg(PROJECT_ROOT / 'assets', 'assets'),
+        '--add-data', add_data_arg(version_file, '.'),
+        '--collect-binaries', 'awkward_cpp',
         '--hidden-import', 'sciplotter_backend.static_routes',
         '--hidden-import', 'sciplotter_backend.data',
         '--hidden-import', 'sciplotter_backend.markers',
@@ -241,7 +245,7 @@ def main() -> int:
     if args.clean:
         clean_target(target)
 
-    dist_dir = build_pyinstaller(target)
+    dist_dir = build_pyinstaller(target, version=args.version)
     artifacts = package_release_artifact(target, dist_dir, skip_appimage=args.skip_appimage, version=args.version)
     for artifact in artifacts:
         print(f'Created release artifact: {artifact}')
