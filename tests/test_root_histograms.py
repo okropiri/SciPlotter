@@ -229,6 +229,18 @@ class RootHistogramImporterTests(unittest.TestCase):
                     self.assertEqual(response.status_code, 400, response.get_json())
                     self.assertEqual(response.get_json()['error'], 'histogram_path must be a string')
 
+    def test_loading_1d_histogram_includes_available_1d_histograms_for_overlay(self):
+        response = self.request('load', histogram_path='one')
+        self.assertEqual(response.status_code, 200, response.get_json())
+        payload = response.get_json()
+        self.assertIn('available_histograms', payload)
+        available_paths = [item['path'] for item in payload['available_histograms']]
+        self.assertIn('one', available_paths)
+        self.assertIn('weighted', available_paths)
+        self.assertNotIn('two', available_paths)
+        self.assertNotIn('invalid', available_paths)
+        self.assertNotIn('invalid_flow', available_paths)
+
 
 if __name__ == '__main__':
     unittest.main()

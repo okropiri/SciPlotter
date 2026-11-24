@@ -14,8 +14,8 @@
     <script>
         // --- Added: export sizing & PDF support ---
         const HISTOGRAM_PLOT_UI_KEY = 'sciplotter.histogram.plot_ui.v1';
-        const DEFAULT_EXPORT_WIDTH = 1000;
-        const DEFAULT_EXPORT_HEIGHT = 800;
+        const DEFAULT_EXPORT_WIDTH = 800;
+        const DEFAULT_EXPORT_HEIGHT = 600;
         const HISTOGRAM_LAYOUT_TOP_MARGIN = 92;
         const HISTOGRAM_LAYOUT_LEFT_MARGIN = 92;
         const HISTOGRAM_LAYOUT_BOTTOM_MARGIN = 84;
@@ -4295,158 +4295,113 @@
             return svg;
         }
 
-        function buildToolbarTextboxIcon() {
-            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-            svg.setAttribute('viewBox', '0 0 24 24');
-            svg.setAttribute('aria-hidden', 'true');
-
-            const box = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-            box.setAttribute('x', '4');
-            box.setAttribute('y', '4');
-            box.setAttribute('width', '16');
-            box.setAttribute('height', '16');
-            box.setAttribute('rx', '2');
-            box.setAttribute('fill', 'none');
-            box.setAttribute('stroke', 'currentColor');
-            box.setAttribute('stroke-width', '1.9');
-            box.setAttribute('stroke-linejoin', 'round');
-
-            const letterA = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-            letterA.setAttribute('d', 'M8.5 17L12 8L15.5 17M9.8 13.8H14.2');
-            letterA.setAttribute('fill', 'none');
-            letterA.setAttribute('stroke', 'currentColor');
-            letterA.setAttribute('stroke-width', '1.9');
-            letterA.setAttribute('stroke-linecap', 'round');
-            letterA.setAttribute('stroke-linejoin', 'round');
-
-            svg.appendChild(box);
-            svg.appendChild(letterA);
+        function createToolbarSvgElement() {
+            const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+            svg.setAttribute("viewBox", "0 0 24 24");
+            svg.setAttribute("aria-hidden", "true");
+            svg.setAttribute("focusable", "false");
+            svg.style.width = "100%";
+            svg.style.height = "100%";
             return svg;
         }
 
-        function buildToolbarEraserIcon() {
-            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-            svg.setAttribute('viewBox', '0 0 24 24');
-            svg.setAttribute('aria-hidden', 'true');
+        function createToolbarSvgPath(d, strokeWidth = "2", fill = "none", extra = {}) {
+            const p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            p.setAttribute("d", d);
+            p.setAttribute("fill", fill);
+            p.setAttribute("stroke", "currentColor");
+            p.setAttribute("stroke-width", strokeWidth);
+            p.setAttribute("stroke-linecap", extra.cap || "round");
+            p.setAttribute("stroke-linejoin", extra.join || "round");
+            return p;
+        }
 
-            const outline = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-            outline.setAttribute('d', 'M6.4 14.6L14.4 6.6C15.2 5.8 16.5 5.8 17.3 6.6L20.4 9.7C21.2 10.5 21.2 11.8 20.4 12.6L12.5 20.5H9.6L6.4 17.3C5.6 16.5 5.6 15.4 6.4 14.6Z');
-            outline.setAttribute('fill', 'none');
-            outline.setAttribute('stroke', 'currentColor');
-            outline.setAttribute('stroke-width', '1.9');
-            outline.setAttribute('stroke-linecap', 'round');
-            outline.setAttribute('stroke-linejoin', 'round');
+        function buildToolbarLineIcon() {
+            const svg = createToolbarSvgElement();
+            const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+            line.setAttribute("x1", "5"); line.setAttribute("y1", "19");
+            line.setAttribute("x2", "19"); line.setAttribute("y2", "5");
+            line.setAttribute("stroke", "currentColor"); line.setAttribute("stroke-width", "2"); line.setAttribute("stroke-linecap", "round");
+            const c1 = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            c1.setAttribute("cx", "5"); c1.setAttribute("cy", "19"); c1.setAttribute("r", "1.75"); c1.setAttribute("fill", "currentColor");
+            const c2 = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            c2.setAttribute("cx", "19"); c2.setAttribute("cy", "5"); c2.setAttribute("r", "1.75"); c2.setAttribute("fill", "currentColor");
+            svg.appendChild(line); svg.appendChild(c1); svg.appendChild(c2);
+            return svg;
+        }
 
-            const bands = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-            bands.setAttribute('d', 'M13.1 7.9L19 13.8M10.5 10.5L16.4 16.4');
-            bands.setAttribute('fill', 'none');
-            bands.setAttribute('stroke', 'currentColor');
-            bands.setAttribute('stroke-width', '1.7');
-            bands.setAttribute('stroke-linecap', 'round');
-            bands.setAttribute('stroke-linejoin', 'round');
+        function buildToolbarRulerIcon() {
+            const svg = createToolbarSvgElement();
+            svg.appendChild(createToolbarSvgPath(
+                'M3.5 17L17 3.5l3.5 3.5L7 20.5z M14 6.5l2 2 M11 9.5l2 2 M8 12.5l2 2 M5 15.5l2 2',
+                '1.65'
+            ));
+            return svg;
+        }
 
-            const base = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-            base.setAttribute('d', 'M8 20.5H17');
-            base.setAttribute('fill', 'none');
-            base.setAttribute('stroke', 'currentColor');
-            base.setAttribute('stroke-width', '1.9');
-            base.setAttribute('stroke-linecap', 'round');
+        function buildToolbarFreehandIcon() {
+            const svg = createToolbarSvgElement();
+            const curve = createToolbarSvgPath("M4 17.5C6.8 14.5 7.8 19 11.5 17.5C14.8 16.2 13.5 9 17 8C19 7.4 20 8.2 20.5 8", "2");
+            const tip = createToolbarSvgPath("M15 3.5L18.5 7L12 13.5L8.5 10L15 3.5Z", "1.8");
+            svg.appendChild(curve); svg.appendChild(tip);
+            return svg;
+        }
 
-            svg.appendChild(outline);
-            svg.appendChild(bands);
-            svg.appendChild(base);
+        function buildToolbarRectIcon() {
+            const svg = createToolbarSvgElement();
+            const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+            rect.setAttribute("x", "4.5"); rect.setAttribute("y", "5.5"); rect.setAttribute("width", "15"); rect.setAttribute("height", "13");
+            rect.setAttribute("rx", "2"); rect.setAttribute("fill", "none"); rect.setAttribute("stroke", "currentColor"); rect.setAttribute("stroke-width", "2");
+            const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+            line.setAttribute("x1", "4.5"); line.setAttribute("y1", "9.5"); line.setAttribute("x2", "19.5"); line.setAttribute("y2", "9.5");
+            line.setAttribute("stroke", "currentColor"); line.setAttribute("stroke-width", "1.2"); line.setAttribute("stroke-dasharray", "2 2");
+            svg.appendChild(rect); svg.appendChild(line);
+            return svg;
+        }
+
+        function buildToolbarCircleIcon() {
+            const svg = createToolbarSvgElement();
+            const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            circle.setAttribute("cx", "12"); circle.setAttribute("cy", "12"); circle.setAttribute("r", "7.5");
+            circle.setAttribute("fill", "none"); circle.setAttribute("stroke", "currentColor"); circle.setAttribute("stroke-width", "2");
+            const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            dot.setAttribute("cx", "12"); dot.setAttribute("cy", "12"); dot.setAttribute("r", "1.5"); dot.setAttribute("fill", "currentColor");
+            svg.appendChild(circle); svg.appendChild(dot);
+            return svg;
+        }
+
+        function buildToolbarTextboxIcon() {
+            const svg = createToolbarSvgElement();
+            const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+            rect.setAttribute("x", "3.5"); rect.setAttribute("y", "4.5"); rect.setAttribute("width", "17"); rect.setAttribute("height", "15");
+            rect.setAttribute("rx", "2.5"); rect.setAttribute("fill", "none"); rect.setAttribute("stroke", "currentColor"); rect.setAttribute("stroke-width", "1.8"); rect.setAttribute("stroke-dasharray", "3 2");
+            const letterA = createToolbarSvgPath("M8.5 16L12 8L15.5 16M9.7 13.2H14.3", "2");
+            svg.appendChild(rect); svg.appendChild(letterA);
             return svg;
         }
 
         function buildToolbarArrowNoteIcon() {
-            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-            svg.setAttribute('viewBox', '0 0 24 24');
-            svg.setAttribute('aria-hidden', 'true');
-
-            const arrow = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-            arrow.setAttribute('d', 'M6 17L18 5M18 5H11.4M18 5V11.6');
-            arrow.setAttribute('fill', 'none');
-            arrow.setAttribute('stroke', 'currentColor');
-            arrow.setAttribute('stroke-width', '1.9');
-            arrow.setAttribute('stroke-linecap', 'round');
-            arrow.setAttribute('stroke-linejoin', 'round');
-
-            const callout = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-            callout.setAttribute('d', 'M5.2 8.5H10.8C12 8.5 12.8 9.3 12.8 10.5V13.2C12.8 14.4 12 15.2 10.8 15.2H8.8L6.4 17.4V15.2H5.2C4 15.2 3.2 14.4 3.2 13.2V10.5C3.2 9.3 4 8.5 5.2 8.5Z');
-            callout.setAttribute('fill', 'none');
-            callout.setAttribute('stroke', 'currentColor');
-            callout.setAttribute('stroke-width', '1.7');
-            callout.setAttribute('stroke-linejoin', 'round');
-
-            svg.appendChild(callout);
-            svg.appendChild(arrow);
+            const svg = createToolbarSvgElement();
+            const arrow = createToolbarSvgPath("M5.5 18.5L18 6M18 6H11M18 6V13", "2");
+            const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            dot.setAttribute("cx", "5.5"); dot.setAttribute("cy", "18.5"); dot.setAttribute("r", "1.75"); dot.setAttribute("fill", "currentColor");
+            svg.appendChild(arrow); svg.appendChild(dot);
             return svg;
         }
 
-        function buildToolbarClearDrawingsIcon() {
-            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-            svg.setAttribute('viewBox', '0 0 24 24');
-            svg.setAttribute('aria-hidden', 'true');
-
-            const frame = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-            frame.setAttribute('x', '4');
-            frame.setAttribute('y', '5');
-            frame.setAttribute('width', '12');
-            frame.setAttribute('height', '12');
-            frame.setAttribute('rx', '2.2');
-            frame.setAttribute('fill', 'none');
-            frame.setAttribute('stroke', 'currentColor');
-            frame.setAttribute('stroke-width', '1.7');
-
-            const slashA = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-            slashA.setAttribute('d', 'M8 9L12 13');
-            slashA.setAttribute('fill', 'none');
-            slashA.setAttribute('stroke', 'currentColor');
-            slashA.setAttribute('stroke-width', '1.8');
-            slashA.setAttribute('stroke-linecap', 'round');
-
-            const slashB = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-            slashB.setAttribute('d', 'M12 9L8 13');
-            slashB.setAttribute('fill', 'none');
-            slashB.setAttribute('stroke', 'currentColor');
-            slashB.setAttribute('stroke-width', '1.8');
-            slashB.setAttribute('stroke-linecap', 'round');
-
-            const sweep = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-            sweep.setAttribute('d', 'M15.8 7.2C18 8 19.5 10.1 19.5 12.5C19.5 15.6 17.2 18.2 14.1 18.7');
-            sweep.setAttribute('fill', 'none');
-            sweep.setAttribute('stroke', 'currentColor');
-            sweep.setAttribute('stroke-width', '1.7');
-            sweep.setAttribute('stroke-linecap', 'round');
-
-            const sweepHead = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-            sweepHead.setAttribute('d', 'M13.9 16.6L13.9 18.9L16.1 17.5');
-            sweepHead.setAttribute('fill', 'none');
-            sweepHead.setAttribute('stroke', 'currentColor');
-            sweepHead.setAttribute('stroke-width', '1.7');
-            sweepHead.setAttribute('stroke-linecap', 'round');
-            sweepHead.setAttribute('stroke-linejoin', 'round');
-
-            svg.appendChild(frame);
-            svg.appendChild(slashA);
-            svg.appendChild(slashB);
-            svg.appendChild(sweep);
-            svg.appendChild(sweepHead);
+        function buildToolbarEraserIcon() {
+            const svg = createToolbarSvgElement();
+            const body = createToolbarSvgPath("M17.8 13.2L12.5 18.5H8.2L4.5 14.8C3.8 14.1 3.8 13 4.5 12.3L13.1 3.7C13.8 3 14.9 3 15.6 3.7L20.3 8.4C21 9.1 21 10.2 20.3 10.9L17.8 13.2", "1.9");
+            const band = createToolbarSvgPath("M9.2 7.6L14.9 13.3", "1.8");
+            const ground = createToolbarSvgPath("M6.5 18.5H20", "2");
+            svg.appendChild(body); svg.appendChild(band); svg.appendChild(ground);
             return svg;
         }
 
-        function buildToolbarInspectIcon(pathData) {
-            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-            svg.setAttribute('viewBox', '0 0 24 24');
-            svg.setAttribute('aria-hidden', 'true');
-            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-            path.setAttribute('d', pathData);
-            path.setAttribute('fill', 'none');
-            path.setAttribute('stroke', 'currentColor');
-            path.setAttribute('stroke-width', '1.7');
-            path.setAttribute('stroke-linecap', 'round');
-            path.setAttribute('stroke-linejoin', 'round');
-            svg.appendChild(path);
+        function buildToolbarTrashIcon() {
+            const svg = createToolbarSvgElement();
+            const can = createToolbarSvgPath("M4.5 6.5H19.5M10 10.5V16M14 10.5V16M6.5 6.5L7.4 18.2C7.5 19.2 8.3 20 9.3 20H14.7C15.7 20 16.5 19.2 16.6 18.2L17.5 6.5M9.2 6.5V4.2C9.2 3.8 9.6 3.5 10 3.5H14C14.4 3.5 14.8 3.8 14.8 4.2V6.5", "1.8");
+            svg.appendChild(can);
             return svg;
         }
 
@@ -4485,21 +4440,28 @@
                         missingActionCount += 1;
                         button.classList.add('is-placeholder');
                         button.disabled = true;
-                    } else if (action.modebarLabel === 'zoom') {
+                    }
+                    if (action.modebarLabel === 'zoom') {
                         iconWrap.appendChild(buildToolbarLensIcon());
                     } else if (action.modebarLabel === 'ruler tool') {
-                        iconWrap.appendChild(buildToolbarInspectIcon('M3.5 17L17 3.5l3.5 3.5L7 20.5z M14 6.5l2 2 M11 9.5l2 2 M8 12.5l2 2 M5 15.5l2 2'));
-                    } else if (action.modebarLabel === 'clear inspect markings') {
-                        iconWrap.appendChild(buildToolbarInspectIcon('M4.5 6.5H19.5M10 10.5V16M14 10.5V16M6.5 6.5L7.4 18.2C7.5 19.2 8.3 20 9.3 20H14.7C15.7 20 16.5 19.2 16.6 18.2L17.5 6.5M9.2 6.5V4.2C9.3 3.6 9.6 3.5 10 3.5H14C14.4 3.5 14.7 3.6 14.8 4.2V6.5'));
+                        iconWrap.appendChild(buildToolbarRulerIcon());
+                    } else if (action.modebarLabel === 'draw line') {
+                        iconWrap.appendChild(buildToolbarLineIcon());
+                    } else if (action.modebarLabel === 'draw open freeform') {
+                        iconWrap.appendChild(buildToolbarFreehandIcon());
+                    } else if (action.modebarLabel === 'draw rectangle') {
+                        iconWrap.appendChild(buildToolbarRectIcon());
+                    } else if (action.modebarLabel === 'draw circle') {
+                        iconWrap.appendChild(buildToolbarCircleIcon());
                     } else if (action.modebarLabel === 'add textbox') {
                         iconWrap.appendChild(buildToolbarTextboxIcon());
                     } else if (action.modebarLabel === 'add arrow note') {
                         iconWrap.appendChild(buildToolbarArrowNoteIcon());
                     } else if (action.modebarLabel === 'erase shape') {
                         iconWrap.appendChild(buildToolbarEraserIcon());
-                    } else if (action.modebarLabel === 'clear drawings') {
-                        iconWrap.appendChild(buildToolbarClearDrawingsIcon());
-                    } else {
+                    } else if (action.modebarLabel === 'clear drawings' || action.modebarLabel === 'clear inspect markings') {
+                        iconWrap.appendChild(buildToolbarTrashIcon());
+                    } else if (sourceButton) {
                         const sourceSvg = sourceButton.querySelector('svg');
                         if (sourceSvg) iconWrap.appendChild(sourceSvg.cloneNode(true));
                     }
@@ -4740,8 +4702,8 @@
         let PROJECTION_LOCKED = false;
         let LAST_PROJECTION_STATE = null;
         let LAST_SELECTION_PROJECTION_STATE = null;
-        const PROJECTION_EXPORT_WIDTH = 1000;
-        const PROJECTION_EXPORT_HEIGHT = 800;
+        const PROJECTION_EXPORT_WIDTH = 800;
+        const PROJECTION_EXPORT_HEIGHT = 600;
 
         function syncHistogramInteractionCursor(gd) {
             if (!gd) return;
@@ -4942,7 +4904,7 @@
             return [Math.min(currentBounds[0], nextBounds[0]), Math.max(currentBounds[1], nextBounds[1])];
         }
 
-        function getHistogramAutofitBounds(gd) {
+        function getHistogramAutofitBounds(gd, includeBinEdges = false) {
             const full = gd?._fullLayout;
             if (!full || !Array.isArray(gd?.data)) return null;
             const xAxisType = full.xaxis?.type || 'linear';
@@ -4970,6 +4932,17 @@
                 } else {
                     yBounds = mergeBounds(yBounds, collectTraceBounds(trace.y, yAxisType));
                 }
+
+                if (includeBinEdges && trace.type === 'bar' && Array.isArray(trace.customdata)) {
+                    const edges = trace.customdata.flatMap((bin) => Array.isArray(bin) ? bin.slice(0, 2) : []);
+                    if (trace.orientation === 'h') {
+                        yBounds = mergeBounds(yBounds, collectTraceBounds(edges, yAxisType));
+                        if (xAxisType !== 'log') xBounds = mergeBounds(xBounds, [0, 0]);
+                    } else {
+                        xBounds = mergeBounds(xBounds, collectTraceBounds(edges, xAxisType));
+                        if (yAxisType !== 'log') yBounds = mergeBounds(yBounds, [0, 0]);
+                    }
+                }
             }
 
             const native = gd.__rootHistogramContext;
@@ -4978,17 +4951,21 @@
                     xBounds = collectTraceBounds(native.axes[0].edges.concat(gd.__projectionGrid?.xCenters || []), xAxisType);
                     yBounds = collectTraceBounds(native.axes[1].edges.concat(gd.__projectionGrid?.yCenters || []), yAxisType);
                 } else {
-                    const horizontal = gd.data.some((trace) => trace.type === 'bar' && trace.orientation === 'h');
+                    const horizontal = gd.data.some((trace) => (trace.type === 'bar' || trace.type === 'scatter') && trace.orientation === 'h');
                     const centers = native.axes[0].edges.slice(1).map((edge, index) => (edge + native.axes[0].edges[index]) / 2);
                     const featureBounds = collectTraceBounds(native.axes[0].edges.concat(centers), horizontal ? yAxisType : xAxisType);
                     if (horizontal) {
-                        yBounds = featureBounds;
+                        yBounds = includeBinEdges ? mergeBounds(yBounds, featureBounds) : featureBounds;
                         if (xAxisType !== 'log') xBounds = mergeBounds(xBounds, [0, 0]);
                     } else {
-                        xBounds = featureBounds;
+                        xBounds = includeBinEdges ? mergeBounds(xBounds, featureBounds) : featureBounds;
                         if (yAxisType !== 'log') yBounds = mergeBounds(yBounds, [0, 0]);
                     }
                 }
+            } else if (includeBinEdges && gd.__projectionGrid) {
+                const { xEdges, yEdges, xCenters, yCenters } = gd.__projectionGrid;
+                xBounds = collectTraceBounds(xEdges.concat(xCenters), xAxisType);
+                yBounds = collectTraceBounds(yEdges.concat(yCenters), yAxisType);
             }
             return { x: xBounds, y: yBounds, xAxisType, yAxisType };
         }
@@ -5001,7 +4978,7 @@
 
         async function applyHistogramAutofit(gd, options = {}) {
             if (!gd || !window.Plotly) return;
-            const bounds = getHistogramAutofitBounds(gd);
+            const bounds = getHistogramAutofitBounds(gd, options.includeBinEdges);
             if (!bounds) return;
 
             const fitX = options.fitX !== false;
@@ -5529,8 +5506,8 @@
             if(gd.__markerClickHandler){
                 gd.removeListener('plotly_click', gd.__markerClickHandler);
             }
-            if(gd.__markerAfterPlotHandler){
-                gd.removeListener('plotly_afterplot', gd.__markerAfterPlotHandler);
+            if(gd.__markerRelayoutHandler){
+                gd.removeListener('plotly_relayout', gd.__markerRelayoutHandler);
             }
             const clickHandler = ev => {
                 if(!MARKER_MODE) return;
@@ -5541,15 +5518,15 @@
                     : (typeof p.z !== 'undefined' ? p.z : undefined);
                 addMarker(gd,p.x,p.y, markerValue);
             };
-            const updatePositions = ()=>{
+            const relayoutHandler = ()=>{
                 for(const m of MARKERS){
                     updateMarkerPositionAndLine(gd,m);
                 }
             };
             gd.on('plotly_click', clickHandler);
-            gd.on('plotly_afterplot', updatePositions);
+            gd.on('plotly_relayout', relayoutHandler);
             gd.__markerClickHandler = clickHandler;
-            gd.__markerAfterPlotHandler = updatePositions;
+            gd.__markerRelayoutHandler = relayoutHandler;
         }
 
         function getRulerReadout({ start, end }) {
@@ -7311,7 +7288,7 @@
             --hist-plot-responsive-scale: 1;
             --control-button-height: 38px;
             --control-button-radius: 4px;
-            --control-label-width: 66px;
+            --control-label-width: 68px;
             --control-dropdown-label-width: var(--control-label-width);
             --control-box-width: 88px;
             --control-box-wide-width: 172px;
@@ -9111,22 +9088,22 @@
         /* Checkbox / radio groups – inline, no decoration */
         #left .row[role="radiogroup"],
         #log-row,
-        #gray-out-1d-row,
+        #options-1d-row,
         #merge-row {
-            gap: 8px;
+            gap: 5px 8px;
         }
 
         #left .row[role="radiogroup"] {
             display: grid;
             grid-template-columns: var(--control-label-width) minmax(0, 1fr) minmax(0, 1fr);
             align-items: center;
-            gap: 8px;
+            gap: 5px 8px;
         }
 
         #left .row[role="radiogroup"] label,
         .control-canonical-row--textticktick label,
         #autoscale-row label,
-        #gray-out-1d-row label,
+        #options-1d-row label,
         #merge-row label,
         #dt-adv-row label,
         #colorscale-row label,
@@ -9138,14 +9115,14 @@
             font-weight: 500;
             display: inline-flex;
             align-items: center;
-            gap: 4px;
+            gap: 5px;
         }
 
         #left .row[role="radiogroup"] label,
         .control-canonical-row--textticktick label,
-        #gray-out-1d-row label,
+        #options-1d-row label,
         #merge-row label {
-            justify-self: stretch;
+            justify-self: start;
         }
 
         /* Dropdowns fill remaining space */
@@ -9155,72 +9132,91 @@
         #orientation {
             flex: 1 1 auto;
             min-width: 0 !important;
+            width: 100%;
         }
 
-        #norm-row select {
+        #norm-row select,
+        #orient-cum-row select {
             min-width: 0 !important;
+            width: 100%;
         }
 
         #orient-cum-row,
         #norm-row,
         #merge-row {
             display: grid;
-            grid-template-columns: var(--control-label-width) minmax(0, 1fr) auto;
+            grid-template-columns: var(--control-dropdown-label-width) minmax(0, 1fr) minmax(0, 1fr);
             align-items: center;
+            gap: 5px 8px;
         }
 
-        #norm-row,
-        #merge-row {
-            grid-template-columns: var(--control-label-width) minmax(0, 1fr);
-        }
-
-        #gray-out-1d-row,
+        #options-1d-row,
         #log-row {
             display: grid;
             grid-template-columns: var(--control-label-width) minmax(0, 1fr) minmax(0, 1fr);
             align-items: center;
-        }
-
-        #orient-cum-row {
-            grid-template-columns: var(--control-label-width) minmax(0, 1fr) minmax(0, 1fr);
+            gap: 5px 8px;
         }
 
         #orient-cum-row > :not(:first-child),
         #norm-row > :not(:first-child),
-        #merge-row > :not(:first-child),
-        #left .row[role="radiogroup"] > :not(:first-child),
-        #gray-out-1d-row > :not(:first-child),
-        #log-row > :not(:first-child) {
+        #merge-row > :not(:first-child) {
+            grid-column: 2 / 4;
             justify-self: stretch;
+        }
+
+        #left .row[role="radiogroup"] > :not(:first-child),
+        #options-1d-row > :not(:first-child),
+        #log-row > :not(:first-child) {
+            justify-self: start;
         }
 
         /* Filter rows - 3-column grid */
         #x-filter-row,
-        #y-filter-row {
+        #y-filter-row,
+        #f-filter-row,
+        #phase-shift-row {
             display: grid;
-            grid-template-columns: var(--control-label-width) 1fr 1fr;
-            gap: 5px;
+            grid-template-columns: var(--control-label-width) minmax(0, 1fr) minmax(0, 1fr);
+            gap: 5px 8px;
             align-items: center;
         }
 
-        #f-filter-row {
+        #c3-adv-row {
             display: grid;
-            grid-template-columns: var(--control-label-width) 1fr 1fr;
-            gap: 5px;
+            grid-template-columns: var(--control-label-width) minmax(0, 1fr);
+            gap: 5px 8px;
             align-items: center;
+        }
+
+        #dt-adv-row {
+            display: grid;
+            grid-template-columns: var(--control-label-width) minmax(0, 1fr);
+            gap: 4px 8px;
+            align-items: start;
+        }
+
+        #dt-adv-row > :not(:first-child) {
+            grid-column: 2;
         }
 
         #x-filter-row input,
         #y-filter-row input,
-        #f-filter-row input {
-            width: auto !important;
+        #f-filter-row input,
+        #phase-shift-row input[type="number"],
+        #c3-adv-row input[type="number"] {
+            width: 100% !important;
             min-width: 0;
+            box-sizing: border-box;
         }
 
         #x-filter-row > label:first-child,
         #y-filter-row > label:first-child,
         #f-filter-row > label:first-child,
-        #norm-row > label:first-child {
+        #norm-row > label:first-child,
+        #orient-cum-row > label:first-child,
+        #phase-shift-row > label:first-child,
+        #c3-adv-row > label:first-child {
             min-width: var(--control-label-width) !important;
             max-width: var(--control-label-width);
         }
@@ -9258,6 +9254,10 @@
         #left #range-y-row,
         #left #range-z-row {
             gap: 5px 8px;
+        }
+
+        #left #bins-row.is-single-bin {
+            grid-template-columns: var(--control-label-width) minmax(0, 1fr);
         }
 
         .control-canonical-row--wide {
@@ -9334,8 +9334,14 @@
             grid-template-columns: var(--control-label-width) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
         }
 
+        #log-row.control-canonical-row--textticktick.is-1d-mode {
+            grid-template-columns: var(--control-label-width) minmax(0, 1fr) minmax(0, 1fr);
+        }
+
         #colorscale-toggles-row.control-canonical-row--textticktick,
-        #autoscale-row.control-canonical-row--textticktick {
+        #autoscale-row.control-canonical-row--textticktick,
+        #options-1d-row.control-canonical-row--textticktick,
+        #style-1d-row.control-canonical-row--textticktick {
             grid-template-columns: var(--control-label-width) minmax(0, 1fr) minmax(0, 1fr);
         }
 
@@ -10355,11 +10361,10 @@
         }
 
         .hist-tool-btn-icon svg {
-            width: var(--hist-toolbar-icon-size);
-            height: var(--hist-toolbar-icon-size);
+            width: var(--hist-toolbar-icon-size, 16px);
+            height: var(--hist-toolbar-icon-size, 16px);
             display: block;
-            fill: currentColor;
-            stroke: currentColor;
+            color: inherit;
         }
 
         .hist-tool-btn-text {
@@ -11844,6 +11849,153 @@
             align-self: center;
         }
 
+        .meta-legend-body {
+            white-space: normal;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .meta-legend-actions {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            margin-left: auto;
+        }
+
+        .meta-legend-action-btn {
+            appearance: none;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+            background: #ffffff;
+            color: #374151;
+            font-size: 10px;
+            font-weight: 600;
+            line-height: 1.2;
+            padding: 2px 6px;
+            cursor: pointer;
+            transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+        }
+
+        .meta-legend-action-btn:hover:not(:disabled) {
+            background: #f3f4f6;
+            border-color: #9ca3af;
+            color: #111827;
+        }
+
+        .meta-legend-action-btn:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
+
+        .meta-legend-mode-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid #e5e7eb;
+            font-size: 11px;
+            color: #334155;
+        }
+
+        .meta-legend-mode-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            color: #1f2937;
+            user-select: none;
+        }
+
+        .meta-legend-search {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 4px 8px;
+            font-size: 11px;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+            background: #ffffff;
+            color: #1f2937;
+            outline: none;
+        }
+
+        .meta-legend-search:focus {
+            border-color: #1B76B3;
+            box-shadow: 0 0 0 2px rgba(27, 118, 179, 0.14);
+        }
+
+        .meta-legend-list {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            max-height: clamp(140px, 26vh, 240px);
+            overflow-y: auto;
+            padding-right: 2px;
+        }
+
+        .meta-legend-item {
+            display: grid;
+            grid-template-columns: 14px 12px minmax(0, 1fr) auto;
+            align-items: center;
+            gap: 6px;
+            padding: 3px 5px;
+            border-radius: 4px;
+            cursor: pointer;
+            user-select: none;
+            font-size: 11.5px;
+            color: #1f2937;
+            transition: background 0.12s ease, opacity 0.12s ease;
+        }
+
+        .meta-legend-item:hover {
+            background: #f1f5f9;
+        }
+
+        .meta-legend-item.is-off {
+            opacity: 0.52;
+        }
+
+        .meta-legend-cb {
+            width: 13px;
+            height: 13px;
+            margin: 0;
+            cursor: pointer;
+            accent-color: #1B76B3;
+        }
+
+        .meta-legend-swatch {
+            width: 10px;
+            height: 10px;
+            border-radius: 2px;
+            border: 1px solid rgba(15, 23, 42, 0.18);
+            flex-shrink: 0;
+        }
+
+        .meta-legend-swatch.is-line {
+            width: 12px;
+            height: 3px;
+            border-radius: 999px;
+            border: none;
+        }
+
+        .meta-legend-label {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-weight: 500;
+            color: #1e293b;
+        }
+
+        .meta-legend-count {
+            font-size: 10.5px;
+            font-variant-numeric: tabular-nums;
+            color: #64748b;
+            white-space: nowrap;
+        }
+
         .projection-card-body {
             display: grid;
             gap: 10px;
@@ -12033,7 +12185,7 @@
                 --header-tab-padding-y: 6px;
                 --header-tab-padding-x: 10px;
                 --control-button-height: 32px;
-                --control-label-width: 58px;
+                --control-label-width: 64px;
                 --control-dropdown-label-width: var(--control-label-width);
                 --control-box-width: 76px;
                 --control-box-wide-width: 150px;
@@ -12121,7 +12273,7 @@
                 --header-tab-padding-y: 6px;
                 --header-tab-padding-x: 10px;
                 --control-button-height: 30px;
-                --control-label-width: 60px;
+                --control-label-width: 64px;
                 --control-dropdown-label-width: var(--control-label-width);
                 --control-box-width: 72px;
                 --control-box-wide-width: 148px;
@@ -12362,11 +12514,11 @@
                             <div class="hist-tool-section-buttons hist-tool-section-buttons--plot">
                                 <label class="hist-tool-size-field" for="plot-width-input">
                                     <span class="hist-tool-size-field-label">X</span>
-                                    <input id="plot-width-input" type="number" min="200" step="10" value="1000" title="Plot width in pixels">
+                                    <input id="plot-width-input" type="number" min="200" step="10" value="800" title="Plot width in pixels">
                                 </label>
                                 <label class="hist-tool-size-field" for="plot-height-input">
                                     <span class="hist-tool-size-field-label">Y</span>
-                                    <input id="plot-height-input" type="number" min="200" step="10" value="800" title="Plot height in pixels">
+                                    <input id="plot-height-input" type="number" min="200" step="10" value="600" title="Plot height in pixels">
                                 </label>
                             </div>
                         </div>
@@ -12495,27 +12647,36 @@
             <!-- Type & Display -->
             <div class="section" id="type-display-section">
                 <h4>Type & Display</h4>
-                <div class="row" role="radiogroup" aria-label="Histogram Type">
-                    <span class="row-label">Mode</span>
-                    <label><input type="radio" name="hist-type" id="hist-1d" value="1d"> 1D</label>
-                    <label><input type="radio" name="hist-type" id="hist-2d" value="2d" checked> 2D</label>
+                <div class="row control-canonical-row control-canonical-row--textticktick" id="mode-row" role="radiogroup" aria-label="Histogram Type">
+                    <span class="row-label control-canonical-label">Mode</span>
+                    <label class="control-canonical-tick-option control-canonical-tick-option--first"><input type="radio" name="hist-type" id="hist-1d" value="1d"> 1D</label>
+                    <label class="control-canonical-tick-option control-canonical-tick-option--second"><input type="radio" name="hist-type" id="hist-2d" value="2d" checked> 2D</label>
                 </div>
-                <div class="row" id="orient-cum-row">
-                    <label for="orientation">Orientation</label>
-                    <select id="orientation" style="width:120px;">
+                <div class="row control-canonical-row control-canonical-row--textticktick" id="style-1d-row" role="radiogroup" aria-label="1D Display Style" style="display:none;">
+                    <span class="row-label control-canonical-label">Style</span>
+                    <label class="control-canonical-tick-option control-canonical-tick-option--first"><input type="radio" name="hist-1d-style" id="hist-style-columns" value="columns" checked> Columns</label>
+                    <label class="control-canonical-tick-option control-canonical-tick-option--second"><input type="radio" name="hist-1d-style" id="hist-style-line" value="line"> Line</label>
+                </div>
+                <div class="row control-canonical-row control-canonical-row--text-dropdown" id="orient-cum-row" style="display:none;">
+                    <label class="control-canonical-label control-canonical-label--text-dropdown" for="orientation">Orient.</label>
+                    <select id="orientation" class="control-canonical-box control-canonical-select control-canonical-select--text-dropdown">
                         <option value="v">Vertical</option>
                         <option value="h">Horizontal</option>
                     </select>
-                    <label><input type="checkbox" id="cumulative"> Cumulative</label>
                 </div>
-                <div class="row" id="norm-row">
-                    <label for="histnorm" style="min-width:90px;">Normalization</label>
-                    <select id="histnorm" style="min-width: 220px;">
+                <div class="row control-canonical-row control-canonical-row--text-dropdown" id="norm-row" style="display:none;">
+                    <label class="control-canonical-label control-canonical-label--text-dropdown" for="histnorm">Scale</label>
+                    <select id="histnorm" class="control-canonical-box control-canonical-select control-canonical-select--text-dropdown">
                         <option value="">Count</option>
                         <option value="probability">Probability</option>
                         <option value="percent">Percent</option>
                         <option value="density">Density</option>
                     </select>
+                </div>
+                <div class="row control-canonical-row control-canonical-row--textticktick" id="options-1d-row" style="display:none;">
+                    <span class="row-label control-canonical-label">Options</span>
+                    <label class="control-canonical-tick-option control-canonical-tick-option--first"><input type="checkbox" id="cumulative"> Cumulative</label>
+                    <label class="control-canonical-tick-option control-canonical-tick-option--second" id="gray-out-1d-row"><input type="checkbox" id="grayOut1d"> Gray-out</label>
                 </div>
             </div>
 
@@ -12528,63 +12689,56 @@
                 </div>
 
                 <!-- Time-based feature phase shift (appears when time features are selected) -->
-                <div class="row" id="phase-shift-row" style="margin-top:6px; display:none;">
-                    <label class="row-label">Phase shift</label>
-                    <div id="phase-shift-controls">
-                        <input type="number" id="phaseShiftNs" value="0" step="1.0" min="-40" max="40"
-                            style="width:90px"
-                            title="Shift time-based features by X ns, wrapped modulo detected period">
-                        <label class="phase-shift-toggle" style="display:flex; align-items:center; gap:6px; margin-left:8px;">
-                            <input type="checkbox" id="wrapPhase" checked>
-                            <span style="font-size:12px;color:#555;">Wrap</span>
-                        </label>
-                    </div>
+                <div class="row control-canonical-row" id="phase-shift-row" style="display:none;">
+                    <label class="row-label control-canonical-label" for="phaseShiftNs">Phase (ns)</label>
+                    <input type="number" id="phaseShiftNs" class="control-canonical-box control-canonical-box--number" value="0" step="1.0" min="-40" max="40"
+                        title="Shift time-based features by X ns, wrapped modulo detected period">
+                    <label class="phase-shift-toggle control-canonical-tick-option control-canonical-tick-option--second">
+                        <input type="checkbox" id="wrapPhase" checked>
+                        <span>Wrap</span>
+                    </label>
                 </div>
-                <div class="row" id="x-filter-row" style="margin-top:6px;">
-                    <label style="min-width:90px;">X range</label>
-                    <input type="text" id="xMinFilter" placeholder="min" style="width:90px">
-                    <input type="text" id="xMaxFilter" placeholder="max" style="width:90px">
-                </div>
-                <!-- 1D-only: gray-out toggle for out-of-range values -->
-                <div class="row" id="gray-out-1d-row" style="display:none; margin-top:6px;">
-                    <label><input type="checkbox" id="grayOut1d"> Filter Gray-out</label>
+                <div class="row control-canonical-row" id="x-filter-row">
+                    <label class="control-canonical-label" for="xMinFilter">X range</label>
+                    <input type="text" id="xMinFilter" class="control-canonical-box control-canonical-box--number" placeholder="min">
+                    <input type="text" id="xMaxFilter" class="control-canonical-box control-canonical-box--number" placeholder="max">
                 </div>
 
                 <!-- Event_to_event_dt options (1D only, shown when selected) -->
-                <div class="row" id="dt-adv-row" style="margin-top:6px; display:none;">
-                    <label><input type="checkbox" id="excludeSelfPairs"> Exclude self-pairs (i ≠ j)</label>
-                    <label><input type="checkbox" id="neighborOnly"> Neighbor-only (t[i] − t[i−1])</label>
-                    <label><input type="checkbox" id="limitWithinTrace" checked> Limit pairs within trace/file</label>
+                <div class="row control-canonical-row" id="dt-adv-row" style="display:none;">
+                    <span class="row-label control-canonical-label">Δt pairs</span>
+                    <label class="control-canonical-tick-option"><input type="checkbox" id="excludeSelfPairs"> Exclude self-pairs (i ≠ j)</label>
+                    <label class="control-canonical-tick-option"><input type="checkbox" id="neighborOnly"> Neighbor-only (t[i] − t[i−1])</label>
+                    <label class="control-canonical-tick-option"><input type="checkbox" id="limitWithinTrace" checked> Limit pairs within trace/file</label>
                 </div>
-                <div class="row control-canonical-row control-canonical-row--text-dropdown" id="y-row" style="margin-top:8px; display:none;">
+                <div class="row control-canonical-row control-canonical-row--text-dropdown" id="y-row" style="display:none;">
                     <label class="control-canonical-label control-canonical-label--text-dropdown" for="axis-y">Y feature</label>
                     <select id="axis-y" class="control-canonical-box control-canonical-select control-canonical-select--text-dropdown"></select>
                 </div>
-                <div class="row" id="y-filter-row" style="margin-top:6px; display:none;">
-                    <label style="min-width:90px;">Y range</label>
-                    <input type="text" id="yMinFilter" placeholder="min" style="width:90px">
-                    <input type="text" id="yMaxFilter" placeholder="max" style="width:90px">
+                <div class="row control-canonical-row" id="y-filter-row" style="display:none;">
+                    <label class="control-canonical-label" for="yMinFilter">Y range</label>
+                    <input type="text" id="yMinFilter" class="control-canonical-box control-canonical-box--number" placeholder="min">
+                    <input type="text" id="yMaxFilter" class="control-canonical-box control-canonical-box--number" placeholder="max">
                 </div>
 
                 <!-- Filter-only feature -->
-                <div class="row control-canonical-row control-canonical-row--text-dropdown" id="f-row" style="margin-top:8px;">
-                    <label class="control-canonical-label control-canonical-label--text-dropdown" for="axis-f">Filter:</label>
+                <div class="row control-canonical-row control-canonical-row--text-dropdown" id="f-row">
+                    <label class="control-canonical-label control-canonical-label--text-dropdown" for="axis-f">Filter</label>
                     <select id="axis-f" class="control-canonical-box control-canonical-select control-canonical-select--text-dropdown"></select>
                 </div>
-                <div class="row" id="f-filter-row" style="margin-top:6px;">
-                    <label style="min-width:90px;">F Range</label>
-                    <input type="number" id="fMinFilter" placeholder="min" style="width:70px" step="any">
-                    <input type="number" id="fMaxFilter" placeholder="max" style="width:71px" step="any">
+                <div class="row control-canonical-row" id="f-filter-row">
+                    <label class="control-canonical-label" for="fMinFilter">F range</label>
+                    <input type="number" id="fMinFilter" class="control-canonical-box control-canonical-box--number" placeholder="min" step="any">
+                    <input type="number" id="fMaxFilter" class="control-canonical-box control-canonical-box--number" placeholder="max" step="any">
                 </div>
 
                 <!-- Advanced Filter: C3_Filter window control (shown only when selected) -->
-                <div class="row" id="c3-adv-row" style="margin-top:6px; display:none;">
-                    <label style="min-width:90px;">C3 window (ns)</label>
-                    <input type="number" id="c3WindowNs" value="80" step="1" style="width:90px">
-                    <span style="font-size:12px;color:#555;">Same trace; pass C4 if a C3 exists within ±window</span>
+                <div class="row control-canonical-row" id="c3-adv-row" style="display:none;">
+                    <label class="control-canonical-label" for="c3WindowNs">C3 win (ns)</label>
+                    <input type="number" id="c3WindowNs" class="control-canonical-box control-canonical-box--number" value="80" step="1" title="Same trace; pass C4 if a C3 exists within ±window">
                 </div>
 
-                <div class="row action-button-row" id="feature-filter-apply-row" style="margin-top:6px;">
+                <div class="row action-button-row" id="feature-filter-apply-row">
                     <button id="apply-feature-filter" class="btn-secondary"
                         title="Apply filters; in 1D, the Gray out toggle controls whether out-of-range entries are grayed or removed">Filter</button>
                     <button id="clear-feature-filter" class="btn-secondary"
@@ -12602,10 +12756,11 @@
                     </select>
                 </div>
                 <div id="channelsDetectedField">Waiting for summary data to detect a channel field.</div>
-                <div class="row" id="merge-row" style="display:none; align-items:center; gap:6px;">
-                    <label style="display:flex; align-items:center; gap:6px;">
+                <div class="row control-canonical-row" id="merge-row" style="display:none;">
+                    <span class="row-label control-canonical-label">Overlay</span>
+                    <label class="control-canonical-tick-option">
                         <input type="checkbox" id="mergeChannels1d" checked>
-                        <span style="font-size:12px;color:#555;">Merge selected channels (1D)</span>
+                        <span>Merge selected channels (1D)</span>
                     </label>
                 </div>
                 <div class="row" id="channel-selector-row">
@@ -13015,6 +13170,11 @@
             return out;
         }
 
+        function getHistogram1DStyle() {
+            const checked = document.querySelector('input[name="hist-1d-style"]:checked');
+            return checked && checked.value === 'line' ? 'line' : 'columns';
+        }
+
         function buildPreBinned1DTrace(values, options = {}) {
             const {
                 start,
@@ -13027,6 +13187,7 @@
                 histnorm = '',
                 cumulative = false,
                 showlegend = true,
+                style1d = 'columns',
             } = options;
             if (!Array.isArray(values) || !values.length || !Number.isFinite(start) || !Number.isFinite(end) || start === end) return null;
             const safeBins = Math.max(1, bins | 0);
@@ -13043,6 +13204,43 @@
             if (cumulative) measure = applyCumulativeHistogramCounts(measure);
             const centers = Array.from({ length: safeBins }, (_, index) => start + ((index + 0.5) * size));
             const edges = Array.from({ length: safeBins }, (_, index) => [start + (index * size), start + ((index + 1) * size)]);
+            const hovertemplate = orientation === 'h'
+                ? 'Bin %{customdata[0]:.6g} to %{customdata[1]:.6g}<br>Value %{x}<extra></extra>'
+                : 'Bin %{customdata[0]:.6g} to %{customdata[1]:.6g}<br>Value %{y}<extra></extra>';
+            if (style1d === 'line') {
+                const stepCoords = [];
+                const stepMeasures = [];
+                const stepCustomdata = [];
+                if (edges.length > 0) {
+                    stepCoords.push(edges[0][0]);
+                    stepMeasures.push(0);
+                    stepCustomdata.push(edges[0]);
+                    for (let index = 0; index < edges.length; index++) {
+                        const pair = edges[index];
+                        const val = measure[index];
+                        stepCoords.push(pair[0], pair[1]);
+                        stepMeasures.push(val, val);
+                        stepCustomdata.push(pair, pair);
+                    }
+                    const lastIdx = edges.length - 1;
+                    stepCoords.push(edges[lastIdx][1]);
+                    stepMeasures.push(0);
+                    stepCustomdata.push(edges[lastIdx]);
+                }
+                return {
+                    type: 'scatter',
+                    mode: 'lines',
+                    name,
+                    opacity,
+                    showlegend,
+                    orientation: orientation === 'h' ? 'h' : 'v',
+                    line: { color, width: 2 },
+                    x: orientation === 'h' ? stepMeasures : stepCoords,
+                    y: orientation === 'h' ? stepCoords : stepMeasures,
+                    customdata: stepCustomdata,
+                    hovertemplate,
+                };
+            }
             const trace = {
                 type: 'bar',
                 name,
@@ -13050,9 +13248,7 @@
                 showlegend,
                 marker: { color },
                 customdata: edges,
-                hovertemplate: orientation === 'h'
-                    ? 'Bin %{customdata[0]:.6g} to %{customdata[1]:.6g}<br>Value %{x}<extra></extra>'
-                    : 'Bin %{customdata[0]:.6g} to %{customdata[1]:.6g}<br>Value %{y}<extra></extra>',
+                hovertemplate,
             };
             if (orientation === 'h') {
                 trace.orientation = 'h';
@@ -13092,6 +13288,11 @@
             return sessionId ? session : null;
         }
 
+        let ACTIVE_ROOT_TH1_PATHS = new Set();
+        let LAST_ROOT_TH1_DATASET_REF = null;
+        let LEGEND_CARD_SEARCH_QUERY = '';
+        const LAST_1D_CHANNEL_COUNTS = new Map();
+
         function getRootHistogramDataset(dataset = null) {
             const source = dataset || (
                 document.getElementById('summarySource')?.value === 'imported' ? LOCAL_SUMMARY : null
@@ -13099,9 +13300,50 @@
             return source?.meta?.root_object_kind === 'histogram' && source.histogram ? source : null;
         }
 
+        function getAvailableRoot1DHistograms(dataset = null) {
+            const rootHist = getRootHistogramDataset(dataset);
+            if (!rootHist || rootHist.meta?.dimension !== 1) return [];
+            if (Array.isArray(rootHist.available_histograms) && rootHist.available_histograms.length) {
+                return rootHist.available_histograms.filter((item) => item && item.histogram && item.meta?.dimension === 1);
+            }
+            const fallbackPath = String(rootHist.meta?.object_path || rootHist.meta?.histogram_path || 'primary');
+            return [{
+                path: fallbackPath,
+                label: String(rootHist.meta?.object_name || rootHist.meta?.title || fallbackPath),
+                title: String(rootHist.meta?.title || ''),
+                histogram: rootHist.histogram,
+                stats: rootHist.stats,
+                notes: Array.isArray(rootHist.notes) ? rootHist.notes : [],
+                meta: rootHist.meta,
+            }];
+        }
+
+        function ensureActiveRootTh1Selection(dataset = null, { reset = false } = {}) {
+            const rootHist = getRootHistogramDataset(dataset);
+            if (!rootHist || rootHist.meta?.dimension !== 1) {
+                if (!rootHist) {
+                    ACTIVE_ROOT_TH1_PATHS.clear();
+                    LAST_ROOT_TH1_DATASET_REF = null;
+                }
+                return;
+            }
+            const available = getAvailableRoot1DHistograms(rootHist);
+            const availablePaths = new Set(available.map((item) => String(item.path)));
+            const primaryPath = String(rootHist.meta?.object_path || rootHist.meta?.histogram_path || available[0]?.path || '');
+            if (reset || LAST_ROOT_TH1_DATASET_REF !== rootHist) {
+                LAST_ROOT_TH1_DATASET_REF = rootHist;
+                ACTIVE_ROOT_TH1_PATHS = new Set(primaryPath ? [primaryPath] : (available[0]?.path ? [String(available[0].path)] : []));
+                return;
+            }
+            for (const path of Array.from(ACTIVE_ROOT_TH1_PATHS)) {
+                if (!availablePaths.has(path)) ACTIVE_ROOT_TH1_PATHS.delete(path);
+            }
+        }
+
         function syncRootHistogramControls({ resetBinning = false } = {}) {
             if (resetBinning) ROOT_HISTOGRAM_AXES_SWAPPED = false;
             const dataset = getRootHistogramDataset();
+            ensureActiveRootTh1Selection(dataset, { reset: resetBinning });
             const axes = dataset && ROOT_HISTOGRAM_AXES_SWAPPED && dataset.meta.dimension === 2
                 ? dataset.meta.axes.slice().reverse() : dataset?.meta.axes;
             const wasHistogram = document.body.classList.contains('has-root-histogram');
@@ -13126,9 +13368,12 @@
             document.body.classList.toggle('has-root-histogram', !!dataset);
             const notice = document.getElementById('rootHistogramNotice');
             if (notice) {
+                const recoveryMessage = dataset ? getRootHistogramRecoveryMessage(dataset.meta) : '';
                 notice.hidden = !dataset;
                 notice.textContent = dataset
-                    ? 'Saved ROOT histogram: enable Rebin, choose fewer bins, then Render to merge whole bins in the displayed range. Uncheck Rebin to restore native bins. Event filters are unavailable.'
+                    ? (recoveryMessage
+                        ? recoveryMessage + ' Rebin can merge the loaded bins further. Event filters are unavailable.'
+                        : 'Saved ROOT histogram: enable Rebin, choose fewer bins, then Render to merge whole bins in the displayed range. Uncheck Rebin to restore native bins. Event filters are unavailable.')
                         + (dataset.meta.dimension === 2 && dataset.meta.has_negative_bins ? ' Log Z is unavailable because some bins have negative contents.' : '')
                         + (dataset.meta.dimension === 1 && (dataset.meta.has_negative_bins || !(dataset.meta.integral > 0))
                             ? ' Probability normalization is unavailable for signed or zero-sum contents; raw running sums remain available.' : '')
@@ -13161,6 +13406,7 @@
             }
             ['binsX', 'binsY'].forEach((id, index) => {
                 const control = document.getElementById(id);
+                const axisName = index ? 'Y' : 'X';
                 const nativeBins = (axes[index] || axes[0]).bin_count;
                 control.min = '1';
                 control.max = String(nativeBins);
@@ -13168,6 +13414,25 @@
                 delete control.dataset.rawValue;
                 control.disabled = !rebin.checked;
                 if (resetBinning || !rebin.checked) control.value = nativeBins;
+
+                if (!control.__rootClampBound) {
+                    control.__rootClampBound = true;
+                    const validateAndClamp = () => {
+                        const currentDataset = getRootHistogramDataset();
+                        if (!currentDataset) return;
+                        const currentAxes = ROOT_HISTOGRAM_AXES_SWAPPED && currentDataset.meta.dimension === 2
+                            ? currentDataset.meta.axes.slice().reverse() : currentDataset.meta.axes;
+                        const maxAllowed = (currentAxes[index] || currentAxes[0]).bin_count;
+                        const val = parseInt(control.value, 10);
+                        if (Number.isFinite(val) && val > maxAllowed) {
+                            control.value = String(maxAllowed);
+                            const resolution = currentDataset.meta.import_rebin ? 'loaded' : 'native';
+                            setHistogramMeta(`Bins ${axisName} exceeds the ${resolution} resolution of this ROOT histogram (${maxAllowed} bins). Clamped to maximum: ${maxAllowed}. Saved histogram bins cannot be subdivided without raw event data.`);
+                        }
+                    };
+                    control.addEventListener('input', validateAndClamp);
+                    control.addEventListener('change', validateAndClamp);
+                }
             });
             setMode(mode);
             summarizeSelection();
@@ -13311,7 +13576,9 @@
                 notes: [
                     `Displayed bin sum: ${integral}; original histogram bin sum: ${dataset.meta.integral}; ROOT entries: ${dataset.meta.entry_count}; flow-bin sum: ${dataset.meta.flow_integral} (not plotted).`,
                     'Exact whole-bin merging: contents and variances are summed, not interpolated. Boundary bins are included whole; range edges snap outward to native edges.',
-                    'Statistics use the original native bin centers in the included range, not the merged bin centers; they do not recover event-level moments.',
+                    dataset.meta.import_rebin
+                        ? 'Statistics after further rebinning use the centers of the bins loaded into SciPlotter.'
+                        : 'Statistics use the original native bin centers in the included range, not the merged bin centers; they do not recover event-level moments.',
                     ...plans.map((plan, index) => `${index ? 'Y' : 'X'}: ${plan.axis.bin_count} displayed bins from ${plan.axis.min} to ${plan.axis.max}.`
                         + (plan.axis.bin_count < plan.requestedBins ? ` Requested ${plan.requestedBins}; limited to available native bins in this range.` : '')),
                     ...dataset.notes.filter((note) => !note.startsWith('ROOT entries:') && !note.startsWith('Native bin edges and contents')),
@@ -13432,6 +13699,7 @@
                 cumulative = false,
                 showlegend = true,
                 nativeHistogram = false,
+                style1d = 'columns',
             } = options;
             if (!Array.isArray(counts) || !Array.isArray(edges) || edges.length !== counts.length + 1) return null;
             const numericCounts = counts.map((value) => nativeHistogram ? Number(value) : (Number(value) || 0));
@@ -13470,19 +13738,61 @@
                 throw new RangeError('Displayed values exceed the numeric range; change normalization or binning.');
             }
 
+            const baseCustomdata = nativeHistogram
+                ? edgePairs.map((pair, index) => [...pair, numericCounts[index]])
+                : edgePairs;
+            const hovertemplate = nativeHistogram
+                ? ('Bin %{customdata[0]:.6g} to %{customdata[1]:.6g}'
+                    + '<br>Bin content %{customdata[2]}<br>Displayed value ' + (orientation === 'h' ? '%{x}' : '%{y}') + '<extra></extra>')
+                : (orientation === 'h'
+                    ? 'Bin %{customdata[0]:.6g} to %{customdata[1]:.6g}<br>Value %{x}<extra></extra>'
+                    : 'Bin %{customdata[0]:.6g} to %{customdata[1]:.6g}<br>Value %{y}<extra></extra>');
+
+            if (style1d === 'line') {
+                const stepCoords = [];
+                const stepMeasures = [];
+                const stepCustomdata = [];
+                if (edgePairs.length > 0) {
+                    stepCoords.push(edgePairs[0][0]);
+                    stepMeasures.push(0);
+                    stepCustomdata.push(baseCustomdata[0]);
+                    for (let index = 0; index < edgePairs.length; index++) {
+                        const pair = edgePairs[index];
+                        const val = measure[index];
+                        const cd = baseCustomdata[index];
+                        stepCoords.push(pair[0], pair[1]);
+                        stepMeasures.push(val, val);
+                        stepCustomdata.push(cd, cd);
+                    }
+                    const lastIdx = edgePairs.length - 1;
+                    stepCoords.push(edgePairs[lastIdx][1]);
+                    stepMeasures.push(0);
+                    stepCustomdata.push(baseCustomdata[lastIdx]);
+                }
+                return {
+                    type: 'scatter',
+                    mode: 'lines',
+                    name,
+                    opacity,
+                    showlegend,
+                    orientation: orientation === 'h' ? 'h' : 'v',
+                    line: { color, width: 2 },
+                    x: orientation === 'h' ? stepMeasures : stepCoords,
+                    y: orientation === 'h' ? stepCoords : stepMeasures,
+                    customdata: stepCustomdata,
+                    hovertemplate,
+                };
+            }
+
             const trace = {
                 type: 'bar',
                 name,
                 opacity,
                 showlegend,
                 marker: { color },
-                customdata: nativeHistogram ? edgePairs.map((pair, index) => [...pair, numericCounts[index]]) : edgePairs,
-                hovertemplate: orientation === 'h'
-                    ? 'Bin %{customdata[0]:.6g} to %{customdata[1]:.6g}<br>Value %{x}<extra></extra>'
-                    : 'Bin %{customdata[0]:.6g} to %{customdata[1]:.6g}<br>Value %{y}<extra></extra>',
+                customdata: baseCustomdata,
+                hovertemplate,
             };
-            if (nativeHistogram) trace.hovertemplate = 'Bin %{customdata[0]:.6g} to %{customdata[1]:.6g}'
-                + '<br>Bin content %{customdata[2]}<br>Displayed value ' + (orientation === 'h' ? '%{x}' : '%{y}') + '<extra></extra>';
             if (orientation === 'h') {
                 trace.orientation = 'h';
                 trace.x = measure;
@@ -13649,31 +13959,57 @@
                 });
                 if (options.autoscaleOnRender && !PRESERVE_ON_NEXT_RENDER && (options.forceAutoX || options.forceAutoY)) {
                     el.__skipAutorangeClear = 0;
-                    await applyHistogramAutofit(el, { fitX: options.forceAutoX, fitY: options.forceAutoY });
+                    await applyHistogramAutofit(el, {
+                        fitX: options.forceAutoX, fitY: options.forceAutoY, includeBinEdges: options.rebinOnRender,
+                    });
                 }
                 PRESERVE_ON_NEXT_RENDER = false;
             };
 
             if (options.mode === '1d') {
-                const seriesList = Array.isArray(aggregate.histogram?.series)
+                const hasSeriesArray = Array.isArray(aggregate.histogram?.series);
+                const seriesList = hasSeriesArray
                     ? aggregate.histogram.series.filter((series) => Array.isArray(series?.counts) && Array.isArray(series?.edges))
                     : null;
+                const emptyOverlay = !!aggregate.meta?.empty_overlay || (hasSeriesArray && seriesList.length === 0);
                 const overlayUsed = aggregate.meta?.merge_channels === false;
                 const grayOutUsed = !!aggregate.meta?.gray_out_1d;
                 const traces = [];
 
-                if (seriesList && seriesList.length) {
+                if (!options.rootHistogram && seriesList) {
                     for (const series of seriesList) {
+                        if (String(series?.bucket || '') === 'channel' && series?.label) {
+                            const countVal = Number(series?.stats?.count);
+                            if (Number.isFinite(countVal)) LAST_1D_CHANNEL_COUNTS.set(String(series.label), countVal);
+                        }
+                    }
+                }
+
+                if (emptyOverlay) {
+                    // Render empty 1D frame when all histograms are toggled off in Legend
+                } else if (seriesList && seriesList.length) {
+                    const isLineStyle = options.style1d === 'line';
+                    for (const [seriesIndex, series] of seriesList.entries()) {
                         const bucket = String(series?.bucket || 'selected');
                         const label = String(series?.label || bucket || 'selected');
+                        const traceColor = series?.color || (
+                            bucket === 'filtered'
+                                ? '#c4c4c4'
+                                : (bucket === 'channel' ? getChannelColor(label, seriesIndex) : options.plot1dColor)
+                        );
+                        const traceOpacity = isLineStyle
+                            ? (bucket === 'filtered' ? 0.65 : 1)
+                            : (bucket === 'filtered' ? 0.55 : (bucket === 'channel' ? (seriesList.length > 1 ? 0.65 : 0.9) : (grayOutUsed ? 0.85 : 1)));
                         const trace = buildPreComputed1DTrace(series.counts, series.edges, {
                             orientation: options.orientation,
-                            color: bucket === 'filtered' ? '#c4c4c4' : (bucket === 'channel' ? getChannelColor(label) : options.plot1dColor),
-                            opacity: bucket === 'filtered' ? 0.55 : (bucket === 'channel' ? 0.65 : (grayOutUsed ? 0.85 : 1)),
+                            color: traceColor,
+                            opacity: traceOpacity,
                             histnorm: options.histnorm,
                             cumulative: options.cumulative,
                             name: bucket === 'selected' ? 'selected' : label,
-                            showlegend: bucket !== 'selected' || overlayUsed,
+                            showlegend: false,
+                            nativeHistogram: !!options.rootHistogram,
+                            style1d: options.style1d || 'columns',
                         });
                         if (!trace) {
                             setHistogramMeta('Exact backend aggregation returned an invalid grouped 1D histogram.', null, selectionPlaceholder);
@@ -13691,6 +14027,7 @@
                         name: 'selected',
                         showlegend: false,
                         nativeHistogram: !!options.rootHistogram,
+                        style1d: options.style1d || 'columns',
                     });
                     if (!trace) {
                         setHistogramMeta('Exact backend aggregation returned an invalid 1D histogram.', null, selectionPlaceholder);
@@ -13706,6 +14043,7 @@
                         yaxis: { title: isDtFeature(options.xKey) ? 'Δt (ns)' : options.xKey },
                         bargap: 0.02,
                         barmode: overlayUsed ? 'overlay' : (grayOutUsed ? 'stack' : 'relative'),
+                        showlegend: false,
                         margin: { t: HISTOGRAM_LAYOUT_TOP_MARGIN },
                         uirevision: 'keep',
                     }
@@ -13715,6 +14053,7 @@
                         yaxis: { title: options.histnorm || 'Count' },
                         bargap: 0.02,
                         barmode: overlayUsed ? 'overlay' : (grayOutUsed ? 'stack' : 'relative'),
+                        showlegend: false,
                         margin: { t: HISTOGRAM_LAYOUT_TOP_MARGIN },
                         uirevision: 'keep',
                     };
@@ -13732,16 +14071,26 @@
                     layout.yaxis.autorange = false;
                 }
                 await bindRenderedPlot(traces, layout);
-                if (seriesList && seriesList.length) {
+                if (emptyOverlay) {
+                    setHistogramMeta('No histograms selected in Legend. Toggle one or more histograms on to display.', null, selectionPlaceholder);
+                } else if (seriesList && seriesList.length) {
                     const noteLines = [sourceNote].concat(Array.isArray(aggregate.notes) ? aggregate.notes : []);
                     if (overlayUsed) {
-                        const parts = seriesList
-                            .filter((series) => String(series?.bucket || '') === 'channel')
-                            .map((series) => `${String(series.label || 'channel')} n=${formatMetaCount(Number(series?.stats?.count))}`);
-                        let line = `Overlay channels: ${parts.join(', ')} (total N=${formatMetaCount(Number(aggregate.meta?.selected_count))})`;
-                        const filteredCount = Number(aggregate.meta?.filtered_count) || 0;
-                        if (grayOutUsed && filteredCount > 0) line += `; filtered N=${formatMetaCount(filteredCount)}`;
-                        setHistogramMeta([line].concat(noteLines.filter(Boolean)).join('\n'), null, selectionPlaceholder);
+                        const channelSeries = seriesList.filter((series) => String(series?.bucket || '') === 'channel');
+                        if (options.rootHistogram && channelSeries.length <= 4) {
+                            setHistogramMeta(buildStatsMetaPayload(
+                                channelSeries.map((series) => buildStatsSeriesFromExactPayload(String(series.label || 'histogram'), series.stats)),
+                                noteLines,
+                            ), null, selectionPlaceholder);
+                        } else {
+                            const parts = channelSeries
+                                .map((series) => `${String(series.label || 'channel')} n=${formatMetaCount(Number(series?.stats?.count))}`);
+                            const prefix = options.rootHistogram ? 'Overlay histograms' : 'Overlay channels';
+                            let line = `${prefix}: ${parts.join(', ')} (total N=${formatMetaCount(Number(aggregate.meta?.selected_count))})`;
+                            const filteredCount = Number(aggregate.meta?.filtered_count) || 0;
+                            if (grayOutUsed && filteredCount > 0) line += `; filtered N=${formatMetaCount(filteredCount)}`;
+                            setHistogramMeta([line].concat(noteLines.filter(Boolean)).join('\n'), null, selectionPlaceholder);
+                        }
                     } else if (grayOutUsed) {
                         const selectedCount = Number(aggregate.meta?.selected_count) || 0;
                         const filteredCount = Number(aggregate.meta?.filtered_count) || 0;
@@ -13772,10 +14121,11 @@
             const colorbarX = 1.02;
             const rawMatrix = projectionGrid.matrix;
             const displayMatrix = options.logZ ? transformHistogram2DMatrixForLog(rawMatrix) : rawMatrix;
+            const useBinEdges = options.rootHistogram || (options.rebinOnRender && options.autoscaleOnRender);
             const trace = {
                 type: 'heatmap',
-                x: options.rootHistogram ? projectionGrid.xEdges : projectionGrid.xCenters,
-                y: options.rootHistogram ? projectionGrid.yEdges : projectionGrid.yCenters,
+                x: useBinEdges ? projectionGrid.xEdges : projectionGrid.xCenters,
+                y: useBinEdges ? projectionGrid.yEdges : projectionGrid.yCenters,
                 z: displayMatrix,
                 coloraxis: 'coloraxis',
                 hovertemplate: histogram2dHoverTemplate(options.logZ),
@@ -14292,7 +14642,12 @@
             'C3': '#ff7f0e',  // orange
             'C4': '#2ca02c',  // green
         };
-        const CHANNEL_COLOR_PALETTE = ['#1f77b4','#ff7f0e','#2ca02c','#d62728','#9467bd','#8c564b','#e377c2','#7f7f7f','#bcbd22','#17becf'];
+        const CHANNEL_COLOR_PALETTE = [
+            '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
+            '#8c564b', '#e377c2', '#17becf', '#bcbd22', '#2563eb',
+            '#dc2626', '#059669', '#d97706', '#7c3aed', '#db2777',
+            '#0891b2', '#65a30d', '#4f46e5', '#ea580c', '#0d9488',
+        ];
         function hashStringStable(s) {
             let h = 2166136261; // FNV-1a 32-bit offset basis
             for (let i = 0; i < s.length; i++) {
@@ -14301,9 +14656,19 @@
             }
             return h >>> 0;
         }
-        function getChannelColor(ch) {
+        function getChannelColor(ch, fallbackIndex = null) {
             const key = String(ch || '').trim().toUpperCase();
             if (CHANNEL_FIXED_COLORS[key]) return CHANNEL_FIXED_COLORS[key];
+            const trailingNumber = key.match(/(\d+)$/);
+            if (trailingNumber) {
+                const numericIdx = parseInt(trailingNumber[1], 10);
+                if (Number.isFinite(numericIdx) && numericIdx >= 0) {
+                    return CHANNEL_COLOR_PALETTE[numericIdx % CHANNEL_COLOR_PALETTE.length];
+                }
+            }
+            if (Number.isInteger(fallbackIndex) && fallbackIndex >= 0) {
+                return CHANNEL_COLOR_PALETTE[fallbackIndex % CHANNEL_COLOR_PALETTE.length];
+            }
             const idx = hashStringStable(key) % CHANNEL_COLOR_PALETTE.length;
             return CHANNEL_COLOR_PALETTE[idx];
         }
@@ -15694,7 +16059,7 @@
             }
             const title = getProjectionStateTitle(state);
             popup.document.open();
-            popup.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>body{margin:0;padding:20px;font-family:Segoe UI,Arial,sans-serif;background:#f8fafc;color:#0f172a}#projection-popup-shell{width:1000px;margin:0 auto}#projection-popup-root{width:1000px;height:800px;border:1px solid #e5e7eb;border-radius:8px;background:#fff;box-shadow:0 12px 28px rgba(15,23,42,.12)}</style></head><body><div id="projection-popup-shell"><div id="projection-popup-root"></div></div></body></html>`);
+            popup.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>body{margin:0;padding:20px;font-family:Segoe UI,Arial,sans-serif;background:#f8fafc;color:#0f172a}#projection-popup-shell{width:800px;margin:0 auto}#projection-popup-root{width:800px;height:600px;border:1px solid #e5e7eb;border-radius:8px;background:#fff;box-shadow:0 12px 28px rgba(15,23,42,.12)}</style></head><body><div id="projection-popup-shell"><div id="projection-popup-root"></div></div></body></html>`);
             popup.document.close();
             const mount = popup.document.getElementById('projection-popup-root');
             if (!mount) return;
@@ -15844,11 +16209,17 @@
                 meta.appendChild(panelStack);
             }
 
+            let legendCard = panelStack.querySelector('[data-meta-card="legend"]');
             let mainCard = panelStack.querySelector('[data-meta-card="main"]');
             let selCard = panelStack.querySelector('[data-meta-card="selection"]');
             let projectionCard = panelStack.querySelector('[data-meta-card="projection"]');
-            if (!mainCard || !selCard || !projectionCard) {
+            if (!legendCard || !mainCard || !selCard || !projectionCard) {
                 panelStack.innerHTML = '';
+                legendCard = document.createElement('section');
+                legendCard.className = 'meta-card';
+                legendCard.dataset.metaCard = 'legend';
+                legendCard.innerHTML = '<div class="meta-card-title" style="display:flex;align-items:center;justify-content:space-between;gap:6px;"><span>Legend</span><div class="meta-legend-actions" data-meta-legend-actions="1"></div></div><div class="meta-card-body meta-legend-body" data-meta-body="legend"></div>';
+
                 mainCard = document.createElement('section');
                 mainCard.className = 'meta-card';
                 mainCard.dataset.metaCard = 'main';
@@ -15864,6 +16235,7 @@
                 projectionCard.dataset.metaCard = 'projection';
                 projectionCard.innerHTML = '<div class="meta-card-title">Projection</div><div class="meta-card-body projection-card-body" data-meta-body="projection"></div>';
 
+                panelStack.appendChild(legendCard);
                 panelStack.appendChild(mainCard);
                 panelStack.appendChild(selCard);
                 panelStack.appendChild(projectionCard);
@@ -15877,13 +16249,317 @@
                 meta,
                 panelHead,
                 panelStack,
+                legendCard,
                 mainCard,
                 selectionCard: selCard,
                 projectionCard,
+                legendActions: panelStack.querySelector('[data-meta-legend-actions="1"]'),
+                legendBody: panelStack.querySelector('[data-meta-body="legend"]'),
                 mainBody: panelStack.querySelector('[data-meta-body="main"]'),
                 selectionBody: panelStack.querySelector('[data-meta-body="selection"]'),
                 projectionBody: panelStack.querySelector('[data-meta-body="projection"]'),
             };
+        }
+
+        function renderHistogramLegendCard(refs = ensureHistogramMetaLayout()) {
+            if (!refs || !refs.legendCard || !refs.legendBody || !refs.legendActions) return;
+            const mode = document.querySelector('input[name="hist-type"]:checked')?.value || '2d';
+            if (mode !== '1d') {
+                refs.legendCard.hidden = true;
+                return;
+            }
+            refs.legendCard.hidden = false;
+            refs.legendActions.replaceChildren();
+            refs.legendBody.replaceChildren();
+
+            const rootHist = getRootHistogramDataset();
+            if (rootHist && rootHist.meta?.dimension === 1) {
+                ensureActiveRootTh1Selection(rootHist);
+                const available = getAvailableRoot1DHistograms(rootHist);
+                const allBtn = document.createElement('button');
+                allBtn.type = 'button';
+                allBtn.className = 'meta-legend-action-btn';
+                allBtn.textContent = 'All';
+                allBtn.title = 'Show all 1D histograms in this ROOT file';
+                allBtn.disabled = available.length === 0 || ACTIVE_ROOT_TH1_PATHS.size === available.length;
+                allBtn.addEventListener('click', async () => {
+                    ACTIVE_ROOT_TH1_PATHS = new Set(available.map((item) => String(item.path)));
+                    captureCurrentRanges();
+                    summarizeSelection();
+                    await renderHistogram();
+                });
+
+                const noneBtn = document.createElement('button');
+                noneBtn.type = 'button';
+                noneBtn.className = 'meta-legend-action-btn';
+                noneBtn.textContent = 'None';
+                noneBtn.title = 'Hide all histograms';
+                noneBtn.disabled = ACTIVE_ROOT_TH1_PATHS.size === 0;
+                noneBtn.addEventListener('click', async () => {
+                    ACTIVE_ROOT_TH1_PATHS.clear();
+                    captureCurrentRanges();
+                    summarizeSelection();
+                    await renderHistogram();
+                });
+
+                refs.legendActions.appendChild(allBtn);
+                refs.legendActions.appendChild(noneBtn);
+
+                const modeBar = document.createElement('div');
+                modeBar.className = 'meta-legend-mode-bar';
+                modeBar.innerHTML = `<span>ROOT TH1 Series</span><span>${ACTIVE_ROOT_TH1_PATHS.size} / ${available.length} active</span>`;
+                refs.legendBody.appendChild(modeBar);
+
+                const list = document.createElement('div');
+                list.className = 'meta-legend-list';
+
+                if (available.length > 6) {
+                    const searchInput = document.createElement('input');
+                    searchInput.type = 'search';
+                    searchInput.className = 'meta-legend-search';
+                    searchInput.placeholder = 'Filter histograms…';
+                    searchInput.value = LEGEND_CARD_SEARCH_QUERY;
+                    searchInput.addEventListener('input', () => {
+                        LEGEND_CARD_SEARCH_QUERY = searchInput.value;
+                        const q = LEGEND_CARD_SEARCH_QUERY.trim().toLowerCase();
+                        Array.from(list.querySelectorAll('.meta-legend-item')).forEach((row) => {
+                            const text = String(row.dataset.legendFilterText || '');
+                            row.hidden = !!q && !text.includes(q);
+                        });
+                    });
+                    refs.legendBody.appendChild(searchInput);
+                }
+
+                const useMultiColors = available.length > 1 || ACTIVE_ROOT_TH1_PATHS.size > 1;
+                const q = LEGEND_CARD_SEARCH_QUERY.trim().toLowerCase();
+                available.forEach((item, idx) => {
+                    const path = String(item.path);
+                    const labelText = String(item.label || path);
+                    const isChecked = ACTIVE_ROOT_TH1_PATHS.has(path);
+                    const swatchColor = useMultiColors
+                        ? getChannelColor(labelText, idx)
+                        : getHistogramOneDimensionalPlotColor();
+                    const countVal = Number(item.stats?.count ?? item.meta?.integral);
+
+                    const row = document.createElement('label');
+                    row.className = `meta-legend-item${isChecked ? '' : ' is-off'}`;
+                    row.dataset.legendFilterText = `${labelText.toLowerCase()} ${path.toLowerCase()}`;
+                    if (q && !row.dataset.legendFilterText.includes(q)) row.hidden = true;
+
+                    const cb = document.createElement('input');
+                    cb.type = 'checkbox';
+                    cb.className = 'meta-legend-cb';
+                    cb.checked = isChecked;
+                    cb.addEventListener('change', async () => {
+                        if (cb.checked) ACTIVE_ROOT_TH1_PATHS.add(path);
+                        else ACTIVE_ROOT_TH1_PATHS.delete(path);
+                        captureCurrentRanges();
+                        summarizeSelection();
+                        await renderHistogram();
+                    });
+
+                    const swatch = document.createElement('span');
+                    swatch.className = `meta-legend-swatch${getHistogram1DStyle() === 'line' ? ' is-line' : ''}`;
+                    swatch.style.background = swatchColor;
+
+                    const labelEl = document.createElement('span');
+                    labelEl.className = 'meta-legend-label';
+                    labelEl.textContent = labelText;
+                    labelEl.title = item.title ? `${path} — ${item.title}` : path;
+
+                    const countEl = document.createElement('span');
+                    countEl.className = 'meta-legend-count';
+                    countEl.textContent = Number.isFinite(countVal) ? `n=${formatMetaCount(countVal)}` : '';
+
+                    row.appendChild(cb);
+                    row.appendChild(swatch);
+                    row.appendChild(labelEl);
+                    row.appendChild(countEl);
+                    list.appendChild(row);
+                });
+
+                refs.legendBody.appendChild(list);
+                return;
+            }
+
+            const channelInputs = getChannelInputs();
+            const mergeCheckbox = document.getElementById('mergeChannels1d');
+            const xKey = document.getElementById('axis-x')?.value || '';
+            const canOverlay = channelInputs.length > 0 && !isDtFeature(xKey);
+            const isOverlay = canOverlay && mergeCheckbox ? !mergeCheckbox.checked : false;
+
+            if (channelInputs.length > 0) {
+                const checkedCount = channelInputs.filter((input) => input.checked).length;
+                const allBtn = document.createElement('button');
+                allBtn.type = 'button';
+                allBtn.className = 'meta-legend-action-btn';
+                allBtn.textContent = 'All';
+                allBtn.title = 'Select all channels';
+                allBtn.disabled = checkedCount === channelInputs.length;
+                allBtn.addEventListener('click', async () => {
+                    await setAllChannelSelections(true);
+                });
+
+                const noneBtn = document.createElement('button');
+                noneBtn.type = 'button';
+                noneBtn.className = 'meta-legend-action-btn';
+                noneBtn.textContent = 'None';
+                noneBtn.title = 'Clear all channels';
+                noneBtn.disabled = checkedCount === 0;
+                noneBtn.addEventListener('click', async () => {
+                    await setAllChannelSelections(false);
+                });
+
+                refs.legendActions.appendChild(allBtn);
+                refs.legendActions.appendChild(noneBtn);
+            }
+
+            if (canOverlay && mergeCheckbox) {
+                const modeBar = document.createElement('div');
+                modeBar.className = 'meta-legend-mode-bar';
+                const modeTitle = document.createElement('span');
+                modeTitle.className = 'meta-legend-mode-label';
+                modeTitle.textContent = 'Overlay channels';
+
+                const toggleWrap = document.createElement('label');
+                toggleWrap.className = 'meta-overlay-toggle';
+                toggleWrap.title = 'Overlay separate colored 1D histograms per channel';
+                const toggleInput = document.createElement('input');
+                toggleInput.type = 'checkbox';
+                toggleInput.checked = isOverlay;
+                const toggleTrack = document.createElement('span');
+                toggleTrack.className = 'meta-overlay-toggle-track';
+                toggleWrap.appendChild(toggleInput);
+                toggleWrap.appendChild(toggleTrack);
+
+                toggleInput.addEventListener('change', async () => {
+                    mergeCheckbox.checked = !toggleInput.checked;
+                    captureCurrentRanges();
+                    summarizeSelection();
+                    await renderHistogram();
+                });
+
+                modeBar.appendChild(modeTitle);
+                modeBar.appendChild(toggleWrap);
+                refs.legendBody.appendChild(modeBar);
+            }
+
+            const list = document.createElement('div');
+            list.className = 'meta-legend-list';
+
+            if (channelInputs.length > 6) {
+                const searchInput = document.createElement('input');
+                searchInput.type = 'search';
+                searchInput.className = 'meta-legend-search';
+                searchInput.placeholder = 'Filter channels…';
+                searchInput.value = LEGEND_CARD_SEARCH_QUERY;
+                searchInput.addEventListener('input', () => {
+                    LEGEND_CARD_SEARCH_QUERY = searchInput.value;
+                    const q = LEGEND_CARD_SEARCH_QUERY.trim().toLowerCase();
+                    Array.from(list.querySelectorAll('.meta-legend-item')).forEach((row) => {
+                        const text = String(row.dataset.legendFilterText || '');
+                        row.hidden = !!q && !text.includes(q);
+                    });
+                });
+                refs.legendBody.appendChild(searchInput);
+            }
+
+            if (!isOverlay) {
+                const mergedRow = document.createElement('div');
+                mergedRow.className = 'meta-legend-item';
+                mergedRow.style.gridTemplateColumns = '12px minmax(0, 1fr) auto';
+                const swatch = document.createElement('span');
+                swatch.className = `meta-legend-swatch${getHistogram1DStyle() === 'line' ? ' is-line' : ''}`;
+                swatch.style.background = getHistogramOneDimensionalPlotColor();
+                const labelEl = document.createElement('span');
+                labelEl.className = 'meta-legend-label';
+                labelEl.textContent = channelInputs.length ? 'Selected (merged channels)' : (xKey || 'Selected');
+                const countEl = document.createElement('span');
+                countEl.className = 'meta-legend-count';
+                countEl.textContent = channelInputs.length
+                    ? `${channelInputs.filter((i) => i.checked).length}/${channelInputs.length} ch`
+                    : 'active';
+                mergedRow.appendChild(swatch);
+                mergedRow.appendChild(labelEl);
+                mergedRow.appendChild(countEl);
+                list.appendChild(mergedRow);
+            }
+
+            const q = LEGEND_CARD_SEARCH_QUERY.trim().toLowerCase();
+            channelInputs.forEach((input, idx) => {
+                const rawValue = String(input.value ?? '');
+                const optionLabel = input.closest('label.channel-selector-option')?.dataset?.channelLabel || rawValue;
+                const isChecked = !!input.checked;
+                const swatchColor = getChannelColor(rawValue, idx);
+                const countVal = LAST_1D_CHANNEL_COUNTS.get(rawValue);
+
+                const row = document.createElement('label');
+                row.className = `meta-legend-item${isChecked ? '' : ' is-off'}`;
+                row.dataset.legendFilterText = `${optionLabel.toLowerCase()} ${rawValue.toLowerCase()}`;
+                if (q && !row.dataset.legendFilterText.includes(q)) row.hidden = true;
+
+                const cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.className = 'meta-legend-cb';
+                cb.checked = isChecked;
+                cb.addEventListener('change', async () => {
+                    input.checked = cb.checked;
+                    const opt = input.closest('label.channel-selector-option');
+                    if (opt) opt.dataset.selected = input.checked ? 'true' : 'false';
+                    await handleChannelSelectionChanged();
+                });
+
+                const swatch = document.createElement('span');
+                swatch.className = `meta-legend-swatch${getHistogram1DStyle() === 'line' ? ' is-line' : ''}`;
+                swatch.style.background = isOverlay ? swatchColor : getHistogramOneDimensionalPlotColor();
+
+                const labelEl = document.createElement('span');
+                labelEl.className = 'meta-legend-label';
+                labelEl.textContent = optionLabel;
+                labelEl.title = `Channel ${optionLabel}`;
+
+                const countEl = document.createElement('span');
+                countEl.className = 'meta-legend-count';
+                countEl.textContent = isChecked && Number.isFinite(countVal)
+                    ? `n=${formatMetaCount(countVal)}`
+                    : (isChecked ? 'on' : 'off');
+
+                row.appendChild(cb);
+                row.appendChild(swatch);
+                row.appendChild(labelEl);
+                row.appendChild(countEl);
+                list.appendChild(row);
+            });
+
+            const grayCheckbox = document.getElementById('grayOut1d');
+            if (grayCheckbox && grayCheckbox.checked) {
+                const grayRow = document.createElement('label');
+                grayRow.className = 'meta-legend-item';
+                const cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.className = 'meta-legend-cb';
+                cb.checked = true;
+                cb.addEventListener('change', async () => {
+                    grayCheckbox.checked = cb.checked;
+                    await rerenderHistogramFromUpdate();
+                });
+                const swatch = document.createElement('span');
+                swatch.className = `meta-legend-swatch${getHistogram1DStyle() === 'line' ? ' is-line' : ''}`;
+                swatch.style.background = '#c4c4c4';
+                const labelEl = document.createElement('span');
+                labelEl.className = 'meta-legend-label';
+                labelEl.textContent = 'Filtered (out-of-range)';
+                const countEl = document.createElement('span');
+                countEl.className = 'meta-legend-count';
+                countEl.textContent = 'gray';
+                grayRow.appendChild(cb);
+                grayRow.appendChild(swatch);
+                grayRow.appendChild(labelEl);
+                grayRow.appendChild(countEl);
+                list.appendChild(grayRow);
+            }
+
+            refs.legendBody.appendChild(list);
         }
 
         function renderHistogramMeta() {
@@ -15893,6 +16569,7 @@
             const selectionContent = normalizeMetaContent(LAST_META_SELECTION);
             const selectionPlaceholder = String(normalizeMetaContent(LAST_META_SELECTION_PLACEHOLDER) || '').trim() || 'Use lasso/select on the 2D plot to inspect a subset.';
 
+            renderHistogramLegendCard(refs);
             renderMetaBody(refs.mainBody, mainContent, 'No statistics available yet.');
             renderMetaBody(refs.selectionBody, selectionContent, selectionPlaceholder);
             refs.mainCard.classList.toggle('is-empty', !hasMetaContent(mainContent));
@@ -16056,6 +16733,14 @@
             return [start, end];
         }
 
+        function getHistogramDataRange(range, axisType, binEdges = []) {
+            if (axisType !== 'log') return getFiniteHistogramRange(range);
+            // Recover exact native edges when converting a fitted log range back to data units.
+            return getFiniteHistogramRange(range?.map((value) =>
+                binEdges.find((edge) => edge > 0 && Math.log10(edge) === value) ?? 10 ** value
+            ));
+        }
+
         function isRebinOnRenderEnabled() {
             return !!document.getElementById('rebinOnRender')?.checked;
         }
@@ -16085,8 +16770,7 @@
         }
 
         function shouldPreserveHistogramRanges(forcePreserve = false) {
-            if (forcePreserve || isRebinOnRenderEnabled()) return true;
-            return !document.getElementById('autoscaleOnRender')?.checked;
+            return forcePreserve || !document.getElementById('autoscaleOnRender')?.checked;
         }
 
         async function rerenderHistogramFromUpdate({ preserveRanges = false, captureRanges = true, summarize = true } = {}) {
@@ -16697,6 +17381,13 @@
             select.value = DATA_IMPORTER_STATE.rootHistogramPath || DATA_IMPORTER_STATE.rootTreePath || '';
         }
 
+        function getRootHistogramRecoveryMessage(histogram) {
+            const original = histogram.import_rebin?.native_bin_counts;
+            if (!original) return '';
+            const format = (counts) => counts.map((count) => count.toLocaleString()).join(' × ');
+            return `Recovered oversized ROOT histogram. Merged ${format(original)} native bins into ${format(histogram.axes.map((axis) => axis.bin_count))} display bins.`;
+        }
+
         function renderDataImporterPreview(errorMessage = '') {
             const preview = DATA_IMPORTER_STATE.preview;
             const previewTitle = document.getElementById('dataImporterPreviewTitle');
@@ -16776,6 +17467,7 @@
             const selectedHistogram = preview.selected_histogram || null;
             const channelDetection = syncDataImporterChannelFieldControls(selectedTree?.headers || []);
             if (selectedHistogram) {
+                const recoveryMessage = getRootHistogramRecoveryMessage(selectedHistogram);
                 if (previewTitle) previewTitle.textContent = selectedHistogram.title || selectedHistogram.path;
                 renderDataImporterMetaChips([
                     `${histogramOptions.length} saved histogram${histogramOptions.length === 1 ? '' : 's'}`,
@@ -16788,11 +17480,11 @@
                     `Object: ${selectedHistogram.path}`,
                     ...selectedHistogram.axes.map((axis, index) => `${index ? 'Y' : 'X'}: ${axis.title || 'Untitled axis'}; ${axis.bin_count} bins; ${axis.min} to ${axis.max}`),
                     `Flow-bin sum (not plotted): ${selectedHistogram.flow_integral}`,
-                    'Native bin edges, contents and variances are retained. No event rows are reconstructed.',
+                    recoveryMessage ? 'Whole-bin sums are preserved. Display resolution is reduced.' : 'Native bin edges, contents and variances are retained. No event rows are reconstructed.',
                 ]);
                 if (card && structure) structure.appendChild(card);
                 if (structureSection) structureSection.hidden = false;
-                setDataImporterPreviewMessage('Load preserves every native bin. Reopen Load to choose another histogram in this file; Browse is only needed to change files.');
+                setDataImporterPreviewMessage(recoveryMessage || 'Load preserves every native bin. Reopen Load to choose another histogram in this file; Browse is only needed to change files.');
                 const samples = selectedHistogram.sample_bins || [];
                 if (sampleTitle) sampleTitle.textContent = `Nonempty bin preview (up to ${samples.length})`;
                 if (sampleSection) sampleSection.hidden = !samples.length;
@@ -17326,7 +18018,7 @@
             if (yRow) yRow.style.display = (mode === '2d') ? 'grid' : 'none';
             if (yFilterRow) yFilterRow.style.display = (mode === '2d') ? 'grid' : 'none';
             if (fFilterRow) fFilterRow.style.display = (!isC3) ? 'grid' : 'none';
-            if (c3AdvRow) c3AdvRow.style.display = isC3 ? 'flex' : 'none';
+            if (c3AdvRow) c3AdvRow.style.display = isC3 ? 'grid' : 'none';
 
             const mergeRow = document.getElementById('merge-row');
             if (mergeRow) {
@@ -17341,27 +18033,37 @@
             const binsYLabel = document.getElementById('binsy-label');
             const binsYInput = document.getElementById('binsY');
             const colorsSectionTitle = document.getElementById('colors-section-title');
+            const logRow = document.getElementById('log-row');
             const logZInput = document.getElementById('logZ');
+            const logZOption = document.getElementById('logZ-option');
+            const style1dRow = document.getElementById('style-1d-row');
+            const options1dRow = document.getElementById('options-1d-row');
+            const grayOut1dRow = document.getElementById('gray-out-1d-row');
             yRow.style.display = (mode === '2d') ? 'grid' : 'none';
             // Toggle 2D specific controls
             binsYLabel.style.display = (mode === '2d') ? 'block' : 'none';
             binsYInput.style.display = (mode === '2d') ? 'block' : 'none';
             binsRow.classList.toggle('control-canonical-row--double-split', mode === '2d');
+            binsRow.classList.toggle('is-single-bin', mode === '1d');
             document.getElementById('range-y-row').style.display = (mode === '2d') ? 'grid' : 'none';
             document.getElementById('plot-1d-color-row').style.display = (mode === '1d') ? 'grid' : 'none';
             document.getElementById('colorscale-row').style.display = (mode === '2d') ? 'grid' : 'none';
             document.getElementById('colorscale-toggles-row').style.display = (mode === '2d') ? 'grid' : 'none';
             document.getElementById('range-z-row').style.display = (mode === '2d') ? 'grid' : 'none';
             if (logZInput) logZInput.disabled = mode !== '2d';
+            if (logZOption) logZOption.style.display = (mode === '2d') ? 'inline-flex' : 'none';
+            if (logRow) logRow.classList.toggle('is-1d-mode', mode === '1d');
             if (colorsSectionTitle) colorsSectionTitle.textContent = mode === '1d' ? 'Color' : 'Colors (2D)';
             // 1D only controls
+            if (style1dRow) style1dRow.style.display = (mode === '1d') ? 'grid' : 'none';
             document.getElementById('orient-cum-row').style.display = (mode === '1d') ? 'grid' : 'none';
             document.getElementById('norm-row').style.display = (mode === '1d') ? 'grid' : 'none';
-            document.getElementById('gray-out-1d-row').style.display = (mode === '1d') ? 'grid' : 'none';
+            if (options1dRow) options1dRow.style.display = (mode === '1d') ? 'grid' : 'none';
+            if (grayOut1dRow) grayOut1dRow.style.display = (mode === '1d') ? 'inline-flex' : 'none';
             syncFeatureRowVisibility(mode);
             // Show Event_to_event_dt options only when in 1D and the synthetic feature is selected
             const xKey = document.getElementById('axis-x')?.value;
-            document.getElementById('dt-adv-row').style.display = (mode === '1d' && xKey === 'Event_to_event_dt') ? 'flex' : 'none';
+            document.getElementById('dt-adv-row').style.display = (mode === '1d' && xKey === 'Event_to_event_dt') ? 'grid' : 'none';
 
             // Update phase shift visibility based on mode and selected features
             const yKey = document.getElementById('axis-y')?.value;
@@ -17409,6 +18111,7 @@
                 binsYLabel.style.display = 'block';
                 binsYInput.style.display = 'block';
                 binsRow.classList.add('control-canonical-row--double-split');
+                binsRow.classList.remove('is-single-bin');
                 xRangeRow.style.display = 'grid';
                 yRangeRow.style.display = 'grid';
                 if (plotColorRow) plotColorRow.style.display = 'none';
@@ -17419,13 +18122,14 @@
             } else {
                 if (plotColorRow) plotColorRow.style.display = 'grid';
                 if (colorsSectionTitle) colorsSectionTitle.textContent = 'Color';
+                binsRow.classList.remove('control-canonical-row--double-split');
+                binsRow.classList.add('is-single-bin');
                 if (orient === 'h') {
                     // Data along Y axis
                     binsXLabel.style.display = 'none';
                     binsXInput.style.display = 'none';
                     binsYLabel.style.display = 'block';
                     binsYInput.style.display = 'block';
-                    binsRow.classList.remove('control-canonical-row--double-split');
                     xRangeRow.style.display = 'none';
                     yRangeRow.style.display = 'grid';
                     document.getElementById('colorscale-row').style.display = 'none';
@@ -17437,7 +18141,6 @@
                     binsXInput.style.display = 'block';
                     binsYLabel.style.display = 'none';
                     binsYInput.style.display = 'none';
-                    binsRow.classList.remove('control-canonical-row--double-split');
                     xRangeRow.style.display = 'grid';
                     yRangeRow.style.display = 'none';
                     document.getElementById('colorscale-row').style.display = 'none';
@@ -17894,6 +18597,7 @@
                 const histnorm = document.getElementById('histnorm')?.value || '';
                 const cumulative = !!document.getElementById('cumulative')?.checked;
                 const orientation = document.getElementById('orientation')?.value || 'v';
+                const style1d = getHistogram1DStyle();
                 const grayOut1d = !!document.getElementById('grayOut1d')?.checked;
                 const xMin = getStoredNumericValue('xMin');
                 const xMax = getStoredNumericValue('xMax');
@@ -17907,7 +18611,7 @@
                 const forceAutoX = autoscaleOnRender && !(Number.isFinite(xMin) && Number.isFinite(xMax));
                 const forceAutoY = autoscaleOnRender && !(Number.isFinite(yMin) && Number.isFinite(yMax));
                 // Lock layout ranges if we are preserving or autoscale is off
-                const lockRanges = rebinOnRender || (!autoscaleOnRender) || PRESERVE_ON_NEXT_RENDER;
+                const lockRanges = !autoscaleOnRender || PRESERVE_ON_NEXT_RENDER;
                 const logX = !!document.getElementById('logX')?.checked;
                 const logY = !!document.getElementById('logY')?.checked;
                 const colorscale = document.getElementById('colorscale')?.value || 'Viridis';
@@ -17933,23 +18637,85 @@
                         validateRootHistogramDisplay({ xMin, xMax, yMin, yMax, logX, logY,
                             ...(mode === '2d' ? { zMin, zMax, logZ } : {}) });
                         if (mode === '2d' && rootHistogram.meta.has_negative_bins && logZ) throw new RangeError('Log Z is unavailable for histograms with negative bin contents.');
-                        const orientationChanged = mode === '1d' && el.data?.some((trace) => trace.type === 'bar' && trace.orientation !== orientation);
+                        const orientationChanged = mode === '1d' && el.data?.some((trace) => (trace.type === 'bar' || trace.type === 'scatter') && trace.orientation && trace.orientation !== orientation);
                         const axesSwapped = mode === '2d' && !!el.__rootHistogramContext?.axes_swapped !== ROOT_HISTOGRAM_AXES_SWAPPED;
                         const previousAxisTypes = Object.fromEntries(['xaxis', 'yaxis'].map((axisName, index) => [
                             axisName, HISTOGRAM_HISTORY_IS_APPLYING ? ((index ? logY : logX) ? 'log' : 'linear')
                                 : el._fullLayout?.[axesSwapped ? (index ? 'xaxis' : 'yaxis') : axisName]?.type,
                         ]));
-                        const rangeForAxis = (min, max, range, axisName) => buildEffectiveRangeRequest(min, max,
-                            orientationChanged ? null : range?.map((value) => previousAxisTypes[axisName] === 'log' ? 10 ** value : value));
                         let view = buildRootHistogramAxisView(rootHistogram, ROOT_HISTOGRAM_AXES_SWAPPED);
+                        const rangeForAxis = (min, max, range, axisName) => {
+                            const axisIndex = mode === '2d' && axisName === 'yaxis' ? 1 : 0;
+                            const dataRange = orientationChanged ? null
+                                : getHistogramDataRange(range, previousAxisTypes[axisName], view.meta.axes[axisIndex].edges);
+                            return buildEffectiveRangeRequest(min, max, dataRange);
+                        };
+                        const rebinXRangeForRoot = mode === '1d' && orientation === 'h'
+                            ? rangeForAxis(yMin, yMax, rebinYRange, 'yaxis') : rangeForAxis(xMin, xMax, rebinXRange, 'xaxis');
                         if (rebinOnRender) {
                             view = buildRootHistogramRebinView(view, {
                                 binsX: Number(document.getElementById('binsX').value),
                                 binsY: Number(document.getElementById('binsY').value),
-                                xRange: mode === '1d' && orientation === 'h'
-                                    ? rangeForAxis(yMin, yMax, rebinYRange, 'yaxis') : rangeForAxis(xMin, xMax, rebinXRange, 'xaxis'),
+                                xRange: rebinXRangeForRoot,
                                 yRange: mode === '2d' ? rangeForAxis(yMin, yMax, rebinYRange, 'yaxis') : null,
                             });
+                        }
+                        if (mode === '1d') {
+                            ensureActiveRootTh1Selection(rootHistogram);
+                            const available1D = getAvailableRoot1DHistograms(rootHistogram);
+                            const activeEntries = available1D
+                                .map((item, idx) => ({ item, idx }))
+                                .filter(({ item }) => ACTIVE_ROOT_TH1_PATHS.has(String(item.path)));
+                            if (activeEntries.length === 0) {
+                                view = {
+                                    ...view,
+                                    histogram: { ...view.histogram, series: [] },
+                                    meta: { ...view.meta, merge_channels: false, empty_overlay: true },
+                                };
+                            } else if (available1D.length > 1 || activeEntries.length > 1) {
+                                const requestedBinsX = Number(document.getElementById('binsX').value);
+                                const builtSeries = [];
+                                let totalSelectedCount = 0;
+                                for (const { item, idx } of activeEntries) {
+                                    let itemView = {
+                                        ...rootHistogram,
+                                        histogram: item.histogram,
+                                        stats: item.stats,
+                                        notes: Array.isArray(item.notes) ? item.notes : [],
+                                        meta: item.meta,
+                                    };
+                                    if (rebinOnRender) {
+                                        const maxBinsForItem = Number(item.meta?.axes?.[0]?.bin_count) || requestedBinsX;
+                                        const safeBinsX = Math.max(1, Math.min(requestedBinsX, maxBinsForItem));
+                                        itemView = buildRootHistogramRebinView(itemView, {
+                                            binsX: safeBinsX,
+                                            binsY: 1,
+                                            xRange: rebinXRangeForRoot,
+                                            yRange: null,
+                                        });
+                                    }
+                                    const label = String(item.label || item.path);
+                                    const itemCount = Number(itemView.stats?.count ?? itemView.meta?.integral) || 0;
+                                    totalSelectedCount += itemCount;
+                                    builtSeries.push({
+                                        bucket: 'channel',
+                                        label,
+                                        color: getChannelColor(label, idx),
+                                        counts: itemView.histogram.counts,
+                                        edges: itemView.histogram.edges,
+                                        stats: itemView.stats,
+                                    });
+                                }
+                                view = {
+                                    ...view,
+                                    histogram: { ...view.histogram, series: builtSeries },
+                                    meta: {
+                                        ...view.meta,
+                                        merge_channels: false,
+                                        selected_count: totalSelectedCount,
+                                    },
+                                };
+                            }
                         }
                         view = { ...view, notes: view.notes.concat([
                             'Display adjustments do not modify the loaded bins or the ROOT file.',
@@ -17964,8 +18730,8 @@
                             mode,
                             xKey: view.meta.axes[0].title || 'X',
                             yKey: view.meta.axes[1]?.title || 'Y',
-                            histnorm, cumulative, orientation,
-                            xMin, xMax, yMin, yMax, autoscaleOnRender, forceAutoX, forceAutoY,
+                            histnorm, cumulative, orientation, style1d,
+                            xMin, xMax, yMin, yMax, autoscaleOnRender, rebinOnRender, forceAutoX, forceAutoY,
                             lockRanges: lockRanges && !orientationChanged,
                             logX, logY, logZ, colorscale, showContours, reverseColorscale,
                             effectiveZMin: Number.isFinite(zMin) ? zMin : Math.min(0, Number(nativeZMin) || 0),
@@ -17982,6 +18748,10 @@
                     return;
                 }
                 delete el.__rootHistogramContext;
+                const previousXType = HISTOGRAM_HISTORY_IS_APPLYING ? (logX ? 'log' : 'linear') : el._fullLayout?.xaxis?.type;
+                const previousYType = HISTOGRAM_HISTORY_IS_APPLYING ? (logY ? 'log' : 'linear') : el._fullLayout?.yaxis?.type;
+                const rebinDataXRange = getHistogramDataRange(rebinXRange, previousXType);
+                const rebinDataYRange = getHistogramDataRange(rebinYRange, previousYType);
                 const { headers, rows } = summaryDataset;
                 if (!headers.length || !rows.length) { setHistogramMeta('No summary data available.'); return; }
 
@@ -18031,8 +18801,9 @@
                             histnorm,
                             cumulative,
                             orientation,
-                            rebinXRange,
-                            rebinYRange,
+                            style1d,
+                            rebinXRange: rebinDataXRange,
+                            rebinYRange: rebinDataYRange,
                             mergeChannels,
                             grayOut1d,
                             xMin,
@@ -18044,6 +18815,7 @@
                             datasetPeriodNs,
                             c3WindowNs,
                             autoscaleOnRender,
+                            rebinOnRender,
                             forceAutoX,
                             forceAutoY,
                             lockRanges,
@@ -18253,6 +19025,9 @@
                         }
                     }
                     // Determine if we have data depending on overlay vs merge
+                    for (const [ch, arr] of perChanIn.entries()) {
+                        if (Array.isArray(arr)) LAST_1D_CHANNEL_COUNTS.set(String(ch), arr.length);
+                    }
                     let haveData;
                     if (overlayUsed) {
                         let total = 0; perChanIn.forEach(arr => { total += arr.length; });
@@ -18281,27 +19056,28 @@
                         layout = {
                             title: `${xKey}`,
                             xaxis: { title: histnorm || 'Count' }, yaxis: { title: isDtFeature(xKey) ? 'Δt (ns)' : xKey },
-                            bargap: 0.02, barmode: overlayUsed ? 'overlay' : (grayOut1d ? 'stack' : 'relative'), margin: { t: HISTOGRAM_LAYOUT_TOP_MARGIN }
+                            bargap: 0.02, barmode: overlayUsed ? 'overlay' : (grayOut1d ? 'stack' : 'relative'), showlegend: false, margin: { t: HISTOGRAM_LAYOUT_TOP_MARGIN }
                         };
                         // Align y-bins across both traces to ensure proper splitting
                         // Use only inVals for axis range calculation to prevent gray-out from affecting axis limits
                         const allVals = overlayUsed ? Array.from(perChanIn.values()).flat() : inVals.slice();
                         const stY = allVals.length > 0 ? stats(allVals) : null;
-                        const [yStart, yEnd] = resolveHistogramDomainBounds(yMin, yMax, rebinYRange, stY?.min, stY?.max);
+                        const [yStart, yEnd] = resolveHistogramDomainBounds(yMin, yMax, rebinDataYRange, stY?.min, stY?.max);
                         const ySize = (yEnd - yStart) / Math.max(1, binsY);
                         if (!overlayUsed) {
-                            if (shouldUsePreBinned1D(inVals.length)) {
+                            if (style1d === 'line' || shouldUsePreBinned1D(inVals.length)) {
                                 const trace = buildPreBinned1DTrace(inVals, {
                                     start: yStart,
                                     end: yEnd,
                                     bins: binsY,
                                     orientation: 'h',
                                     color: plot1dColor,
-                                    opacity: grayOut1d ? 0.85 : 1.0,
+                                    opacity: style1d === 'line' ? 1.0 : (grayOut1d ? 0.85 : 1.0),
                                     name: traceMain.name || 'selected',
                                     histnorm,
                                     cumulative,
                                     showlegend: !!traceMain.name,
+                                    style1d,
                                 });
                                 if (trace) traces.push(trace);
                             } else {
@@ -18313,8 +19089,8 @@
                             const entries = Array.from(perChanIn.entries()).sort((a,b)=> a[0].localeCompare(b[0], undefined, { numeric: true }));
                             for (const [ch, arr] of entries) {
                                 if (!arr.length) continue;
-                                const t = shouldUsePreBinned1D(arr.length)
-                                    ? buildPreBinned1DTrace(arr, { start: yStart, end: yEnd, bins: binsY, orientation: 'h', color: getChannelColor(ch), opacity: 0.65, name: ch, histnorm, cumulative })
+                                const t = (style1d === 'line' || shouldUsePreBinned1D(arr.length))
+                                    ? buildPreBinned1DTrace(arr, { start: yStart, end: yEnd, bins: binsY, orientation: 'h', color: getChannelColor(ch), opacity: style1d === 'line' ? 1 : 0.65, name: ch, histnorm, cumulative, style1d })
                                     : { type: 'histogram', name: ch, y: arr, nbinsy: binsY, orientation: 'h', marker: { color: getChannelColor(ch) }, opacity: 0.65 };
                                 if (!t) continue;
                                 if (t.type === 'histogram') {
@@ -18327,8 +19103,8 @@
                             }
                         }
                         if (grayOut1d && outVals.length) {
-                            const grayTrace = shouldUsePreBinned1D(outVals.length)
-                                ? buildPreBinned1DTrace(outVals, { start: yStart, end: yEnd, bins: binsY, orientation: 'h', color: '#c4c4c4', opacity: 0.55, name: 'filtered', histnorm, cumulative })
+                            const grayTrace = (style1d === 'line' || shouldUsePreBinned1D(outVals.length))
+                                ? buildPreBinned1DTrace(outVals, { start: yStart, end: yEnd, bins: binsY, orientation: 'h', color: '#c4c4c4', opacity: style1d === 'line' ? 0.65 : 0.55, name: 'filtered', histnorm, cumulative, style1d })
                                 : { type: 'histogram', name: 'filtered', y: outVals, nbinsy: binsY, orientation: 'h', marker: { color: '#c4c4c4' }, opacity: 0.55 };
                             if (grayTrace?.type === 'histogram') {
                                 if (histnorm) grayTrace.histnorm = histnorm;
@@ -18351,7 +19127,7 @@
                         layout = {
                             title: `${xKey}`,
                             xaxis: { title: isDtFeature(xKey) ? 'Δt (ns)' : xKey }, yaxis: { title: histnorm || 'Count' },
-                            bargap: 0.02, barmode: overlayUsed ? 'overlay' : (grayOut1d ? 'stack' : 'relative'), margin: { t: HISTOGRAM_LAYOUT_TOP_MARGIN }
+                            bargap: 0.02, barmode: overlayUsed ? 'overlay' : (grayOut1d ? 'stack' : 'relative'), showlegend: false, margin: { t: HISTOGRAM_LAYOUT_TOP_MARGIN }
                         };
                         // For Event_to_event_dt, derive theoretical bounds from dt range for stable bins
                         const allVals = overlayUsed ? Array.from(perChanIn.values()).flat() : ((xKey === 'Event_to_event_dt') ? (function () {
@@ -18391,24 +19167,25 @@
                         const [xStart, xEnd] = resolveHistogramDomainBounds(
                             xMin,
                             xMax,
-                            rebinXRange,
+                            rebinDataXRange,
                             dtDomain ? dtDomain[0] : stX?.min,
                             dtDomain ? dtDomain[1] : stX?.max,
                         );
                         const xSize = (xEnd - xStart) / Math.max(1, binsX);
                         if (!overlayUsed) {
-                            if (shouldUsePreBinned1D(inVals.length)) {
+                            if (style1d === 'line' || shouldUsePreBinned1D(inVals.length)) {
                                 const trace = buildPreBinned1DTrace(inVals, {
                                     start: xStart,
                                     end: xEnd,
                                     bins: binsX,
                                     orientation: 'v',
                                     color: plot1dColor,
-                                    opacity: grayOut1d ? 0.85 : 1.0,
+                                    opacity: style1d === 'line' ? 1.0 : (grayOut1d ? 0.85 : 1.0),
                                     name: traceMain.name || 'selected',
                                     histnorm,
                                     cumulative,
                                     showlegend: !!traceMain.name,
+                                    style1d,
                                 });
                                 if (trace) traces.push(trace);
                             } else {
@@ -18419,8 +19196,8 @@
                             const entries = Array.from(perChanIn.entries()).sort((a,b)=> a[0].localeCompare(b[0], undefined, { numeric: true }));
                             for (const [ch, arr] of entries) {
                                 if (!arr.length) continue;
-                                const t = shouldUsePreBinned1D(arr.length)
-                                    ? buildPreBinned1DTrace(arr, { start: xStart, end: xEnd, bins: binsX, orientation: 'v', color: getChannelColor(ch), opacity: 0.65, name: ch, histnorm, cumulative })
+                                const t = (style1d === 'line' || shouldUsePreBinned1D(arr.length))
+                                    ? buildPreBinned1DTrace(arr, { start: xStart, end: xEnd, bins: binsX, orientation: 'v', color: getChannelColor(ch), opacity: style1d === 'line' ? 1 : 0.65, name: ch, histnorm, cumulative, style1d })
                                     : { type: 'histogram', name: ch, x: arr, nbinsx: binsX, orientation: 'v', marker: { color: getChannelColor(ch) }, opacity: 0.65 };
                                 if (!t) continue;
                                 if (t.type === 'histogram') {
@@ -18433,8 +19210,8 @@
                             }
                         }
                         if (grayOut1d && outVals.length) {
-                            const grayTrace = shouldUsePreBinned1D(outVals.length)
-                                ? buildPreBinned1DTrace(outVals, { start: xStart, end: xEnd, bins: binsX, orientation: 'v', color: '#c4c4c4', opacity: 0.55, name: 'filtered', histnorm, cumulative })
+                            const grayTrace = (style1d === 'line' || shouldUsePreBinned1D(outVals.length))
+                                ? buildPreBinned1DTrace(outVals, { start: xStart, end: xEnd, bins: binsX, orientation: 'v', color: '#c4c4c4', opacity: style1d === 'line' ? 0.65 : 0.55, name: 'filtered', histnorm, cumulative, style1d })
                                 : { type: 'histogram', name: 'filtered', x: outVals, nbinsx: binsX, orientation: 'v', marker: { color: '#c4c4c4' }, opacity: 0.55 };
                             if (grayTrace?.type === 'histogram') {
                                 if (histnorm) grayTrace.histnorm = histnorm;
@@ -18472,6 +19249,7 @@
                     const baseAnnotationCount = applyHistogramDrawStateToLayout(layout);
                     await Plotly.newPlot(el, traces, layout, buildPlotConfig(el));
                     el.__histBaseAnnotationCount = baseAnnotationCount;
+                    delete el.__projectionGrid;
                     applyHistogramTooltips(el);
                     wireEditablePlotText(el);
                     wireHistogramSelection(el, mode, xKey, yKey);
@@ -18512,7 +19290,7 @@
                     applyHistogramTooltips(el);
                     if (autoscaleOnRender && !PRESERVE_ON_NEXT_RENDER && (forceAutoX || forceAutoY)) {
                         el.__skipAutorangeClear = 0;
-                        await applyHistogramAutofit(el, { fitX: forceAutoX, fitY: forceAutoY });
+                        await applyHistogramAutofit(el, { fitX: forceAutoX, fitY: forceAutoY, includeBinEdges: rebinOnRender });
                     }
                     // Reset preserve flag after one render
                     PRESERVE_ON_NEXT_RENDER = false;
@@ -18598,8 +19376,8 @@
                     let trace = { type: traceType, x: xs, y: ys, nbinsx: binsX, nbinsy: binsY, coloraxis: 'coloraxis', hovertemplate: histogram2dHoverTemplate() };
                     const st2X = stats(xs);
                     const st2Y = stats(ys);
-                    const [xStart, xEnd] = resolveHistogramDomainBounds(xMin, xMax, rebinXRange, st2X?.min, st2X?.max);
-                    const [yStart, yEnd] = resolveHistogramDomainBounds(yMin, yMax, rebinYRange, st2Y?.min, st2Y?.max);
+                    const [xStart, xEnd] = resolveHistogramDomainBounds(xMin, xMax, rebinDataXRange, st2X?.min, st2X?.max);
+                    const [yStart, yEnd] = resolveHistogramDomainBounds(yMin, yMax, rebinDataYRange, st2Y?.min, st2Y?.max);
                     trace.xbins = { start: xStart, end: xEnd, size: (xEnd - xStart) / Math.max(1, binsX) };
                     trace.ybins = { start: yStart, end: yEnd, size: (yEnd - yStart) / Math.max(1, binsY) };
                     const selectionTrace = {
@@ -18615,7 +19393,9 @@
                         selected: { marker: { color: 'rgba(0,0,0,0)', size: 8, opacity: 0, line: { width: 0, color: 'rgba(0,0,0,0)' } } },
                         unselected: { marker: { opacity: 0, color: 'rgba(0,0,0,0)', line: { width: 0, color: 'rgba(0,0,0,0)' } } },
                     };
-                    const usePreBinned2D = logZ || shouldUsePreBinned2D(xy.length);
+                    // Plotly's automatic binning uses axis units for logarithmic histogram axes.
+                    const rebinLogAxes = rebinOnRender && autoscaleOnRender && (logX || logY);
+                    const usePreBinned2D = logZ || rebinLogAxes || shouldUsePreBinned2D(xy.length);
                     let projectionGrid = null;
                     let displayProjectionMatrix = null;
                     if (usePreBinned2D) {
@@ -18624,8 +19404,8 @@
                             displayProjectionMatrix = logZ ? transformHistogram2DMatrixForLog(projectionGrid.matrix) : projectionGrid.matrix;
                             trace = {
                                 type: 'heatmap',
-                                x: projectionGrid.xCenters,
-                                y: projectionGrid.yCenters,
+                                x: rebinLogAxes ? projectionGrid.xEdges : projectionGrid.xCenters,
+                                y: rebinLogAxes ? projectionGrid.yEdges : projectionGrid.yCenters,
                                 z: displayProjectionMatrix,
                                 coloraxis: 'coloraxis',
                                 hovertemplate: histogram2dHoverTemplate(logZ),
@@ -18774,7 +19554,7 @@
                     // Skip when we are preserving ranges (e.g., color-related changes)
                     if (autoscaleOnRender && !PRESERVE_ON_NEXT_RENDER && (forceAutoX || forceAutoY)) {
                         el.__skipAutorangeClear = 0;
-                        await applyHistogramAutofit(el, { fitX: forceAutoX, fitY: forceAutoY });
+                        await applyHistogramAutofit(el, { fitX: forceAutoX, fitY: forceAutoY, includeBinEdges: rebinOnRender });
                     }
                     // Align background heatmap to the actual axis ranges so it covers the whole canvas
                     try {
@@ -19093,6 +19873,14 @@
                 }
             });
             ['binsX', 'binsY', 'histnorm', 'cumulative', 'orientation', 'xMin', 'xMax', 'yMin', 'yMax', 'zMin', 'zMax', 'logX', 'logY', 'logZ'].forEach(wire);
+            document.querySelectorAll('input[name="hist-1d-style"]').forEach((radio) => {
+                radio.addEventListener('change', async () => {
+                    renderHistogramLegendCard();
+                    if (document.getElementById('histogram-plot')?.data) {
+                        await rerenderHistogramFromUpdate({ preserveRanges: true });
+                    }
+                });
+            });
             // 1D gray-out toggle should immediately re-render and preserve ranges
             const grayToggle = document.getElementById('grayOut1d');
             if (grayToggle) {
@@ -19143,7 +19931,7 @@
                 // Toggle visibility of dt options row when feature changes
                 const mode = document.querySelector('input[name="hist-type"]:checked')?.value || '2d';
                 const xKey = document.getElementById('axis-x').value;
-                document.getElementById('dt-adv-row').style.display = (mode === '1d' && xKey === 'Event_to_event_dt') ? 'flex' : 'none';
+                document.getElementById('dt-adv-row').style.display = (mode === '1d' && xKey === 'Event_to_event_dt') ? 'grid' : 'none';
                 // Toggle merge toggle visibility for dt features
                 const mergeRow = document.getElementById('merge-row');
                 if (mergeRow) mergeRow.style.display = (mode === '1d' && !isDtFeature(xKey)) ? 'grid' : 'none';
@@ -19241,6 +20029,7 @@
             const mergeToggle = document.getElementById('mergeChannels1d');
             if (mergeToggle) {
                 mergeToggle.addEventListener('change', async () => {
+                    renderHistogramLegendCard();
                     const mode = document.querySelector('input[name="hist-type"]:checked')?.value || '2d';
                     if (mode !== '1d') return;
                     await rerenderHistogramFromUpdate();
@@ -19255,7 +20044,17 @@
                     await rerenderHistogramFromUpdate();
                 });
             });
-            document.getElementById('render-hist').addEventListener('click', async () => { await rerenderHistogramFromUpdate(); });
+            const renderButton = document.getElementById('render-hist');
+            renderButton.addEventListener('click', async () => { await rerenderHistogramFromUpdate(); });
+            document.getElementById('left-scroll').addEventListener('keydown', (event) => {
+                const input = event.target;
+                if (event.key !== 'Enter' || event.isComposing || event.defaultPrevented
+                    || !input.matches('input.control-canonical-box--number')) return;
+                event.preventDefault();
+                if (event.repeat) return;
+                if (RANGE_DISPLAY_INPUT_IDS.has(input.id)) syncRangeInputDisplay(input);
+                renderButton.click();
+            });
             document.getElementById('clear-hist').addEventListener('click', clearPlot);
 
             /* ── Spacebar hold → temporary pan mode ── */
@@ -19482,21 +20281,15 @@
                 });
             }
 
-            document.getElementById('autoscaleOnRender')?.addEventListener('change', async (e) => {
-                const enabled = !!e.target?.checked;
-                const rebinToggle = document.getElementById('rebinOnRender');
-                if (enabled) {
-                    if (rebinToggle) rebinToggle.checked = false;
+            document.getElementById('autoscaleOnRender')?.addEventListener('change', (e) => {
+                if (e.target?.checked && !isRebinOnRenderEnabled()) {
                     LAST_X_RANGE = null;
                     LAST_Y_RANGE = null;
                 }
                 if (getRootHistogramDataset()) syncRootHistogramControls();
             });
 
-            document.getElementById('rebinOnRender')?.addEventListener('change', async (e) => {
-                const enabled = !!e.target?.checked;
-                const autoscaleToggle = document.getElementById('autoscaleOnRender');
-                if (enabled && autoscaleToggle) autoscaleToggle.checked = false;
+            document.getElementById('rebinOnRender')?.addEventListener('change', () => {
                 if (getRootHistogramDataset()) syncRootHistogramControls();
             });
 

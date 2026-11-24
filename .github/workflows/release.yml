@@ -41,6 +41,9 @@ jobs:
       - name: Bootstrap build environment
         run: python scripts/bootstrap.py --build
 
+      - name: Run regression tests
+        run: ${{ matrix.venv_python }} -m unittest discover -s tests -v
+
       - name: Install macOS signing certificate
         if: runner.os == 'macOS'
         env:
@@ -105,6 +108,26 @@ jobs:
           SCIPLOTTER_MACOS_NOTARY_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
         run: ${{ matrix.venv_python }} scripts/build_release.py --clean
 
+      - name: Smoke test Windows executable
+        if: runner.os == 'Windows'
+        run: ${{ matrix.venv_python }} scripts/smoke_test_release.py dist/release/SciPlotter-windows.exe
+
+      - name: Smoke test macOS archive
+        if: runner.os == 'macOS'
+        run: |
+          APP_DIR="$(mktemp -d)"
+          ditto -x -k dist/release/SciPlotter-macos.zip "$APP_DIR"
+          codesign --verify --deep --strict "$APP_DIR/SciPlotter.app"
+          ${{ matrix.venv_python }} scripts/smoke_test_release.py "$APP_DIR/SciPlotter.app/Contents/MacOS/SciPlotter"
+
+      - name: Smoke test Linux packages
+        if: runner.os == 'Linux'
+        run: |
+          chmod +x dist/release/SciPlotter-linux.AppImage
+          APPIMAGE_EXTRACT_AND_RUN=1 ${{ matrix.venv_python }} scripts/smoke_test_release.py dist/release/SciPlotter-linux.AppImage
+          sudo apt-get install -y ./dist/release/SciPlotter-linux.deb
+          ${{ matrix.venv_python }} scripts/smoke_test_release.py /usr/bin/sciplotter
+
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
@@ -129,6 +152,7 @@ jobs:
       - name: Publish release assets
         uses: softprops/action-gh-release@v2
         with:
+          fail_on_unmatched_files: true
           files: |
             release-assets/SciPlotter-windows/SciPlotter-windows.exe
             release-assets/SciPlotter-macos/SciPlotter-macos.zip

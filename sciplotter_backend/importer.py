@@ -15,6 +15,8 @@ import numpy as np
 
 PREVIEW_ROW_LIMIT = 100
 ROOT_LOAD_ENTRY_LIMIT = 20_000
+ROOT_BYTE_COUNT_BIT = 1 << 30
+ROOT_RECOVERED_BINS_PER_AXIS = 512
 ROOT_HISTOGRAM_CLASSES = {
     f'TH{dimension}{storage}'
     for dimension in (1, 2)
@@ -26,6 +28,14 @@ SUPPORTED_IMPORT_FILE_TYPES: dict[str, tuple[str, ...]] = {
     'root': ('.root',),
 }
 IMPORTER_DEFAULT_ROOT = Path(__file__).resolve().parent.parent
+
+
+@dataclass(frozen=True)
+class _RecoveredRootHistogram:
+    values: np.ndarray
+    metadata: Dict[str, Any]
+    variances: Optional[np.ndarray]
+    stats: Optional[Dict[str, Any]]
 
 
 @dataclass(frozen=True)
@@ -208,9 +218,15 @@ def preview_root_file(
             supported_histograms = [item for item in histogram_options if item['supported']]
             if histogram_path or supported_histograms:
                 selected_path = histogram_path or supported_histograms[0]['path']
-                histogram = _require_root_histogram(root_file, selected_path)
-                values, axes = _read_root_histogram_bins(histogram)
-                selected = _describe_root_histogram(histogram, selected_path, values, axes)
+                key = _require_root_histogram_key(root_file, selected_path)
+                if _is_wrapped_root_histogram(key):
+                    recovered = _recover_root_th2i(key, selected_path)
+                    values, selected = recovered.values, recovered.metadata
+                    axes = selected['axes']
+                else:
+                    histogram = key.get()
+                    values, axes = _read_root_histogram_bins(histogram)
+                    selected = _describe_root_histogram(histogram, selected_path, values, axes)
                 indices = np.argwhere(values != 0)[:sample_rows]
                 selected['sample_bins'] = [
                     {
@@ -226,7 +242,9 @@ def preview_root_file(
                     **payload,
                     'supported': True,
                     'selected_histogram': selected,
-                    'message': 'Saved histogram: native bins are loaded directly, without reconstructing events.',
+                    'message': ('Recovered oversized ROOT histogram. SciPlotter merges whole native bins for display.'
+                                if selected.get('import_rebin') else
+                                'Saved histogram: native bins are loaded directly, without reconstructing events.'),
                 }
 
         if not tree_options:
@@ -255,7 +273,7 @@ def preview_root_file(
         }
 
 
-def _require_root_histogram(root_file, histogram_path: str):
+def _require_root_histogram_key(root_file, histogram_path: str):
     normalized_path = str(histogram_path or '').strip()
     if not normalized_path:
         raise ValueError('histogram_path parameter required')
@@ -264,27 +282,139 @@ def _require_root_histogram(root_file, histogram_path: str):
         raise ValueError(f'ROOT histogram not found: {normalized_path}')
     if class_name not in ROOT_HISTOGRAM_CLASSES:
         raise ValueError(f'Unsupported ROOT histogram class {class_name}: select a TH1 or TH2 histogram')
-    return root_file[normalized_path]
+    return root_file.key(normalized_path)
+
+
+def _is_wrapped_root_histogram(key) -> bool:
+    return key.classname() == 'TH2I' and key.fObjlen >= ROOT_BYTE_COUNT_BIT + 4
+
+
+def _read_wrapped_th2i(key):
+    uproot = _require_uproot()
+    message = ('Cannot recover the oversized ROOT TH2I safely. Try regenerating it with fewer bins '
+               'or saving the original binning in smaller ROOT histograms.')
+    try:
+        file = key.file
+        if tuple(file.class_named('TH2I', 4).base_names_versions) != (('TH2', 5), ('TArrayI', 1)):
+            raise ValueError(message)
+        chunk, cursor = key.get_uncompressed_chunk_cursor()
+        start = cursor.copy()
+        context = {'breadcrumbs': (), 'TKey': key}
+        declared, version, memberwise = uproot.deserialization.numbytes_version(chunk, cursor, context)
+        # The key gives the full length independently of the reserved bit in the object header.
+        if version != 4 or memberwise or declared is None or declared + ROOT_BYTE_COUNT_BIT != key.fObjlen:
+            raise ValueError(message)
+        base = file.class_named('TH2', 5).read(chunk, cursor, context, file, file.detached, key.parent)
+        bins = file.class_named('TArrayI', 1).read(chunk, cursor, context, file, file.detached, key.parent)
+        if cursor.displacement(start) != key.fObjlen:
+            raise ValueError(message)
+    except uproot.deserialization.DeserializationError as exc:
+        raise ValueError(message) from exc
+    return base, bins
+
+
+def _merge_root_2d_bins(values: np.ndarray, starts: Sequence[np.ndarray], dtype) -> np.ndarray:
+    # Reduce the axis that gives the smaller intermediate array first.
+    first = 0 if len(starts[0]) * values.shape[1] <= len(starts[1]) * values.shape[0] else 1
+    grouped = np.add.reduceat(values, starts[first], axis=first, dtype=dtype)
+    second = 1 - first
+    return np.add.reduceat(grouped, starts[second], axis=second, dtype=dtype)
+
+
+def _recover_root_th2i(key, path: str) -> _RecoveredRootHistogram:
+    base, bins = _read_wrapped_th2i(key)
+    native_axes = [base.member('fXaxis'), base.member('fYaxis')]
+    shape = tuple(int(axis.member('fNbins')) for axis in native_axes)
+    cells = math.prod(count + 2 for count in shape)
+    if min(shape) <= 0 or cells != len(bins) or cells != base.member('fNcells'):
+        raise ValueError('Oversized ROOT TH2I bin storage does not match its axes.')
+    with_flow = np.asarray(bins).reshape(shape[1] + 2, shape[0] + 2).T
+    native = with_flow[1:-1, 1:-1]
+    starts = [
+        np.arange(min(count, ROOT_RECOVERED_BINS_PER_AXIS), dtype=np.int64) * count
+        // min(count, ROOT_RECOVERED_BINS_PER_AXIS)
+        for count in shape
+    ]
+    values = _merge_root_2d_bins(native, starts, np.int64)
+    axes = []
+    original_edges = []
+    for axis, count, indices in zip(native_axes, shape, starts):
+        native_axis = _read_root_histogram_axis(axis, count)
+        original_edges.append(native_axis['edges'])
+        edges = np.asarray(native_axis['edges'])[np.append(indices, count)].tolist()
+        labels = native_axis['labels']
+        axes.append({
+            **native_axis,
+            'edges': edges,
+            'bin_count': len(indices),
+            'labels': labels if len(indices) == count else None,
+        })
+
+    entries = float(base.member('fEntries'))
+    if not math.isfinite(entries):
+        raise ValueError('ROOT histogram entries must be finite')
+    signed = native.min() < 0
+    flow_integral = sum(int(border.sum(dtype=np.int64)) for border in (
+        with_flow[0, :], with_flow[-1, :], with_flow[1:-1, 0], with_flow[1:-1, -1],
+    ))
+    sumw2 = np.asarray(base.member('fSumw2'))
+    if sumw2.size:
+        if sumw2.size != cells:
+            raise ValueError('ROOT histogram stored variances must include one value per regular and flow bin')
+        raw_variances = sumw2.reshape(with_flow.T.shape).T[1:-1, 1:-1]
+        if not math.isfinite(float(raw_variances.max())) or not float(raw_variances.min()) >= 0:
+            raise ValueError('ROOT histogram variances must be finite and nonnegative')
+        variances = _merge_root_2d_bins(raw_variances, starts, np.float64)
+        if not np.all(np.isfinite(variances)):
+            raise ValueError('Merged ROOT histogram variances must be finite')
+        variance_source = 'stored_sumw2'
+    else:
+        variances = None if signed else values
+        variance_source = 'unavailable' if signed else 'poisson_default'
+    stats = {
+        'x': _root_histogram_axis_stats(native.sum(axis=1, dtype=np.int64), original_edges[0]),
+        'y': _root_histogram_axis_stats(native.sum(axis=0, dtype=np.int64), original_edges[1]),
+    } if not signed else None
+    metadata = {
+        'path': path,
+        'class_name': 'TH2I',
+        'title': str(base.member('fTitle') or ''),
+        'dimension': 2,
+        'axes': axes,
+        'bin_count': int(values.size),
+        'nonzero_bin_count': int(np.count_nonzero(values)),
+        'entry_count': entries,
+        'integral': int(values.sum(dtype=np.int64)),
+        'flow_integral': flow_integral,
+        'has_negative_bins': bool(signed),
+        'min_bin_content': int(values.min()),
+        'max_bin_content': int(values.max()),
+        'variance_source': variance_source,
+        'import_rebin': {'native_bin_counts': list(shape)},
+    }
+    return _RecoveredRootHistogram(values, metadata, variances, stats)
+
+
+def _read_root_histogram_axis(axis, count: int) -> Dict[str, Any]:
+    edges = np.asarray(axis.edges(), dtype=np.float64)
+    if len(edges) != count + 1 or not np.all(np.isfinite(edges)) or not np.all(np.diff(edges) > 0):
+        raise ValueError('ROOT histogram bin edges must be finite and strictly increasing')
+    labels = axis.labels()
+    return {
+        'title': str(axis.member('fTitle') or ''),
+        'edges': edges.tolist(),
+        'bin_count': count,
+        'min': float(edges[0]),
+        'max': float(edges[-1]),
+        'labels': [str(label) for label in labels] if labels is not None else None,
+    }
 
 
 def _read_root_histogram_bins(histogram) -> Tuple[np.ndarray, List[Dict[str, Any]]]:
     values = np.asarray(histogram.values(flow=False), dtype=np.float64)
     if values.ndim not in (1, 2) or not values.size or not np.all(np.isfinite(values)):
         raise ValueError('ROOT histogram must contain finite 1D or 2D bin contents')
-    axes = []
-    for index, axis in enumerate(histogram.axes):
-        edges = np.asarray(axis.edges(), dtype=np.float64)
-        if len(edges) != values.shape[index] + 1 or not np.all(np.isfinite(edges)) or not np.all(np.diff(edges) > 0):
-            raise ValueError('ROOT histogram bin edges must be finite and strictly increasing')
-        labels = axis.labels()
-        axes.append({
-            'title': str(axis.member('fTitle') or ''),
-            'edges': edges.tolist(),
-            'bin_count': values.shape[index],
-            'min': float(edges[0]),
-            'max': float(edges[-1]),
-            'labels': [str(label) for label in labels] if labels is not None else None,
-        })
+    axes = [_read_root_histogram_axis(axis, count) for axis, count in zip(histogram.axes, values.shape)]
     return values, axes
 
 
@@ -333,11 +463,14 @@ def _root_histogram_axis_stats(values: np.ndarray, edges: Sequence[float]) -> Op
     }
 
 
-def load_root_histogram(path: str, *, histogram_path: str) -> Dict[str, Any]:
-    file_path = _resolve_file(path, allowed_suffixes=SUPPORTED_IMPORT_FILE_TYPES['root'])
-    uproot = _require_uproot()
-    with uproot.open(file_path) as root_file:
-        histogram = _require_root_histogram(root_file, histogram_path)
+def _extract_root_histogram_payload(root_file, histogram_path: str) -> Dict[str, Any]:
+    key = _require_root_histogram_key(root_file, histogram_path)
+    recovered = _recover_root_th2i(key, histogram_path) if _is_wrapped_root_histogram(key) else None
+    if recovered:
+        values, metadata, variances = recovered.values, recovered.metadata, recovered.variances
+        axes = metadata['axes']
+    else:
+        histogram = key.get()
         values, axes = _read_root_histogram_bins(histogram)
         metadata = _describe_root_histogram(histogram, histogram_path, values, axes)
         sumw2_size = len(histogram.member('fSumw2'))
@@ -374,14 +507,16 @@ def load_root_histogram(path: str, *, histogram_path: str) -> Dict[str, Any]:
             'y_centers': ((np.asarray(axes[1]['edges'][:-1]) + np.asarray(axes[1]['edges'][1:])) / 2).tolist(),
             'variances': variances.T.tolist() if variances is not None else None,
         }
-        stats = {
+        stats = recovered.stats if recovered else ({
             'x': _root_histogram_axis_stats(values.sum(axis=1), axes[0]['edges']),
             'y': _root_histogram_axis_stats(values.sum(axis=0), axes[1]['edges']),
-        } if not metadata['has_negative_bins'] else None
-    display_name = f'{Path(file_path).name} :: {histogram_path}'
+        } if not metadata['has_negative_bins'] else None)
+
     notes = [
         f"ROOT entries: {metadata['entry_count']:g}; in-range bin sum: {metadata['integral']:g}; flow-bin sum: {metadata['flow_integral']:g}.",
-        'Native bin edges and contents are preserved; underflow/overflow bins are not plotted.',
+        ('Recovered the wrapped ROOT object size using its file key. SciPlotter merged whole native bins '
+         'for display and retained the original in-range and flow sums.' if recovered else
+         'Native bin edges and contents are preserved; underflow/overflow bins are not plotted.'),
         'Statistics use weighted bin centers, not original events. Event filters are unavailable; rebinning merges existing whole bins.',
     ]
     if metadata['variance_source'] == 'poisson_default':
@@ -392,18 +527,80 @@ def load_root_histogram(path: str, *, histogram_path: str) -> Dict[str, Any]:
         notes.append('Stored Sumw2 bin variances are retained; inter-bin covariance is not available.')
     if metadata['has_negative_bins']:
         notes.append('Signed bin contents are preserved; event-like statistics are unavailable for negative weights.')
+
     return {
-        'kind': 'root',
-        'name': display_name,
-        'source_label': display_name,
-        'source_path': file_path,
-        'headers': ['X', 'Y'][:values.ndim],
-        'rows': [],
+        'ndim': int(values.ndim),
         'histogram': bins,
         'stats': stats,
         'notes': notes,
         'meta': {**metadata, 'root_object_kind': 'histogram', 'histogram_path': histogram_path, 'prebinned': True},
     }
+
+
+def load_root_histogram(path: str, *, histogram_path: str) -> Dict[str, Any]:
+    file_path = _resolve_file(path, allowed_suffixes=SUPPORTED_IMPORT_FILE_TYPES['root'])
+    uproot = _require_uproot()
+    available_histograms: List[Dict[str, Any]] = []
+    with uproot.open(file_path) as root_file:
+        primary = _extract_root_histogram_payload(root_file, histogram_path)
+        if primary['ndim'] == 1:
+            normalized_selected = str(histogram_path or '').strip()
+            available_raw: List[Tuple[str, Dict[str, Any]]] = []
+            seen_selected = False
+            for item in _root_objects(root_file):
+                if item.get('kind') != 'histogram':
+                    continue
+                class_name = str(item.get('class_name') or '')
+                if class_name not in ROOT_HISTOGRAM_CLASSES or not class_name.startswith('TH1'):
+                    continue
+                cand_path = str(item.get('path') or '').strip()
+                if not cand_path:
+                    continue
+                if cand_path == normalized_selected:
+                    available_raw.append((cand_path, primary))
+                    seen_selected = True
+                    continue
+                try:
+                    cand_payload = _extract_root_histogram_payload(root_file, cand_path)
+                    if cand_payload['ndim'] == 1:
+                        available_raw.append((cand_path, cand_payload))
+                except Exception:
+                    continue
+            if not seen_selected and normalized_selected:
+                available_raw.insert(0, (normalized_selected, primary))
+            leaf_counts: Dict[str, int] = {}
+            for cand_path, _ in available_raw:
+                leaf = cand_path.split('/')[-1]
+                leaf_counts[leaf] = leaf_counts.get(leaf, 0) + 1
+            available_histograms = [
+                {
+                    'path': cand_path,
+                    'label': cand_path.split('/')[-1] if leaf_counts.get(cand_path.split('/')[-1], 0) == 1 else cand_path,
+                    'title': cand['meta']['title'],
+                    'histogram': cand['histogram'],
+                    'stats': cand['stats'],
+                    'notes': cand['notes'],
+                    'meta': cand['meta'],
+                }
+                for cand_path, cand in available_raw
+            ]
+
+    display_name = f'{Path(file_path).name} :: {histogram_path}'
+    result = {
+        'kind': 'root',
+        'name': display_name,
+        'source_label': display_name,
+        'source_path': file_path,
+        'headers': ['X', 'Y'][:primary['ndim']],
+        'rows': [],
+        'histogram': primary['histogram'],
+        'stats': primary['stats'],
+        'notes': primary['notes'],
+        'meta': primary['meta'],
+    }
+    if primary['ndim'] == 1:
+        result['available_histograms'] = available_histograms
+    return result
 
 
 def describe_root_tree_dataset(paths: Sequence[str], *, tree_path: str) -> RootTreeDataset:

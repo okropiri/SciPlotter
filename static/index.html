@@ -22,8 +22,21 @@
   </script>
   <style>
     :root {
-      --files-height: 140px;
       --header-height: 76px;
+      --header-brand-text-size: 22px;
+      --header-brand-byline-size: 10px;
+      --header-brand-mark-width: 76px;
+      --header-brand-mark-height: 52px;
+      --header-tab-font-size: 14px;
+      --header-tab-padding-y: 8px;
+      --header-tab-padding-x: 12px;
+      --files-height: 160px;
+      --hist-panel-gap: 16px;
+      --hist-app-side-gutter: 0px;
+      --hist-side-panel-base-width: clamp(300px, 22vw, 372px);
+      --hist-side-panel-width: var(--hist-side-panel-base-width);
+      --control-button-height: 32px;
+      --control-button-radius: 4px;
       --brand-bg: #021535;
       --brand-cyan: #1B76B3;
       --brand-cyan-strong: #145A88;
@@ -31,13 +44,54 @@
       --brand-pink-soft: rgba(173, 71, 183, 0.14);
       --brand-pink-ring: rgba(173, 71, 183, 0.28);
       --surface-0: #f9fafb;
-      --surface-1: #fafbfc;
-      --surface-2: #ffffff;
-      --border-soft: #e5e7eb;
-      --border-strong: #d1d5db;
-      --text-strong: #111827;
-      --text-muted: #6b7280;
+      --surface-1: #ffffff;
+      --surface-2: #f8fafc;
+      --border-soft: #d9e2ec;
+      --border-strong: #c2cfdd;
+      --text-strong: #0f172a;
+      --text-muted: #5b6b7f;
       --accent: var(--brand-pink);
+      --accent-soft: var(--brand-pink-soft);
+      --panel-divider-width: 1px;
+      --panel-divider-bg: linear-gradient(180deg, rgba(148, 163, 184, 0.1) 0%, rgba(148, 163, 184, 0.42) 50%, rgba(148, 163, 184, 0.1) 100%);
+    }
+
+    @media (min-width: 981px) and (max-width: 1760px), (min-width: 981px) and (max-height: 1000px) {
+      :root {
+        --header-height: 68px;
+        --header-brand-text-size: 19px;
+        --header-brand-byline-size: 9px;
+        --header-brand-mark-width: 64px;
+        --header-brand-mark-height: 44px;
+        --header-tab-font-size: 12px;
+        --header-tab-padding-y: 6px;
+        --header-tab-padding-x: 10px;
+      }
+      body > .site-header {
+        padding: 0 12px;
+      }
+      body > .site-header .tabs {
+        gap: 6px;
+      }
+    }
+
+    @media (min-width: 821px) and (max-width: 980px) {
+      :root {
+        --header-height: 68px;
+        --header-brand-text-size: 19px;
+        --header-brand-byline-size: 9px;
+        --header-brand-mark-width: 64px;
+        --header-brand-mark-height: 44px;
+        --header-tab-font-size: 12px;
+        --header-tab-padding-y: 6px;
+        --header-tab-padding-x: 10px;
+      }
+      body > .site-header {
+        padding: 0 12px;
+      }
+      body > .site-header .tabs {
+        gap: 6px;
+      }
     }
 
     body {
@@ -47,13 +101,13 @@
       color: var(--text-strong);
     }
 
-    /* Top header */
-    #shared-header .site-header {
+    /* Top header matching histogram.html */
+    body > .site-header {
       height: var(--header-height);
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0 16px 0 8px;
+      padding: 0 16px;
       background: var(--brand-bg);
       color: #fff;
       border-bottom: 1px solid rgba(255, 255, 255, 0.08);
@@ -61,7 +115,7 @@
       box-shadow: 0 10px 24px rgba(2, 21, 53, 0.28);
     }
 
-    #shared-header .site-header .brand {
+    body > .site-header .brand {
       display: inline-flex;
       align-items: center;
       gap: 4px;
@@ -69,127 +123,328 @@
       text-decoration: none;
       color: inherit;
       margin-right: 20px;
+      font-weight: 600;
+      letter-spacing: 0.2px;
     }
 
-    #shared-header .site-header .brand:hover {
-      color: inherit;
+    body > .site-header .brand-copy {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1px;
+      min-width: 0;
+      line-height: 1;
+      text-align: center;
     }
 
-    #shared-header .brand-text {
+    body > .site-header .brand-text {
       font-family: "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
-      font-size: 22px;
+      font-size: var(--header-brand-text-size);
       font-weight: 700;
       letter-spacing: 0.4px;
       color: #fff;
       white-space: nowrap;
     }
 
-    #shared-header .brand-mark {
-      width: 76px;
-      height: 52px;
+    body > .site-header .brand-byline {
+      font-family: "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+      font-size: var(--header-brand-byline-size);
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      color: rgba(255, 255, 255, 0.7);
+      white-space: nowrap;
+    }
+
+    body > .site-header .brand:hover {
+      color: inherit;
+    }
+
+    body > .site-header .brand-mark {
+      width: var(--header-brand-mark-width);
+      height: var(--header-brand-mark-height);
       flex: 0 0 auto;
       display: block;
       object-fit: contain;
       object-position: left center;
     }
 
-    #shared-header .tabs {
+    body > .site-header .tabs {
       display: flex;
       gap: 8px;
       align-items: center;
     }
 
-    #shared-header .tab {
+    body > .site-header .tab {
       display: inline-block;
-      padding: 8px 12px;
-      color: #dbeafe;
+      padding: var(--header-tab-padding-y) var(--header-tab-padding-x);
+      color: #cbd5e1;
       text-decoration: none;
       border-radius: 6px;
-      transition: background 120ms, color 120ms, box-shadow 120ms;
-      font-size: 14px;
+      transition: background 120ms, color 120ms;
+      font-size: var(--header-tab-font-size);
       line-height: 1;
     }
 
-    #shared-header .tab:hover {
-      background: rgba(173, 71, 183, 0.18);
+    body > .site-header .tab:hover {
+      background: rgba(255, 255, 255, 0.08);
       color: #fff;
-      box-shadow: inset 0 0 0 1px rgba(173, 71, 183, 0.34);
     }
 
-    #shared-header .tab.active {
+    body > .site-header .tab.active {
       background: var(--brand-pink);
       color: #fff;
-      box-shadow: 0 8px 18px rgba(173, 71, 183, 0.32);
+      box-shadow: 0 8px 18px rgba(173, 71, 183, 0.3);
     }
 
     @media (max-width: 760px) {
-      #shared-header .site-header {
+      body > .site-header {
         padding: 0 10px 0 4px;
         gap: 8px;
       }
-
-      #shared-header .brand-mark {
+      body > .site-header .brand-mark {
         width: 90px;
         height: 40px;
       }
-
-      #shared-header .brand-text {
+      body > .site-header .brand-text {
         font-size: 17px;
       }
-
-      #shared-header .tabs {
+      body > .site-header .brand-byline {
+        font-size: 9px;
+        letter-spacing: 0.06em;
+      }
+      body > .site-header .tabs {
         gap: 4px;
       }
-
-      #shared-header .tab {
-        padding: 7px 10px;
-        font-size: 13px;
+      body > .site-header .tab {
+        padding: 6px 8px;
+        font-size: 12px;
       }
     }
 
+    /* Main split layout */
     #app {
       display: flex;
       height: calc(100vh - var(--header-height));
-      background: var(--surface-0);
+      background: #f9fafb;
+      overflow: hidden;
+      position: relative;
     }
 
     #left {
-      width: 334px;
-      border-right: 1px solid var(--border-soft);
-      padding: 10px 10px 16px;
+      width: var(--hist-side-panel-width);
+      flex: 0 0 var(--hist-side-panel-width);
+      padding: 10px 10px 18px;
       box-sizing: border-box;
-      overflow: auto;
-      background: var(--surface-1);
-      font-size: 12px;
-      line-height: 1.35;
+      overflow-y: auto;
+      overflow-x: hidden;
+      position: relative;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.92) 0%, rgba(248,250,252,0.97) 100%),
+        var(--surface-0);
+      backdrop-filter: blur(10px);
+      border-right: var(--panel-divider-width) solid var(--border-soft);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      min-height: 0;
     }
 
-    #right {
+    #left .header-row {
+      position: sticky;
+      top: -10px;
+      z-index: 10;
+      padding: 12px 14px;
+      margin: -10px -10px 0 -10px;
+      background: linear-gradient(180deg, rgba(244,247,251,0.98) 0%, rgba(244,247,251,0.92) 78%, rgba(244,247,251,0) 100%);
+      backdrop-filter: blur(10px);
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+    }
+
+    .panel-header-title {
+      margin: 0;
       flex: 1;
-      padding: 12px;
+      min-width: 0;
+      font-size: 14px;
+      line-height: 1.2;
+      letter-spacing: -0.02em;
+      color: var(--text-strong);
+      font-weight: 700;
+    }
+
+    /* Section cards matching histogram.html */
+    .section {
+      margin: 0;
+      border: 1px solid rgba(194, 207, 221, 0.82);
+      padding: 14px 12px 12px;
+      border-radius: 14px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.98) 100%);
+      box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
       box-sizing: border-box;
-      background: var(--surface-0);
+    }
+
+    .section h4 {
+      margin: 0 0 10px;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: none;
+      color: #475569;
+    }
+
+    .row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .row-label {
+      font-size: 12px;
+      font-weight: 700;
+      color: #475569;
+    }
+
+    .section-hint {
+      font-size: 11px;
+      color: #64748b;
+      line-height: 1.4;
+    }
+
+    .btn-group {
+      display: inline-flex;
+      gap: 6px;
+      align-items: center;
+    }
+
+    #left label {
+      color: var(--text-strong);
+      font-weight: 600;
+      font-size: 12px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Standard styled inputs & buttons */
+    select,
+    input[type="number"],
+    input[type="text"] {
+      min-height: 30px;
+      height: 30px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      border: 1px solid var(--border-soft);
+      background: var(--surface-1);
+      color: var(--text-strong);
+      font-family: inherit;
+      font-size: 12px;
+      box-sizing: border-box;
+      box-shadow: inset 0 1px 1px rgba(15, 23, 42, 0.03);
+      transition: border-color 120ms ease, box-shadow 120ms ease;
+    }
+
+    select:focus,
+    input[type="number"]:focus,
+    input[type="text"]:focus {
+      outline: none;
+      border-color: var(--brand-pink);
+      box-shadow: 0 0 0 2px var(--brand-pink-ring);
+      background: #fff;
+    }
+
+    button {
+      min-height: var(--control-button-height);
+      height: var(--control-button-height);
+      padding: 4px 10px;
+      border-radius: var(--control-button-radius);
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      cursor: pointer;
+      box-sizing: border-box;
+      transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, background-color 120ms ease;
+    }
+
+    .btn-primary {
+      background: linear-gradient(180deg, var(--brand-cyan) 0%, var(--brand-cyan-strong) 100%);
+      color: #fff;
+      border: 1px solid var(--brand-cyan-strong);
+      box-shadow: 0 6px 14px rgba(27, 118, 179, 0.22);
+    }
+
+    .btn-secondary {
+      background: linear-gradient(180deg, var(--brand-cyan) 0%, var(--brand-cyan-strong) 100%);
+      color: #fff;
+      border: 1px solid var(--brand-cyan-strong);
+      box-shadow: 0 6px 14px rgba(27, 118, 179, 0.16);
+    }
+
+    button:hover:not(:disabled) {
+      transform: translateY(-1px);
+      background: linear-gradient(180deg, #2285ca 0%, #166391 100%);
+      border-color: var(--brand-cyan-strong);
+      color: #fff;
+    }
+
+    button:active:not(:disabled) {
+      transform: translateY(0);
+    }
+
+    button:disabled {
+      background: #e2e8f0 !important;
+      border-color: #cbd5e1 !important;
+      color: #94a3b8 !important;
+      box-shadow: none !important;
+      cursor: not-allowed;
+      transform: none !important;
+    }
+
+    input[type="checkbox"] {
+      accent-color: var(--brand-pink);
+      transform: translateY(-0.5px);
+    }
+
+    /* Status and display boxes */
+    .meta-display-box {
+      background: var(--surface-2);
+      border: 1px solid var(--border-soft);
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      font-size: 11.5px;
+      color: #334155;
+      white-space: pre-wrap;
+      word-break: break-all;
+      box-sizing: border-box;
+      line-height: 1.4;
     }
 
     #files {
       list-style: none;
+      margin: 8px 0 0 0;
       padding: 0;
-      margin: 0;
       height: var(--files-height);
       overflow-y: auto;
       border: 1px solid var(--border-soft);
-      border-radius: 4px;
-      background: var(--surface-2);
+      border-radius: 6px;
+      background: #fff;
     }
 
     #files li {
       padding: 6px 8px;
-      border-bottom: 1px solid #f3f4f6;
+      border-bottom: 1px solid #f1f5f9;
       cursor: pointer;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      font-size: 12px;
+      font-size: 11.5px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      color: var(--text-strong);
+      transition: background 120ms;
     }
 
     #files li:hover {
@@ -199,124 +454,42 @@
     #files li.sel {
       background: var(--brand-pink-soft);
       color: var(--brand-pink);
+      font-weight: 600;
       box-shadow: inset 3px 0 0 var(--brand-pink);
     }
 
-    #controls {
-      margin: 8px 0;
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      flex-wrap: wrap;
+    /* Custom scrollbar */
+    #left::-webkit-scrollbar,
+    #files::-webkit-scrollbar,
+    .meta-display-box::-webkit-scrollbar,
+    .modal-body::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
     }
 
-    #controls2 {
-      margin: 6px 0 10px;
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      flex-wrap: wrap;
+    #left::-webkit-scrollbar-track,
+    #files::-webkit-scrollbar-track,
+    .meta-display-box::-webkit-scrollbar-track,
+    .modal-body::-webkit-scrollbar-track {
+      background: transparent;
     }
 
-    #plot {
-      width: 100%;
-      height: calc(100vh - var(--header-height) - 120px);
+    #left::-webkit-scrollbar-thumb,
+    #files::-webkit-scrollbar-thumb,
+    .meta-display-box::-webkit-scrollbar-thumb,
+    .modal-body::-webkit-scrollbar-thumb {
+      background: rgba(148, 163, 184, 0.45);
+      border-radius: 3px;
     }
 
-    #filter {
-      width: 100%;
-      box-sizing: border-box;
-      min-height: 26px;
-      height: 26px;
-      padding: 3px 8px;
-      border: 1px solid var(--border-strong);
-      border-radius: 4px;
-      background: var(--surface-2);
-      color: var(--text-strong);
-      font: inherit;
+    #left::-webkit-scrollbar-thumb:hover,
+    #files::-webkit-scrollbar-thumb:hover,
+    .meta-display-box::-webkit-scrollbar-thumb:hover,
+    .modal-body::-webkit-scrollbar-thumb:hover {
+      background: rgba(100, 116, 139, 0.65);
     }
 
-    .meta {
-      font-size: 12px;
-      color: #374151;
-      white-space: pre-wrap;
-      margin-top: 12px;
-    }
-
-    button {
-      min-height: 26px;
-      height: 26px;
-      padding: 3px 10px;
-      border-radius: 4px;
-      border: 1px solid var(--brand-cyan-strong);
-      background: linear-gradient(180deg, var(--brand-cyan) 0%, var(--brand-cyan-strong) 100%);
-      color: #fff;
-      font: inherit;
-      font-weight: 600;
-      box-shadow: 0 8px 18px rgba(27, 118, 179, 0.22);
-      cursor: pointer;
-    }
-
-    button:hover {
-      background: linear-gradient(180deg, #2285ca 0%, #166391 100%);
-      border-color: var(--brand-cyan-strong);
-    }
-
-    button:disabled {
-      background: #d7e6f0;
-      border-color: #bfd0db;
-      color: #6b7280;
-      box-shadow: none;
-      cursor: not-allowed;
-    }
-
-    input[type='text'],
-    input[type='number'],
-    select {
-      min-height: 26px;
-      height: 26px;
-      padding: 3px 8px;
-      border-radius: 4px;
-      border: 1px solid var(--border-strong);
-      background: var(--surface-2);
-      color: var(--text-strong);
-      font: inherit;
-      box-sizing: border-box;
-      box-shadow: none;
-    }
-
-    input[type='text']:focus,
-    input[type='number']:focus,
-    select:focus {
-      outline: none;
-      border-color: var(--accent);
-      box-shadow: 0 0 0 2px var(--brand-pink-ring);
-    }
-
-    input[type='checkbox'] {
-      accent-color: var(--brand-pink);
-    }
-
-    .nav-btn {
-      padding: 3px 10px;
-    }
-
-    .header-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin: 0 0 8px;
-    }
-
-    .header-row h3 {
-      margin: 0;
-      font-size: 14px;
-      font-weight: 700;
-      color: var(--text-strong);
-      line-height: 1.2;
-    }
-
-    /* Pile-up status dot */
+    /* Indicators and tooltips */
     .status-dot {
       width: 10px;
       height: 10px;
@@ -324,22 +497,17 @@
       display: inline-block;
       border: 1px solid #aaa;
     }
-
     .status-pass {
       background: #17c964;
-      /* green */
       border-color: #0ea24f;
     }
-
     .status-fail {
       background: #ff4d4f;
-      /* red */
       border-color: #d9363e;
     }
-
     .status-unknown {
-      background: #ccc;
-      border-color: #aaa;
+      background: #cbd5e1;
+      border-color: #94a3b8;
     }
 
     .help-icon {
@@ -348,247 +516,205 @@
       justify-content: center;
       width: 16px;
       height: 16px;
-      margin-left: 6px;
       border-radius: 50%;
       background: var(--brand-pink-soft);
       color: var(--brand-pink);
-      font-size: 12px;
+      font-size: 11px;
+      font-weight: 700;
       line-height: 16px;
       border: 1px solid rgba(173, 71, 183, 0.28);
       cursor: help;
       user-select: none;
+      flex: 0 0 auto;
     }
 
     .tooltip {
       position: fixed;
       z-index: 10000;
-      background: #1f2937;
+      background: #1e293b;
       color: #fff;
-      padding: 6px 8px;
-      border-radius: 4px;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-      font-size: 12px;
+      padding: 6px 10px;
+      border-radius: 6px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+      font-size: 11.5px;
       max-width: 360px;
       white-space: pre-line;
       pointer-events: none;
       opacity: 0;
-      transition: opacity 80ms ease-in-out;
+      transition: opacity 100ms ease-in-out;
+      line-height: 1.4;
     }
-
     .tooltip.show {
-      opacity: 0.95;
+      opacity: 0.98;
     }
 
-    #loading,
-    #directory-config,
-    #marker-section,
-    #smoothing-section,
-    #pileup-section,
-    #psd-section,
-    #event-finder-section {
-      margin-top: 0 !important;
-      margin-bottom: 0 !important;
-      padding: 10px 0 10px !important;
-      border: 0 !important;
-      border-bottom: 1px solid var(--border-soft) !important;
-      border-radius: 0 !important;
-      background: transparent !important;
+    /* Modals */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(15, 23, 42, 0.45);
+      backdrop-filter: blur(4px);
+      z-index: 1100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-dialog {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: #fff;
+      border-radius: 12px;
+      width: min(720px, calc(100vw - 40px));
+      max-height: min(600px, calc(100vh - 60px));
+      box-shadow: 0 20px 48px rgba(15, 23, 42, 0.25);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      border: 1px solid var(--border-soft);
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 18px;
+      border-bottom: 1px solid var(--border-soft);
+      background: #f8fafc;
+    }
+
+    .modal-title {
+      font-weight: 700;
+      font-size: 14px;
+      color: var(--text-strong);
+    }
+
+    .modal-close-btn {
+      background: none !important;
+      border: none !important;
       box-shadow: none !important;
+      font-size: 22px;
+      cursor: pointer;
+      color: #64748b;
+      padding: 0;
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transform: none !important;
+    }
+    .modal-close-btn:hover {
+      color: #0f172a;
+      background: none !important;
     }
 
-    #loading {
-      margin-bottom: 8px !important;
-      padding: 8px 10px !important;
-      background: #fffbeb !important;
-      border: 1px solid #fef3c7 !important;
-      border-radius: 4px !important;
-      color: #92400e !important;
-      font-size: 12px !important;
+    .modal-subbar {
+      padding: 10px 18px;
+      background: #f1f5f9;
+      border-bottom: 1px solid var(--border-soft);
     }
 
-    #directory-config {
-      padding-top: 0 !important;
+    .modal-body {
+      flex: 1 1 auto;
+      overflow-y: auto;
+      max-height: 380px;
+      background: #fff;
     }
 
-    #directory-config label,
-    #marker-section label,
-    #smoothing-section label,
-    #pileup-section label,
-    #psd-section label,
-    #event-finder-section label,
-    #controls label,
-    #controls2 label {
-      font-size: 12px;
-      color: #374151;
-    }
-
-    #directory-config > div:first-child,
-    #directory-config > div[style*='Summary CSV'],
-    #marker-section > div:first-of-type,
-    #smoothing-section > div,
-    #pileup-section > div,
-    #psd-section > div,
-    #event-finder-section > div {
-      gap: 8px !important;
-    }
-
-    #marker-section h4,
-    #smoothing-section h4,
-    #pileup-section h4,
-    #psd-section h4,
-    #event-finder-section h4 {
-      margin: 0 0 8px 0 !important;
-      font-size: 12px !important;
-      font-weight: 700 !important;
-      letter-spacing: 0.05em;
-      text-transform: uppercase;
-      color: var(--text-muted) !important;
-    }
-
-    #current-directory,
-    #current-summary,
-    #marker-source-status,
-    #smoothing-status,
-    #pileup-results,
-    #psd-results,
-    #event-finder-results {
-      background: var(--surface-2) !important;
-      border: 1px solid var(--border-soft) !important;
-      border-radius: 4px !important;
-      color: #374151 !important;
-      font-size: 12px !important;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace !important;
-      box-shadow: none !important;
-    }
-
-    #current-directory,
-    #current-summary {
-      padding: 6px 8px !important;
-    }
-
-    #marker-source-status,
-    #smoothing-status,
-    #pileup-results,
-    #psd-results,
-    #event-finder-results {
-      padding: 8px !important;
-    }
-
-    #directory-input {
-      width: 100% !important;
-      margin-bottom: 6px !important;
-    }
-
-    #show-original,
-    #cancel-directory,
-    #cancel-browser,
-    #summary-cancel {
-      background: linear-gradient(180deg, var(--brand-cyan) 0%, var(--brand-cyan-strong) 100%) !important;
-      color: #fff !important;
-      border: 1px solid var(--brand-cyan-strong) !important;
-    }
-
-    #apply-directory,
-    #select-dir,
-    #run-pileup,
-    #run-psd,
-    #run-event-finder,
-    #apply-smoothing,
-    #apply-updated-markers {
-      background: linear-gradient(180deg, var(--brand-cyan) 0%, var(--brand-cyan-strong) 100%) !important;
-      border: 1px solid var(--brand-cyan-strong) !important;
-      color: #fff !important;
-    }
-
-    #browse-directory,
-    #change-directory,
-    #go-home,
-    #go-up,
-    #close-browser,
-    #close-summary-picker,
-    #browseSummary,
-    #apply-feature-filter,
-    #clear-feature-filter,
-    #clear-hist,
-    #render-hist,
-    #plot-settings-close,
-    #plot-settings-reset,
-    #plot-settings-apply {
-      background: linear-gradient(180deg, var(--brand-cyan) 0%, var(--brand-cyan-strong) 100%) !important;
-      color: #fff !important;
-      border-color: var(--brand-cyan-strong) !important;
-    }
-
-    #directory-browser,
-    #summary-file-picker {
-      font-family: "Segoe UI", "Inter", "Helvetica Neue", Arial, sans-serif !important;
-    }
-
-    #directory-browser > div,
-    #summary-file-picker > div {
-      background: var(--surface-1) !important;
-      border: 1px solid var(--border-soft) !important;
-      border-radius: 6px !important;
-      box-shadow: 0 18px 42px rgba(15, 23, 42, 0.18) !important;
-    }
-
-    #directory-browser > div > div:first-child,
-    #summary-file-picker > div > div:first-child,
-    #directory-browser > div > div:last-child,
-    #summary-file-picker > div > div:last-child {
-      background: var(--surface-1) !important;
-      border-color: var(--border-soft) !important;
-    }
-
-    #directory-browser h3,
-    #summary-file-picker [style*='font-weight:600'] {
-      font-size: 12px !important;
-      letter-spacing: 0.05em;
-      text-transform: uppercase;
-      color: var(--text-strong) !important;
-    }
-
-    #summary-current-path,
-    #current-path {
-      background: var(--surface-2) !important;
-      border: 1px solid var(--border-strong) !important;
-      border-radius: 4px !important;
-      color: #374151 !important;
-      font-size: 12px !important;
+    .modal-footer {
+      padding: 12px 18px;
+      border-top: 1px solid var(--border-soft);
+      background: #f8fafc;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
     }
 
     #summary-list ul,
     #dir-list {
-      background: var(--surface-2);
+      list-style: none;
+      margin: 0;
+      padding: 0;
     }
 
     #summary-list li,
     .dir-item {
-      font-size: 12px !important;
-      border-bottom: 1px solid #f3f4f6 !important;
+      font-size: 12px;
+      border-bottom: 1px solid #f1f5f9;
+      padding: 8px 14px;
+      cursor: pointer;
+      transition: background 100ms;
     }
 
     #summary-list li:hover,
     .dir-item:hover {
-      background: #f8fafc !important;
+      background: #f8fafc;
     }
 
-    @media (max-width: 980px) {
-      #left {
-        width: 300px;
-        padding: 8px 8px 14px;
-      }
+    /* Right pane */
+    #right {
+      flex: 1;
+      min-width: 0;
+      padding: 14px 18px;
+      box-sizing: border-box;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      background: var(--surface-0);
+      overflow: hidden;
+    }
+
+    #plot {
+      width: 100%;
+      flex: 1 1 auto;
+      min-height: 420px;
+    }
+
+    #meta {
+      flex: 0 0 auto;
+      font-size: 12px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      color: #334155;
+      white-space: pre-wrap;
+      margin-top: 10px;
+      padding: 10px 14px;
+      background: #fff;
+      border: 1px solid var(--border-soft);
+      border-radius: 8px;
+      max-height: 120px;
+      overflow-y: auto;
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03);
+    }
+
+    /* Dynamic Raw Resolution controls */
+    #raw-resolution-controls {
+      margin: 0 !important;
+      padding: 10px 12px !important;
+      border: 1px solid rgba(194, 207, 221, 0.82) !important;
+      border-radius: 12px !important;
+      background: linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.98) 100%) !important;
+      box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04) !important;
     }
   </style>
   <script>
     // For shared header to mark the active tab
     window.ACTIVE_TAB = 'waveforms';
-    // Utility to inject the common header
+    // Utility to inject the common header if not already present
     function loadHeader(){
+      if (document.querySelector('body > header.site-header')) return;
       fetch('partials/header.html').then(function(r){ return r.text();}).then(function(html){
         var holder = document.getElementById('shared-header');
-        if (holder) { holder.innerHTML = html; }
-        // Now mark active tab
+        if (holder) {
+          holder.innerHTML = html;
+          holder.style.display = '';
+        }
         try {
           holder.querySelectorAll('.tab').forEach(function(a){
             if (a.getAttribute('data-tab') === window.ACTIVE_TAB) a.classList.add('active');
@@ -601,262 +727,302 @@
 </head>
 
 <body>
-  <div id="shared-header"></div>
+  <header class="site-header">
+    <a class="brand" href="index.html">
+      <img class="brand-mark" src="assets/logo_transparent.svg" alt="Sci Plotter logo" />
+      <span class="brand-copy">
+        <span class="brand-text">Sci Plotter</span>
+        <span class="brand-byline">by Dachi Okropiridze</span>
+      </span>
+    </a>
+    <nav class="tabs">
+      <a class="tab active" href="index.html" data-tab="waveforms">Waveforms</a>
+      <a class="tab" href="histogram.html" data-tab="histogram">Histograms</a>
+    </nav>
+  </header>
+  <div id="shared-header" style="display:none;"></div>
+
   <div id='app'>
     <div id='left'>
+      <div class="header-row">
+        <h3 class="panel-header-title">Waveform Controls</h3>
+      </div>
+
       <div id='loading'
-        style='display:none; padding:6px 8px; background:#fffbe6; border:1px solid #ffe58f; color:#8c6d1f; margin-bottom:6px; font-size:12px;'>
+        style='display:none; padding:8px 12px; background:#fffbeb; border:1px solid #fef3c7; color:#92400e; margin-bottom:8px; font-size:12px; border-radius:8px;'>
         <span id="loading-text">Loading…</span>
         <span id="loading-progress" style="margin-left:6px; display:none;">0%</span>
         <div id="loading-bar-wrap" style="display:none; margin-top:4px; width:100%; height:6px; background:#f0e3b0; border-radius:3px; overflow:hidden;">
           <div id="loading-bar" style="width:0%; height:100%; background:#d4a514; transition:width 80ms;"></div>
         </div>
       </div>
-      <!-- Waveforms Directory Configuration -->
-      <div id='directory-config' style='margin-bottom: 8px; padding: 8px; background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 4px;'>
-        <div style='display: flex; align-items: center; gap: 8px; margin-bottom: 6px;'>
-          <label style='font-weight: bold; font-size: 0.9em;'>Waveforms Directory:</label>
-          <button id='browse-directory' class='btn-secondary' title='Browse Directories' style='padding: 4px 8px; font-size: 0.8em; border: 1px solid #ccc; background: #f8f9fa; border-radius: 3px; cursor: pointer;'>📂 Browse</button>
-          <button id='change-directory' style='padding: 2px 6px; font-size: 0.8em;'>Manual</button>
+
+      <!-- Waveforms Directory & Data Source Configuration -->
+      <div id='directory-config' class="section">
+        <h4>Data Source</h4>
+        <div class="row" style="justify-content: space-between;">
+          <label class="row-label">Waveforms Directory</label>
+          <div class="btn-group">
+            <button id='browse-directory' class='btn-secondary' title='Browse Directories'>📂 Browse</button>
+            <button id='change-directory' class='btn-secondary' title='Enter path manually'>Manual</button>
+          </div>
         </div>
-        <div id='current-directory' style='font-family: monospace; font-size: 0.85em; color: #666; word-break: break-all;'>
+        <div id='current-directory' class="meta-display-box" style="margin-top: 6px;">
           Loading...
         </div>
 
-        <!-- Summary selection -->
-        <div style='display:flex; align-items:center; gap:8px; margin-top:8px;'>
-          <label style='font-weight: bold; font-size: 0.9em;'>Summary CSV:</label>
-          <button id='auto-summary' style='padding: 2px 6px; font-size: 0.8em;'>Auto</button>
-          <button id='pick-summary' style='padding: 2px 6px; font-size: 0.8em;'>Pick file</button>
-          <span id='current-summary' style='font-family: monospace; font-size: 0.85em; color: #666; word-break: break-all;'>Auto (preferred)</span>
+        <!-- Manual text input -->
+        <div id='directory-input-section' style='display: none; margin-top: 8px;'>
+          <input id='directory-input' type='text' placeholder='Enter directory path...' style='width: 100%; margin-bottom: 6px;' />
+          <div class="row" style='gap: 6px;'>
+            <button id='apply-directory' class='btn-primary' style='flex: 1;'>Apply</button>
+            <button id='cancel-directory' class='btn-secondary' style='flex: 1;'>Cancel</button>
+          </div>
         </div>
 
+        <!-- Summary selection -->
+        <div class="row" style='margin-top: 12px; justify-content: space-between;'>
+          <label class="row-label">Summary CSV</label>
+          <div class="btn-group">
+            <button id='auto-summary' class='btn-secondary'>Auto</button>
+            <button id='pick-summary' class='btn-secondary'>Pick file</button>
+          </div>
+        </div>
+        <div id='current-summary' class="meta-display-box" style="margin-top: 6px;">Auto (preferred)</div>
+
         <!-- Summary File Picker Modal -->
-        <div id='summary-file-picker' style='display:none; position: fixed; top:0; left:0; right:0; bottom:0; background: rgba(0,0,0,0.5); z-index: 1100;'>
-          <div style='position:absolute; top:50%; left:50%; transform: translate(-50%, -50%); width: 800px; max-height: 600px; background:#fff; border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,0.3); display:flex; flex-direction:column;'>
-            <div style='display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border-bottom:1px solid #ddd; background:#f8f9fa;'>
-              <div style='font-weight:600;'>📄 Select Summary CSV</div>
-              <button id='close-summary-picker' style='background:none; border:none; font-size:20px; cursor:pointer;'>&times;</button>
+        <div id='summary-file-picker' class="modal-overlay" style='display:none;'>
+          <div class="modal-dialog">
+            <div class="modal-header">
+              <div class="modal-title">📄 Select Summary CSV</div>
+              <button id='close-summary-picker' class="modal-close-btn">&times;</button>
             </div>
-            <div style='padding:10px 16px; background:#f1f3f4; border-bottom:1px solid #ddd;'>
-              <div style='display:flex; gap:8px; align-items:center;'>
-                <button id='summary-go-up' style='padding:4px 8px;'>⬆ Up</button>
-                <div id='summary-current-path' style='flex:1; font-family:monospace; background:#fff; padding:6px 10px; border:1px solid #ccc; border-radius:3px;'></div>
+            <div class="modal-subbar">
+              <div class="row" style='gap:8px; align-items:center;'>
+                <button id='summary-go-up' class="btn-secondary">⬆ Up</button>
+                <div id='summary-current-path' class="meta-display-box" style="flex:1;"></div>
               </div>
             </div>
-            <div style='flex:1; overflow:auto;'>
-              <div id='summary-list'><div style='padding:24px; text-align:center; color:#666;'>Loading...</div></div>
+            <div class="modal-body">
+              <div id='summary-list'><div style='padding:24px; text-align:center; color:#64748b;'>Loading...</div></div>
             </div>
-            <div style='padding:12px 16px; border-top:1px solid #ddd; background:#f8f9fa; display:flex; justify-content:flex-end; gap:8px;'>
-              <button id='summary-cancel' style='padding:6px 12px;'>Cancel</button>
+            <div class="modal-footer">
+              <button id='summary-cancel' class="btn-secondary">Cancel</button>
             </div>
           </div>
         </div>
         
         <!-- Directory Browser Modal -->
-        <div id='directory-browser' style='display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; font-family: Arial, sans-serif;'>
-          <div style='position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; border-radius: 8px; width: 700px; max-height: 600px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); display: flex; flex-direction: column;'>
-            
-            <!-- Header -->
-            <div style='display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; border-bottom: 1px solid #ddd; background: #f8f9fa; border-radius: 8px 8px 0 0;'>
-              <h3 style='margin: 0; color: #333;'>📂 Select Directory</h3>
-              <button id='close-browser' style='background: none; border: none; font-size: 20px; cursor: pointer; color: #666; padding: 0; width: 24px; height: 24px;'>&times;</button>
+        <div id='directory-browser' class="modal-overlay" style='display: none;'>
+          <div class="modal-dialog">
+            <div class="modal-header">
+              <div class="modal-title">📂 Select Directory</div>
+              <button id='close-browser' class="modal-close-btn">&times;</button>
             </div>
-            
-            <!-- Navigation Bar -->
-            <div style='padding: 10px 20px; background: #f1f3f4; border-bottom: 1px solid #ddd;'>
-              <div style='display: flex; align-items: center; gap: 8px; margin-bottom: 8px;'>
-                <button id='go-home' style='padding: 4px 8px; background: #e9ecef; border: 1px solid #ccc; border-radius: 3px; cursor: pointer; font-size: 12px;'>🏠 Home</button>
-                <button id='go-up' style='padding: 4px 8px; background: #e9ecef; border: 1px solid #ccc; border-radius: 3px; cursor: pointer; font-size: 12px;'>⬆ Up</button>
+            <div class="modal-subbar">
+              <div class="row" style='gap: 8px; align-items: center; margin-bottom: 8px;'>
+                <button id='go-home' class="btn-secondary">🏠 Home</button>
+                <button id='go-up' class="btn-secondary">⬆ Up</button>
               </div>
-              <div style='font-family: monospace; background: white; padding: 6px 10px; border: 1px solid #ccc; border-radius: 3px; font-size: 13px; word-break: break-all;' id='current-path'></div>
+              <div id='current-path' class="meta-display-box"></div>
             </div>
-            
-            <!-- Directory List -->
-            <div style='flex: 1; overflow-y: auto; max-height: 400px;'>
-              <div id='dir-list' style='padding: 0;'>
-                <div style='padding: 40px; text-align: center; color: #666;'>Loading...</div>
+            <div class="modal-body">
+              <div id='dir-list'>
+                <div style='padding: 40px; text-align: center; color: #64748b;'>Loading...</div>
               </div>
             </div>
-            
-            <!-- Footer -->
-            <div style='padding: 15px 20px; border-top: 1px solid #ddd; background: #f8f9fa; display: flex; justify-content: space-between; align-items: center; border-radius: 0 0 8px 8px;'>
-              <button id='select-dir' style='padding: 8px 16px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 500;'>Select This Directory</button>
-              <button id='cancel-browser' style='padding: 8px 16px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;'>Cancel</button>
+            <div class="modal-footer" style="justify-content: space-between;">
+              <button id='select-dir' class="btn-primary">Select This Directory</button>
+              <button id='cancel-browser' class="btn-secondary">Cancel</button>
             </div>
-          </div>
-        </div>
-        
-        <!-- Manual text input -->
-        <div id='directory-input-section' style='display: none; margin-top: 8px;'>
-          <input id='directory-input' type='text' placeholder='Enter directory path...' style='width: 100%; margin-bottom: 6px; padding: 4px 8px; border: 1px solid #ccc; border-radius: 3px;' />
-          <div style='display: flex; gap: 6px;'>
-            <button id='apply-directory' style='padding: 4px 8px; font-size: 0.8em; background: #28a745; color: white; border: none; border-radius: 3px;'>Apply</button>
-            <button id='cancel-directory' style='padding: 4px 8px; font-size: 0.8em; background: #6c757d; color: white; border: none; border-radius: 3px;'>Cancel</button>
           </div>
         </div>
       </div>
       
-      <div class='header-row'>
-        <h3 style='margin:0; flex:1'>Waveform files</h3>
-        <button id='prev' class='nav-btn'>◀ Prev</button>
-        <button id='next' class='nav-btn'>Next ▶</button>
-      </div>
-      
+      <!-- Waveform files section -->
+      <div id="waveform-files-section" class="section">
+        <div class="row" style="justify-content: space-between; margin-bottom: 8px;">
+          <h4 style="margin: 0;">Waveform Files</h4>
+          <div class="btn-group">
+            <button id='prev' class='nav-btn btn-secondary'>◀ Prev</button>
+            <button id='next' class='nav-btn btn-secondary'>Next ▶</button>
+          </div>
+        </div>
 
-      <input id='filter' placeholder='filter by name...' />
-      <div id='controls'>
-        <label><input type='checkbox' id='overlay'> overlay</label>
-        <button id='refresh'>Refresh</button>
-        <button id='clear'>Clear</button>
+        <input id='filter' type="text" placeholder='Filter by name...' style="width: 100%; margin-bottom: 8px;" />
+        <div id='controls' class="row" style="justify-content: space-between; margin-bottom: 8px;">
+          <label><input type='checkbox' id='overlay'> Overlay</label>
+          <div class="btn-group">
+            <button id='refresh' class="btn-secondary">Refresh</button>
+            <button id='clear' class="btn-secondary">Clear</button>
+          </div>
+        </div>
+        <div id='controls2' class="row" style="justify-content: space-between; margin-bottom: 8px;">
+          <label><input type='checkbox' id='fixYAxis'> Fix Y-axis</label>
+          <label style="display: inline-flex; align-items: center; gap: 4px;">
+            <span>Y Range:</span>
+            <input type='text' id='yRange' placeholder='min,max' style="width: 86px;">
+          </label>
+        </div>
+        <ul id='files'></ul>
       </div>
-      <div id='controls2'>
-        <label><input type='checkbox' id='fixYAxis'> Fix Y-axis</label>
-        <label>Y Range: <input type='text' id='yRange' placeholder='min,max' size='10'></label>
-      </div>
-      <ul id='files'></ul>
 
       <!-- Marker Visualization Section -->
-      <div id='marker-section' style='margin-top: 16px; border-top: 1px solid #ddd; padding-top: 12px;'>
-        <h4 style='margin: 0 0 8px 0;'>Markers</h4>
-        <div style='display:flex; gap:12px; flex-wrap:wrap; font-size:0.9em; align-items:center;'>
+      <div id='marker-section' class="section">
+        <div class="row" style="justify-content: space-between;">
+          <h4 style="margin: 0;">Markers</h4>
+          <div class='help-icon' data-tooltip='EFdynamic: boundary expansion on raw waveform (EF-style algorithm).&#10;Batch: same EF-style algorithm applied to Savitzky–Golay smoothed waveform (window=101, poly=3).'>?</div>
+        </div>
+        <div class="row" style='gap:12px; margin-top: 8px;'>
           <label><input type='checkbox' id='show-efdynamic-markers' checked> EFdynamic (raw)</label>
           <label><input type='checkbox' id='show-batch-markers' checked> Batch (smoothed)</label>
-          <div class='help-icon' data-tooltip='EFdynamic: boundary expansion on raw waveform (EF-style algorithm).\nBatch: same EF-style algorithm applied to Savitzky–Golay smoothed waveform (window=101, poly=3).'>?</div>
         </div>
-        <div style='font-size:0.75em; color:#555; margin-top:4px;'>Raw EFdynamic markers always computed from original waveform. Batch markers appear after smoothing is applied. Peak markers: orange = EFdynamic, purple = Batch. Start/End lines share those colors.</div>
-        <div id='marker-source-status' style='margin-top:6px; font-size:0.7em; background:#f5f7fa; border:1px solid #e2e8f0; padding:4px 6px; border-radius:4px; color:#334155; font-family:monospace;'>marker sources: (pending)</div>
+        <div class="section-hint" style="margin-top: 6px;">Raw EFdynamic markers always computed from original waveform. Batch markers appear after smoothing is applied. Peak markers: orange = EFdynamic, purple = Batch. Start/End lines share those colors.</div>
+        <div id='marker-source-status' class="meta-display-box" style="margin-top: 8px;">marker sources: (pending)</div>
       </div>
 
       <!-- Smoothing Section -->
-      <div id='smoothing-section' style='margin-top: 16px; border-top: 1px solid #ddd; padding-top: 12px;'>
-        <h4 style='margin: 0 0 8px 0;'>Batch Analyzer Smoothing</h4>
-        <div style='margin-bottom: 8px;'>
-          <label>Method:
-            <select id='smoothing-method' style='width: 160px;'>
+      <div id='smoothing-section' class="section">
+        <div class="row" style="justify-content: space-between;">
+          <h4 style="margin: 0;">Batch Analyzer Smoothing</h4>
+          <span id='method-help' class='help-icon'
+            data-tooltip='Smoothing methods:&#10;• Savitzky–Golay: Local polynomial fit within a sliding window. Preserves peak shape while reducing noise.&#10;• Adaptive: Noise-adaptive averaging (auto-tunes span).&#10;• Edge-preserving: Smoothing that tries to keep sharp transitions.&#10;• Gaussian: Convolution with a Gaussian kernel (smooth, can blur peaks).'>?</span>
+        </div>
+        <div class="row" style='margin-top: 8px;'>
+          <label style="flex: 1;">Method:
+            <select id='smoothing-method' style='flex: 1; min-width: 140px;'>
               <option value='savgol'>Savitzky-Golay (default)</option>
               <option value='adaptive'>Adaptive</option>
               <option value='edge_preserving'>Edge-preserving</option>
               <option value='gaussian'>Gaussian</option>
             </select>
           </label>
-          <span id='method-help' class='help-icon'
-            data-tooltip='Smoothing methods:\n• Savitzky–Golay: Local polynomial fit within a sliding window. Preserves peak shape while reducing noise.\n• Adaptive: Noise-adaptive averaging (auto-tunes span).\n• Edge-preserving: Smoothing that tries to keep sharp transitions.\n• Gaussian: Convolution with a Gaussian kernel (smooth, can blur peaks).'>?</span>
-          <span id='savgol-params' style='margin-top:12px; display:inline-flex; align-items:left; gap:16px;'>
-            <label>Window:
-              <input type='number' id='savgol-window' value='101' min='3' step='2' style='width: 70px;'
-                data-tooltip='Savitzky–Golay window length in samples (odd integer, ≥ poly + 2). Controls the smoothing span.'>
-            </label>
-            <label>Poly:
-              <input type='number' id='savgol-poly' value='3' min='0' step='1' style='width: 60px;'
-                data-tooltip='Polynomial order (0 .. window−1). Higher values preserve sharp features but smooth less.'>
-            </label>
-            <span id='savgol-help' class='help-icon'
-              data-tooltip='Savitzky–Golay parameters:\n• Window: Odd number of samples (≥ poly + 2). Larger window = stronger smoothing; too large may smear pulses.\n• Poly: Polynomial order (typ. 2–4). Higher = better peak preservation but can introduce oscillations.'>?</span>
-          </span>
         </div>
-        <div style='margin-bottom: 8px; display: flex; gap: 8px; align-items: center;'>
-          <button id='apply-smoothing' disabled>Apply Smoothing</button>
-          <button id='show-original' disabled style='background: #e8e8e8;'>Show Original</button>
+        <div id='savgol-params' class="row" style='margin-top: 8px; gap: 10px;'>
+          <label style="flex: 1;">Window:
+            <input type='number' id='savgol-window' value='101' min='3' step='2' style='width: 100%;'
+              data-tooltip='Savitzky–Golay window length in samples (odd integer, ≥ poly + 2). Controls the smoothing span.'>
+          </label>
+          <label style="flex: 1;">Poly:
+            <input type='number' id='savgol-poly' value='3' min='0' step='1' style='width: 100%;'
+              data-tooltip='Polynomial order (0 .. window−1). Higher values preserve sharp features but smooth less.'>
+          </label>
+          <span id='savgol-help' class='help-icon'
+            data-tooltip='Savitzky–Golay parameters:&#10;• Window: Odd number of samples (≥ poly + 2). Larger window = stronger smoothing; too large may smear pulses.&#10;• Poly: Polynomial order (typ. 2–4). Higher = better peak preservation but can introduce oscillations.'>?</span>
         </div>
-        <div style='margin-bottom: 8px; display: flex; gap: 8px; align-items: center; font-size: 0.9em;'>
+        <div class="row" style='margin-top: 10px; gap: 8px;'>
+          <button id='apply-smoothing' class="btn-primary" style="flex: 1;" disabled>Apply Smoothing</button>
+          <button id='show-original' class="btn-secondary" style="flex: 1;" disabled>Show Original</button>
+        </div>
+        <div class="row" style='margin-top: 8px; gap: 10px;'>
           <label><input type='checkbox' id='overlay-smooth'> Overlay smoothed</label>
           <label><input type='checkbox' id='use-smoothed-analysis'> Use smoothed for analysis</label>
-          <button id='apply-updated-markers' disabled>Apply markers</button>
-          <label>Thr mV: <input type='number' id='updated-threshold' placeholder='keep old'
-              style='width: 80px;'></label>
         </div>
-        <div id='smoothing-status'
-          style='background: #f8f8f8; border: 1px solid #ddd; padding: 8px; min-height: 40px; font-family: monospace; font-size: 0.85em; white-space: pre-wrap;'>
+        <div class="row" style='margin-top: 8px; gap: 8px; align-items: center;'>
+          <button id='apply-updated-markers' class="btn-secondary" style="flex: 1;" disabled>Apply markers</button>
+          <label style="display: inline-flex; align-items: center; gap: 4px;">
+            <span>Thr mV:</span>
+            <input type='number' id='updated-threshold' placeholder='keep old' style='width: 76px;'>
+          </label>
+        </div>
+        <div id='smoothing-status' class="meta-display-box" style="margin-top: 10px; min-height: 40px;">
           Select a waveform file to apply smoothing
         </div>
       </div>
 
       <!-- Pile-up Detection Section -->
-      <div id='pileup-section' style='margin-top: 16px; border-top: 1px solid #ddd; padding-top: 12px;'>
-        <h4 style='margin: 0 0 8px 0;'>Pile-up Detection</h4>
-        <div style='margin-bottom: 8px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;'>
-          <label>Quasi-ratio α:
-            <input type='number' id='quasi-ratio' value='' step='0.05' min='0' max='1' style='width: 70px;'>
-          </label>
-          <label><input type='checkbox' id='scan-alpha' checked> Scan</label>
-          <label>Max noise crossing (ns):
-            <input type='number' id='max-noise-cross-ns' value='' step='0.1' min='0' style='width: 80px;'>
-          </label>
-          <button id='run-pileup' disabled>Run Pile-up</button>
+      <div id='pileup-section' class="section">
+        <div class="row" style="justify-content: space-between;">
+          <h4 style="margin: 0;">Pile-up Detection</h4>
           <span id='pileup-indicator' class='status-dot status-unknown' title='Pile-up status unknown'></span>
         </div>
-        <div style='font-size: 0.85em; color:#666; margin-bottom:6px;'>
+        <div class="row" style='margin-top: 8px; gap: 8px; align-items: center;'>
+          <label style="flex: 1;">Quasi-ratio α:
+            <input type='number' id='quasi-ratio' value='' step='0.05' min='0' max='1' style='width: 100%;'>
+          </label>
+          <label style="padding-top: 16px;"><input type='checkbox' id='scan-alpha' checked> Scan</label>
+        </div>
+        <div class="row" style="margin-top: 6px;">
+          <label style="width: 100%;">Max noise cross (ns):
+            <input type='number' id='max-noise-cross-ns' value='' step='0.1' min='0' style='flex: 1;'>
+          </label>
+        </div>
+        <div class="section-hint" style="margin-top: 6px;">
           Quasi-threshold = thr + α · (peak − thr)
         </div>
-        <div id='pileup-results'
-          style='background: #f8f8f8; border: 1px solid #ddd; padding: 8px; min-height: 60px; font-family: monospace; font-size: 0.85em; white-space: pre-wrap;'>
+        <div class="row" style="margin-top: 8px;">
+          <button id='run-pileup' class="btn-primary" style="width: 100%;" disabled>Run Pile-up</button>
+        </div>
+        <div id='pileup-results' class="meta-display-box" style="margin-top: 10px; min-height: 50px;">
           Select a waveform file to run pile-up detection
         </div>
       </div>
 
       <!-- PSD Analysis Section -->
-      <div id='psd-section' style='margin-top: 16px; border-top: 1px solid #ddd; padding-top: 12px;'>
-        <h4 style='margin: 0 0 8px 0;'>PSD Analysis</h4>
-        <div style='margin-bottom: 8px; display: flex; gap: 8px; align-items: center;'>
-          <label>Qtail: <input type='number' id='qtail-fraction' value='' step='0.1' min='0' max='1'
-              style='width: 60px;'></label>
-          <button id='run-psd' disabled>Run PSD</button>
+      <div id='psd-section' class="section">
+        <h4>PSD Analysis</h4>
+        <div class="row" style='gap: 8px; align-items: center;'>
+          <label style="flex: 1;">Qtail:
+            <input type='number' id='qtail-fraction' value='' step='0.1' min='0' max='1' style='width: 100%;'>
+          </label>
+          <button id='run-psd' class="btn-primary" style="flex: 1; margin-top: 18px;" disabled>Run PSD</button>
         </div>
-        <div style='font-size: 0.85em; color:#555; margin: 6px 0 10px 0;'>
+        <div class="section-hint" style="margin-top: 8px;">
           PSD integrates relative to baseline (0 mV). If "Use smoothed for analysis" is enabled, smoothing and marker recomputation apply before PSD.
         </div>
-        <div id='psd-results'
-          style='background: #f8f8f8; border: 1px solid #ddd; padding: 8px; min-height: 60px; font-family: monospace; font-size: 0.85em; white-space: pre-wrap;'>
+        <div id='psd-results' class="meta-display-box" style="margin-top: 10px; min-height: 50px;">
           Select a waveform file to run PSD analysis
         </div>
       </div>
 
       <!-- Event_Finder Modular Analysis Section -->
-      <div id='event-finder-section' style='margin-top: 16px; border-top: 1px solid #ddd; padding-top: 12px;'>
-        <h4 style='margin: 0 0 8px 0;'>Event_Finder Modular Analysis</h4>
-        <div style='margin-bottom: 8px;'>
-          <div style='display: flex; gap: 8px; align-items: center; margin-bottom: 6px;'>
-            <label>Detection Channels: 
-              <select id='detection-channels' style='width: 100px;'>
-                <option value='all'>All (C2,C3,C4)</option>
-                <option value='C2'>C2 only</option>
-                <option value='C3'>C3 only</option>
-                <option value='C4'>C4 only</option>
-                <option value='C2,C3'>C2,C3</option>
-                <option value='C2,C4'>C2,C4</option>
-                <option value='C3,C4'>C3,C4</option>
-              </select>
-            </label>
-            <label>Export Format: 
-              <select id='export-format' style='width: 60px;'>
-                <option value='csv'>CSV</option>
-                <option value='json'>JSON</option>
-              </select>
-            </label>
-          </div>
-          <div style='display: flex; gap: 8px; align-items: center; margin-bottom: 6px;'>
-            <label><input type='checkbox' id='include-waveforms'> Include waveform segments</label>
-            <label><input type='checkbox' id='detailed-metadata'> Detailed metadata</label>
-            <label><input type='checkbox' id='use-config-override'> Override thresholds</label>
-          </div>
-          <div id='threshold-overrides' style='display: none; margin-bottom: 6px; padding: 6px; background: #f0f0f0; border-radius: 3px;'>
-            <div style='font-size: 0.85em; margin-bottom: 4px;'>Threshold Overrides (V):</div>
-            <div style='display: flex; gap: 8px; flex-wrap: wrap;'>
-              <label>C1: <input type='number' id='c1-threshold' step='0.001' min='0' style='width: 60px;' placeholder='0.100'></label>
-              <label>C2: <input type='number' id='c2-threshold' step='0.001' min='0' style='width: 60px;' placeholder='0.001'></label>
-              <label>C3: <input type='number' id='c3-threshold' step='0.001' min='0' style='width: 60px;' placeholder='0.002'></label>
-              <label>C4: <input type='number' id='c4-threshold' step='0.001' min='0' style='width: 60px;' placeholder='0.015'></label>
-            </div>
-          </div>
-          <button id='run-event-finder' disabled>Run Event Analysis</button>
+      <div id='event-finder-section' class="section">
+        <div class="row" style="justify-content: space-between;">
+          <h4 style="margin: 0;">Event_Finder Modular Analysis</h4>
           <span id='event-finder-indicator' class='status-dot status-unknown' title='Event analysis status unknown'></span>
         </div>
-        <div style='font-size: 0.85em; color:#666; margin-bottom:6px;'>
+        <div class="row" style='margin-top: 8px; gap: 8px;'>
+          <label style="flex: 2;">Detection Channels:
+            <select id='detection-channels' style='width: 100%;'>
+              <option value='all'>All (C2,C3,C4)</option>
+              <option value='C2'>C2 only</option>
+              <option value='C3'>C3 only</option>
+              <option value='C4'>C4 only</option>
+              <option value='C2,C3'>C2,C3</option>
+              <option value='C2,C4'>C2,C4</option>
+              <option value='C3,C4'>C3,C4</option>
+            </select>
+          </label>
+          <label style="flex: 1;">Export:
+            <select id='export-format' style='width: 100%;'>
+              <option value='csv'>CSV</option>
+              <option value='json'>JSON</option>
+            </select>
+          </label>
+        </div>
+        <div class="row" style='margin-top: 8px; gap: 6px; flex-direction: column; align-items: flex-start;'>
+          <label><input type='checkbox' id='include-waveforms'> Include waveform segments</label>
+          <label><input type='checkbox' id='detailed-metadata'> Detailed metadata</label>
+          <label><input type='checkbox' id='use-config-override'> Override thresholds</label>
+        </div>
+        <div id='threshold-overrides' style='display: none; margin-top: 8px; padding: 10px; background: #f1f5f9; border-radius: 8px; border: 1px solid var(--border-soft);'>
+          <div style='font-size: 11px; font-weight: 700; color: #475569; margin-bottom: 6px;'>Threshold Overrides (V):</div>
+          <div class="row" style='gap: 8px;'>
+            <label style="flex: 1;">C1: <input type='number' id='c1-threshold' step='0.001' min='0' style='width: 100%;' placeholder='0.100'></label>
+            <label style="flex: 1;">C2: <input type='number' id='c2-threshold' step='0.001' min='0' style='width: 100%;' placeholder='0.001'></label>
+          </div>
+          <div class="row" style='gap: 8px; margin-top: 6px;'>
+            <label style="flex: 1;">C3: <input type='number' id='c3-threshold' step='0.001' min='0' style='width: 100%;' placeholder='0.002'></label>
+            <label style="flex: 1;">C4: <input type='number' id='c4-threshold' step='0.001' min='0' style='width: 100%;' placeholder='0.015'></label>
+          </div>
+        </div>
+        <div class="row" style="margin-top: 10px;">
+          <button id='run-event-finder' class="btn-primary" style="width: 100%;" disabled>Run Event Analysis</button>
+        </div>
+        <div class="section-hint" style="margin-top: 8px;">
           Comprehensive event detection with cyclotron correlation, pulse characterization, and quality filtering
         </div>
-        <div id='event-finder-results'
-          style='background: #f8f8f8; border: 1px solid #ddd; padding: 8px; min-height: 80px; font-family: monospace; font-size: 0.85em; white-space: pre-wrap;'>
+        <div id='event-finder-results' class="meta-display-box" style="margin-top: 10px; min-height: 60px;">
           Select a waveform file to run Event_Finder modular analysis
         </div>
       </div>
@@ -3547,6 +3713,13 @@
     });
 
 
+
+    // Responsive Plotly graph resize
+    window.addEventListener('resize', () => {
+      if (window.Plotly && document.getElementById('plot') && document.getElementById('plot').data) {
+        try { Plotly.Plots.resize('plot'); } catch(_) {}
+      }
+    });
 
     // initial load
     refresh();

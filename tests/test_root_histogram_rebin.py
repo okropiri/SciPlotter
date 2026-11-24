@@ -11,7 +11,7 @@ class RootHistogramRebinTests(unittest.TestCase):
     def setUpClass(cls):
         node = shutil.which('node')
         if node:
-            cls.command = [node, '-e']
+            cls.command = [node, '-']
             cls.node = True
         elif sys.platform == 'darwin' and Path('/usr/bin/osascript').is_file():
             cls.command = ['/usr/bin/osascript', '-l', 'JavaScript', '-e']
@@ -27,7 +27,8 @@ class RootHistogramRebinTests(unittest.TestCase):
             'buildPreComputed1DTrace', 'buildExactProjectionGrid',
             'buildSelectionProjectionPanelStateFromExactHistogram',
             'collectTraceBounds', 'mergeBounds', 'axisTypeIsUsable', 'getHistogramAutofitBounds',
-            'captureCurrentRanges',
+            'captureCurrentRanges', 'getFiniteHistogramRange', 'getHistogramDataRange',
+            'shouldPreserveHistogramRanges',
         ):
             start = html.index(f'function {name}(')
             end = html.index('\n        function ', start + 1)
@@ -37,7 +38,10 @@ class RootHistogramRebinTests(unittest.TestCase):
     def evaluate(self, expression):
         code = self.helper + '\nconst result = JSON.stringify(' + expression + ');'
         code += '\nconsole.log(result);' if self.node else '\nresult;'
-        result = subprocess.run(self.command + [code], capture_output=True, text=True, timeout=15)
+        if self.node:
+            result = subprocess.run(self.command, input=code, capture_output=True, text=True, encoding='utf-8', timeout=15)
+        else:
+            result = subprocess.run(self.command + [code], capture_output=True, text=True, encoding='utf-8', timeout=15)
         self.assertEqual(result.returncode, 0, result.stderr)
         return json.loads(result.stdout)
 
@@ -268,6 +272,40 @@ class RootHistogramRebinTests(unittest.TestCase):
         self.assertEqual(result['horizontal']['x'], [0, 6.5])
         self.assertEqual(result['horizontal']['y'], [0, 6])
 
+    def test_autoscale_can_fit_rebinned_data(self):
+        result = self.evaluate("""(() => {
+            const autoscale = {checked: true};
+            globalThis.document = {getElementById: () => autoscale};
+            globalThis.isRebinOnRenderEnabled = () => true;
+            const combined = shouldPreserveHistogramRanges();
+            const forced = shouldPreserveHistogramRanges(true);
+            autoscale.checked = false;
+            return [combined, forced, shouldPreserveHistogramRanges()];
+        })()""")
+        self.assertEqual(result, [False, True, True])
+
+    def test_rebinned_autofit_uses_edges_of_precomputed_bars_and_heatmaps(self):
+        result = self.evaluate("""(() => {
+            const layout = {xaxis: {type: 'linear'}, yaxis: {type: 'linear'}};
+            const bar = buildPreComputed1DTrace([2, 5], [1, 4, 10], {orientation: 'h'});
+            const bars = getHistogramAutofitBounds({_fullLayout: layout, data: [bar]}, true);
+            const grid = {
+                xEdges: [1, 4, 10], yEdges: [2, 6, 9],
+                xCenters: [2.5, 7], yCenters: [4, 7.5],
+            };
+            const heatmap = getHistogramAutofitBounds({
+                _fullLayout: layout, __projectionGrid: grid,
+                data: [{type: 'heatmap', x: grid.xCenters, y: grid.yCenters}],
+            }, true);
+            const logRange = getHistogramDataRange([Math.log10(5), Math.log10(15)], 'log', [5, 10, 15]);
+            return {bars, heatmap, logRange};
+        })()""")
+        self.assertEqual(result['bars']['x'], [0, 5])
+        self.assertEqual(result['bars']['y'], [1, 10])
+        self.assertEqual(result['heatmap']['x'], [1, 10])
+        self.assertEqual(result['heatmap']['y'], [2, 9])
+        self.assertEqual(result['logRange'], [5, 15])
+
     def test_clear_placeholder_ranges_are_not_used_to_crop_rebinning(self):
         result = self.evaluate("""(() => {
             const graph = {
@@ -286,6 +324,36 @@ class RootHistogramRebinTests(unittest.TestCase):
         })()""")
         self.assertEqual(result['placeholder'], [None, None])
         self.assertEqual(result['data'], [[0, 3], [-2, 5]])
+
+    def test_1d_trace_supports_columns_and_step_line_styles(self):
+        result = self.evaluate("""(() => ({
+            columns: buildPreComputed1DTrace([2, 5], [0, 1, 3], {
+                color: '#1B76B3',
+                nativeHistogram: true,
+                style1d: 'columns',
+            }),
+            lineV: buildPreComputed1DTrace([2, 5], [0, 1, 3], {
+                color: '#E11D48',
+                nativeHistogram: true,
+                style1d: 'line',
+                orientation: 'v',
+            }),
+            lineH: buildPreComputed1DTrace([2, 5], [0, 1, 3], {
+                color: '#16A34A',
+                nativeHistogram: true,
+                style1d: 'line',
+                orientation: 'h',
+            }),
+        }))()""")
+        self.assertEqual(result['columns']['type'], 'bar')
+        self.assertEqual(result['lineV']['type'], 'scatter')
+        self.assertEqual(result['lineV']['mode'], 'lines')
+        self.assertEqual(result['lineV']['x'], [0, 0, 1, 1, 3, 3])
+        self.assertEqual(result['lineV']['y'], [0, 2, 2, 5, 5, 0])
+        self.assertEqual(result['lineH']['type'], 'scatter')
+        self.assertEqual(result['lineH']['orientation'], 'h')
+        self.assertEqual(result['lineH']['x'], [0, 2, 2, 5, 5, 0])
+        self.assertEqual(result['lineH']['y'], [0, 0, 1, 1, 3, 3])
 
 
 if __name__ == '__main__':
